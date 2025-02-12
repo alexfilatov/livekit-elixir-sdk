@@ -1,7 +1,7 @@
 defmodule LiveKit do
   @moduledoc """
   LiveKit server SDK for Elixir.
-  
+
   This SDK enables you to manage LiveKit rooms and access tokens programmatically.
   """
 

@@ -11,7 +11,20 @@ defmodule LiveKit.MixProject do
       description: description(),
       package: package(),
       name: "LiveKit",
-      source_url: "https://github.com/yourusername/livekit"
+      source_url: "https://github.com/yourusername/livekit",
+      # Docs
+      docs: [
+        main: "LiveKit",
+        extras: ["README.md"]
+      ],
+      # Test coverage
+      test_coverage: [tool: ExCoveralls],
+      preferred_cli_env: [
+        coveralls: :test,
+        "coveralls.detail": :test,
+        "coveralls.post": :test,
+        "coveralls.html": :test
+      ]
     ]
   end
 
@@ -32,7 +45,11 @@ defmodule LiveKit.MixProject do
       {:tesla, "~> 1.7"},
       {:hackney, "~> 1.18"},
       {:inflex, "~> 2.1"},
-      {:ex_doc, "~> 0.29", only: :dev, runtime: false}
+      # Development dependencies
+      {:ex_doc, "~> 0.29", only: :dev, runtime: false},
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:excoveralls, "~> 0.18", only: :test},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
     ]
   end
 

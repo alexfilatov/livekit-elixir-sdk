@@ -35,7 +35,7 @@ defmodule LiveKit.RoomServiceClientTest do
     test "sends request with correct structure", %{client: client} do
       room_name = "test_room"
       opts = [empty_timeout: 300]
-      
+
       # Since we're using a fake URL, we expect a request failure
       assert {:error, :request_failed} = RoomServiceClient.create_room(client, room_name, opts)
     end
@@ -51,7 +51,7 @@ defmodule LiveKit.RoomServiceClientTest do
   describe "delete_room/2" do
     test "sends request with correct structure", %{client: client} do
       room_name = "test_room"
-      
+
       # Since we're using a fake URL, we expect a request failure
       assert {:error, :request_failed} = RoomServiceClient.delete_room(client, room_name)
     end

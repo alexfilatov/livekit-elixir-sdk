@@ -58,7 +58,7 @@ defmodule LiveKit.AccessTokenTest do
 
       jwt = AccessToken.to_jwt(token)
       assert is_binary(jwt)
-      
+
       # Verify the token can be decoded
       {:ok, claims} = LiveKit.TokenVerifier.verify(jwt, @api_secret)
       assert claims["sub"] == "user123"

@@ -8,6 +8,7 @@ defmodule LiveKit.Utils do
   """
   def to_http_url(url) when is_binary(url) do
     uri = URI.parse(url)
+
     case uri.scheme do
       nil -> "http://" <> url
       "ws" -> "http://" <> String.replace_prefix(url, "ws://", "")

@@ -66,10 +66,11 @@ defmodule LiveKit.AccessToken do
     current_time = System.system_time(:second)
     exp_time = current_time + (token.ttl || 3600)
 
-    video_grant = token.grants
-    |> Map.from_struct()
-    |> Enum.map(fn {k, v} -> {Inflex.camelize(to_string(k), :lower), v} end)
-    |> Enum.into(%{})
+    video_grant =
+      token.grants
+      |> Map.from_struct()
+      |> Enum.map(fn {k, v} -> {Inflex.camelize(to_string(k), :lower), v} end)
+      |> Enum.into(%{})
 
     claims = %{
       "iss" => token.api_key,
