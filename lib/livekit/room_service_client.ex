@@ -85,15 +85,10 @@ defmodule LiveKit.RoomServiceClient do
     case apply(Tesla, method, [client.client, path] ++ request_args(body, headers)) do
       {:ok, %{status: status}} when status != 200 ->
         {:error, :request_failed}
-
       {:ok, response} ->
         {:ok, response.body}
-
-      {:error, :econnrefused} ->
-        {:error, :connection_refused}
-
-      {:error, reason} ->
-        {:error, reason}
+      {:error, _reason} ->
+        {:error, :request_failed}
     end
   end
 

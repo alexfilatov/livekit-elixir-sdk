@@ -35,9 +35,19 @@ defmodule LiveKit.RoomServiceClientTest do
     test "sends request with correct structure", %{client: client} do
       room_name = "test_room"
       opts = [empty_timeout: 300]
-
+      
       # Since we're using a fake URL, we expect a request failure
       assert {:error, :request_failed} = RoomServiceClient.create_room(client, room_name, opts)
+    end
+
+    test "handles network errors", %{client: client} do
+      client = %{client | base_url: "http://invalid.example"}
+      assert {:error, :request_failed} = RoomServiceClient.create_room(client, "test_room")
+    end
+
+    test "handles connection errors", %{client: client} do
+      client = %{client | base_url: "http://localhost:1"}
+      assert {:error, :request_failed} = RoomServiceClient.create_room(client, "test_room")
     end
   end
 
@@ -46,14 +56,34 @@ defmodule LiveKit.RoomServiceClientTest do
       # Since we're using a fake URL, we expect a request failure
       assert {:error, :request_failed} = RoomServiceClient.list_rooms(client)
     end
+
+    test "handles network errors", %{client: client} do
+      client = %{client | base_url: "http://invalid.example"}
+      assert {:error, :request_failed} = RoomServiceClient.list_rooms(client)
+    end
+
+    test "handles connection errors", %{client: client} do
+      client = %{client | base_url: "http://localhost:1"}
+      assert {:error, :request_failed} = RoomServiceClient.list_rooms(client)
+    end
   end
 
   describe "delete_room/2" do
     test "sends request with correct structure", %{client: client} do
       room_name = "test_room"
-
+      
       # Since we're using a fake URL, we expect a request failure
       assert {:error, :request_failed} = RoomServiceClient.delete_room(client, room_name)
+    end
+
+    test "handles network errors", %{client: client} do
+      client = %{client | base_url: "http://invalid.example"}
+      assert {:error, :request_failed} = RoomServiceClient.delete_room(client, "test_room")
+    end
+
+    test "handles connection errors", %{client: client} do
+      client = %{client | base_url: "http://localhost:1"}
+      assert {:error, :request_failed} = RoomServiceClient.delete_room(client, "test_room")
     end
   end
 end
