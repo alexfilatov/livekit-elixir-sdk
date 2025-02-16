@@ -1,0 +1,247 @@
+# LiveKit Server SDK Advanced Usage
+
+## Setup
+
+First, let's install and set up our dependencies.
+
+```elixir
+Mix.install([
+  {:livekit, path: "/Users/alex/Projects/my/livekit/livekit"},
+  {:jason, "~> 1.4"},
+  {:tesla, "~> 1.7"},
+  {:hackney, "~> 1.18"}
+])
+
+alias LiveKit.{AccessToken, RoomServiceClient}
+```
+
+## Configuration
+
+```elixir
+server_url = "ws://localhost:7880"
+api_key = "devkey"
+api_secret = "secret"
+
+# Initialize the RoomServiceClient
+client = RoomServiceClient.new(server_url, api_key, api_secret)
+```
+
+## Advanced Room Management Module
+
+Let's create a module with advanced room management features including retries and error handling.
+
+```elixir
+defmodule RoomManager do
+  @max_retries 3
+  @retry_delay 1000 # 1 second
+
+  def with_retries(fun) do
+    do_with_retries(fun, 0)
+  end
+
+  defp do_with_retries(fun, retry_count) when retry_count < @max_retries do
+    case fun.() do
+      {:ok, result} ->
+        {:ok, result}
+
+      {:error, :request_failed} ->
+        IO.puts("Request failed, retrying in #{@retry_delay}ms (attempt #{retry_count + 1}/#{@max_retries})")
+        Process.sleep(@retry_delay)
+        do_with_retries(fun, retry_count + 1)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp do_with_retries(_fun, _retry_count) do
+    {:error, :max_retries_exceeded}
+  end
+
+  def create_room_with_token(client, room_name, opts \\ []) do
+    # First try to create the room
+    case with_retries(fn -> RoomServiceClient.create_room(client, room_name, opts) end) do
+      {:ok, room} ->
+        # Generate an admin token for the room
+        token = generate_admin_token(client, room_name)
+        {:ok, %{room: room, token: token}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def generate_admin_token(client, room_name) do
+    AccessToken.new(client.api_key, client.api_secret)
+    |> AccessToken.with_identity("admin-#{:rand.uniform(1000)}")
+    |> AccessToken.with_ttl(3600)
+    |> AccessToken.add_grant(%{
+      room_join: true,
+      room: room_name,
+      can_publish: true,
+      can_subscribe: true,
+      can_publish_data: true,
+      can_admin: true
+    })
+    |> AccessToken.to_jwt()
+  end
+
+  def ensure_room_exists(client, room_name, opts \\ []) do
+    case with_retries(fn -> RoomServiceClient.list_rooms(client) end) do
+      {:ok, %{"rooms" => rooms}} ->
+        if Enum.any?(rooms, & &1["name"] == room_name) do
+          {:ok, :room_exists}
+        else
+          create_room_with_token(client, room_name, opts)
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def cleanup_empty_rooms(client) do
+    case with_retries(fn -> RoomServiceClient.list_rooms(client) end) do
+      {:ok, %{"rooms" => rooms}} ->
+        empty_rooms = Enum.filter(rooms, & &1["num_participants"] == 0)
+
+        results = Enum.map(empty_rooms, fn room ->
+          case with_retries(fn -> RoomServiceClient.delete_room(client, room["name"]) end) do
+            {:ok, _} -> {:ok, room["name"]}
+            {:error, reason} -> {:error, {room["name"], reason}}
+          end
+        end)
+
+        {
+          Enum.filter(results, fn {status, _} -> status == :ok end),
+          Enum.filter(results, fn {status, _} -> status == :error end)
+        }
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+end
+```
+
+## Creating a Room with Retry Logic
+
+```elixir
+room_name = "advanced-room-#{:rand.uniform(1000)}"
+case RoomManager.create_room_with_token(client, room_name) do
+  {:ok, %{room: room, token: token}} ->
+    IO.puts("Room created successfully:")
+    IO.inspect(room, pretty: true)
+    IO.puts("\nAdmin token generated:")
+    IO.puts(token)
+
+  {:error, reason} ->
+    IO.puts("Failed to create room: #{inspect(reason)}")
+end
+```
+
+## Ensuring Room Exists
+
+This function will either return an existing room or create a new one.
+
+```elixir
+case RoomManager.ensure_room_exists(client, "persistent-room") do
+  {:ok, :room_exists} ->
+    IO.puts("Room already exists")
+
+  {:ok, %{room: room, token: token}} ->
+    IO.puts("Room created:")
+    IO.inspect(room, pretty: true)
+    IO.puts("\nAdmin token:")
+    IO.puts(token)
+
+  {:error, reason} ->
+    IO.puts("Error: #{inspect(reason)}")
+end
+```
+
+## Cleaning Up Empty Rooms
+
+This will find and delete all rooms with no participants.
+
+```elixir
+case RoomManager.cleanup_empty_rooms(client) do
+  {successful, failed} ->
+    IO.puts("\nSuccessfully deleted rooms:")
+    Enum.each(successful, fn {:ok, name} -> IO.puts("- #{name}") end)
+
+    unless Enum.empty?(failed) do
+      IO.puts("\nFailed to delete rooms:")
+      Enum.each(failed, fn {:error, {name, reason}} ->
+        IO.puts("- #{name}: #{inspect(reason)}")
+      end)
+    end
+
+  {:error, reason} ->
+    IO.puts("Failed to cleanup rooms: #{inspect(reason)}")
+end
+```
+
+## Custom Token Generation
+
+Here's an example of generating a token with custom permissions and metadata:
+
+```elixir
+token = AccessToken.new(api_key, api_secret)
+|> AccessToken.with_identity("custom-user")
+|> AccessToken.with_ttl(7200) # 2 hours
+|> AccessToken.with_metadata(Jason.encode!(%{
+  name: "Custom User",
+  role: "moderator",
+  avatar: "https://example.com/avatar.jpg"
+}))
+|> AccessToken.add_grant(%{
+  room_join: true,
+  room: room_name,
+  can_publish: true,
+  can_subscribe: true,
+  can_publish_data: true,
+  can_update_metadata: true,
+  can_remove_participant: true
+})
+|> AccessToken.to_jwt()
+
+IO.puts("Custom token: #{token}")
+```
+
+## Error Handling Examples
+
+Here are some examples of handling various error cases:
+
+```elixir
+# Try to create a room with invalid options
+case RoomManager.create_room_with_token(client, "test-room", [invalid_option: true]) do
+  {:ok, _} -> IO.puts("Room created (unexpected)")
+  {:error, reason} -> IO.puts("Expected error: #{inspect(reason)}")
+end
+
+# Try to delete a non-existent room
+case RoomManager.with_retries(fn -> RoomServiceClient.delete_room(client, "non-existent-room") end) do
+  {:ok, _} -> IO.puts("Room deleted (unexpected)")
+  {:error, reason} -> IO.puts("Expected error: #{inspect(reason)}")
+end
+
+# Try to list rooms with invalid credentials
+invalid_client = RoomServiceClient.new(server_url, "invalid", "credentials")
+case RoomManager.with_retries(fn -> RoomServiceClient.list_rooms(invalid_client) end) do
+  {:ok, _} -> IO.puts("Rooms listed (unexpected)")
+  {:error, reason} -> IO.puts("Expected error: #{inspect(reason)}")
+end
+```
+
+## Next Steps
+
+This advanced example demonstrates:
+1. Automatic retries for failed requests
+2. Room existence checks
+3. Cleanup of empty rooms
+4. Error handling and recovery
+5. Custom token generation with advanced permissions
+6. Various error cases and how to handle them
+
+For basic usage, see `basic_usage.livemd`.

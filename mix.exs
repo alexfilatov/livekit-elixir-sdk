@@ -11,7 +11,7 @@ defmodule LiveKit.MixProject do
       description: description(),
       package: package(),
       name: "LiveKit",
-      source_url: "https://github.com/yourusername/livekit",
+      source_url: "https://github.com/gymbile/livekit",
       # Docs
       docs: [
         main: "LiveKit",
@@ -24,7 +24,8 @@ defmodule LiveKit.MixProject do
         "coveralls.detail": :test,
         "coveralls.post": :test,
         "coveralls.html": :test
-      ]
+      ],
+      compilers: Mix.compilers() ++ [:proto]
     ]
   end
 
@@ -40,11 +41,12 @@ defmodule LiveKit.MixProject do
     [
       {:protobuf, "~> 0.12.0"},
       {:google_protos, "~> 0.3.0"},
-      {:jason, "~> 1.4"},
-      {:joken, "~> 2.6"},
       {:tesla, "~> 1.7"},
       {:hackney, "~> 1.18"},
+      {:jason, "~> 1.4"},
+      {:joken, "~> 2.6"},
       {:inflex, "~> 2.1"},
+      {:twirp, "~> 0.8"},
       # Development dependencies
       {:ex_doc, "~> 0.29", only: :dev, runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
@@ -65,7 +67,7 @@ defmodule LiveKit.MixProject do
       files: ~w(lib priv mix.exs README.md LICENSE),
       licenses: ["Apache-2.0"],
       links: %{
-        "GitHub" => "https://github.com/yourusername/livekit"
+        "GitHub" => "https://github.com/gymbile/livekit"
       }
     ]
   end

@@ -1,0 +1,126 @@
+syntax = "proto3";
+
+package livekit;
+
+import "livekit_models.proto";
+import "livekit_egress.proto";
+import "livekit_agent_dispatch.proto";
+
+// Service API
+service RoomService {
+  rpc CreateRoom(CreateRoomRequest) returns (Room);
+  rpc ListRooms(ListRoomsRequest) returns (ListRoomsResponse);
+  rpc DeleteRoom(DeleteRoomRequest) returns (DeleteRoomResponse);
+  rpc UpdateRoomMetadata(UpdateRoomMetadataRequest) returns (Room);
+  rpc ListParticipants(ListParticipantsRequest) returns (ListParticipantsResponse);
+  rpc GetParticipant(RoomParticipantIdentity) returns (ParticipantInfo);
+  rpc RemoveParticipant(RoomParticipantIdentity) returns (RemoveParticipantResponse);
+  rpc MutePublishedTrack(MuteRoomTrackRequest) returns (MuteRoomTrackResponse);
+  rpc UpdateParticipant(UpdateParticipantRequest) returns (ParticipantInfo);
+  rpc UpdateSubscriptions(UpdateSubscriptionsRequest) returns (UpdateSubscriptionsResponse);
+  rpc SendData(SendDataRequest) returns (SendDataResponse);
+}
+
+message CreateRoomRequest {
+  string name = 1;
+  string room_preset = 12;
+  uint32 empty_timeout = 2;
+  uint32 departure_timeout = 10;
+  uint32 max_participants = 3;
+  string node_id = 4;
+  string metadata = 5;
+  RoomEgress egress = 6;
+  uint32 min_playout_delay = 7;
+  uint32 max_playout_delay = 8;
+  bool sync_streams = 9;
+  bool replay_enabled = 13;
+  repeated RoomAgentDispatch agents = 14;
+}
+
+message RoomEgress {
+  RoomCompositeEgressRequest room = 1;
+  AutoParticipantEgress participant = 3;
+  AutoTrackEgress tracks = 2;
+}
+
+message RoomAgent {
+  repeated RoomAgentDispatch dispatches = 1;
+}
+
+message ListRoomsRequest {
+  repeated string names = 1;
+}
+
+message ListRoomsResponse {
+  repeated Room rooms = 1;
+}
+
+message DeleteRoomRequest {
+  string room = 1;
+}
+
+message DeleteRoomResponse {}
+
+message UpdateRoomMetadataRequest {
+  string room = 1;
+  string metadata = 2;
+}
+
+message ListParticipantsRequest {
+  string room = 1;
+}
+
+message ListParticipantsResponse {
+  repeated ParticipantInfo participants = 1;
+}
+
+message RoomParticipantIdentity {
+  string room = 1;
+  string identity = 2;
+}
+
+message RemoveParticipantResponse {}
+
+message MuteRoomTrackRequest {
+  string room = 1;
+  string identity = 2;
+  string track_sid = 3;
+  bool muted = 4;
+}
+
+message MuteRoomTrackResponse {
+  TrackInfo track = 1;
+}
+
+message UpdateParticipantRequest {
+  string room = 1;
+  string identity = 2;
+  string metadata = 3;
+  ParticipantPermission permission = 4;
+  string name = 5;
+  map<string, string> attributes = 6;
+}
+
+message UpdateSubscriptionsRequest {
+  string room = 1;
+  string identity = 2;
+  repeated string track_sids = 3;
+  bool subscribe = 4;
+}
+
+message UpdateSubscriptionsResponse {}
+
+message SendDataRequest {
+  string room = 1;
+  bytes data = 2;
+  DataPacketKind kind = 3;
+  repeated string destination_sids = 4;
+  repeated string destination_identities = 5;
+}
+
+message SendDataResponse {}
+
+enum DataPacketKind {
+  RELIABLE = 0;
+  LOSSY = 1;
+}

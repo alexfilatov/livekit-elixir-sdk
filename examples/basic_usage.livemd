@@ -1,0 +1,165 @@
+# LiveKit Server SDK Basic Usage
+
+## Setup
+
+First, let's install and set up our dependencies. We'll use the local LiveKit SDK package.
+
+```elixir
+Mix.install([
+  {:livekit, path: "/Users/alex/Projects/my/livekit/livekit"},
+  {:jason, "~> 1.4"},
+  {:tesla, "~> 1.7"},
+  {:hackney, "~> 1.18"}
+])
+
+alias LiveKit.{AccessToken, RoomServiceClient}
+```
+
+## Configuration
+
+Set your LiveKit server credentials. You can modify these values to match your setup.
+
+```elixir
+server_url = "http://localhost:7880"
+api_key = "devkey"
+api_secret = "secret"
+
+# Initialize the RoomServiceClient
+client = RoomServiceClient.new(server_url, api_key, api_secret)
+```
+
+## Debug Authentication
+
+Let's check the authentication token generation:
+
+```elixir
+# Generate a test access token with room creation permissions
+token = AccessToken.new(api_key, api_secret)
+|> AccessToken.with_identity("test")
+|> AccessToken.with_ttl(600)
+|> AccessToken.add_grant(%{
+  room_create: true,
+  room_list: true,
+  room_admin: true
+})
+|> AccessToken.to_jwt()
+
+IO.puts("Generated token: #{token}")
+
+# Let's examine the client configuration
+IO.puts("\nClient configuration:")
+IO.inspect(client, pretty: true)
+
+# Make a test request to list rooms to check auth
+IO.puts("\nTesting authentication with list_rooms:")
+case RoomServiceClient.list_rooms(client) do
+  {:ok, rooms} ->
+    IO.puts("Authentication successful!")
+    IO.puts("Current rooms:")
+    IO.inspect(rooms, pretty: true)
+  {:error, reason} ->
+    IO.puts("Authentication failed: #{inspect(reason)}")
+end
+```
+
+## Creating a Room
+
+Now let's try to create a room:
+
+```elixir
+room_name = "test-room-#{:rand.uniform(1000)}"
+room_opts = [
+  empty_timeout: 10 * 60, # 10 minutes
+  max_participants: 10
+]
+
+# Try to create the room
+case RoomServiceClient.create_room(client, room_name, room_opts) do
+  {:ok, room} ->
+    IO.puts("Room created successfully:")
+    IO.inspect(room, pretty: true)
+  {:error, reason} ->
+    IO.puts("Error creating room: #{inspect(reason)}")
+end
+```
+
+## Listing Rooms
+
+View all active rooms on your LiveKit server.
+
+```elixir
+case RoomServiceClient.list_rooms(client) do
+  {:ok, rooms} ->
+    IO.puts("Active rooms:")
+    IO.inspect(rooms, pretty: true)
+  {:error, reason} ->
+    IO.puts("Error listing rooms: #{inspect(reason)}")
+end
+```
+
+## Generating Access Tokens
+
+### Participant Token
+
+Generate a token for a regular participant with basic permissions.
+
+```elixir
+participant_token = AccessToken.new(api_key, api_secret)
+|> AccessToken.with_identity("participant-#{:rand.uniform(1000)}")
+|> AccessToken.with_ttl(3600) # 1 hour
+|> AccessToken.with_metadata(%{name: "Test User"} |> Jason.encode!())
+|> AccessToken.add_grant(%{
+  room_join: true,
+  room: room_name,
+  can_publish: true,
+  can_subscribe: true,
+  can_publish_data: true
+})
+|> AccessToken.to_jwt()
+
+IO.puts("Participant token: #{participant_token}")
+```
+
+### Admin Token
+
+Generate a token with admin permissions.
+
+```elixir
+admin_token = AccessToken.new(api_key, api_secret)
+|> AccessToken.with_identity("admin-#{:rand.uniform(1000)}")
+|> AccessToken.with_ttl(3600) # 1 hour
+|> AccessToken.add_grant(%{
+  room_join: true,
+  room: room_name,
+  can_publish: true,
+  can_subscribe: true,
+  can_publish_data: true,
+  can_admin: true
+})
+|> AccessToken.to_jwt()
+
+IO.puts("Admin token: #{admin_token}")
+```
+
+## Deleting a Room
+
+When you're done with a room, you can delete it.
+
+```elixir
+case RoomServiceClient.delete_room(client, room_name) do
+  {:ok, _} ->
+    IO.puts("Room #{room_name} deleted successfully")
+  {:error, reason} ->
+    IO.puts("Error deleting room: #{inspect(reason)}")
+end
+```
+
+## Next Steps
+
+Now that you have a room and access tokens, you can:
+
+1. Connect to the room using a LiveKit client library
+2. Use the admin token to manage the room
+3. Monitor room activity and participants
+
+For more advanced usage, check out the `advanced_usage.livemd` example.

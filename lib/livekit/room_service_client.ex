@@ -1,41 +1,42 @@
 defmodule LiveKit.RoomServiceClient do
   @moduledoc """
-  Client for interacting with LiveKit room services.
+  Client for the LiveKit Room Service API.
   """
 
   use Tesla
+  alias LiveKit.AccessToken
+  alias Livekit.{
+    CreateRoomRequest, Room, ListRoomsRequest, ListRoomsResponse, DeleteRoomRequest,
+    UpdateRoomMetadataRequest, ListParticipantsRequest, ListParticipantsResponse,
+    RoomParticipantIdentity, ParticipantInfo, MuteRoomTrackRequest, MuteRoomTrackResponse,
+    UpdateParticipantRequest, UpdateSubscriptionsRequest, SendDataRequest, DataPacketKind
+  }
+  require Logger
 
-  alias LiveKit.Utils
-
-  plug(Tesla.Middleware.BaseUrl, "")
-  plug(Tesla.Middleware.JSON)
-
-  defstruct api_key: nil,
-            api_secret: nil,
-            base_url: nil,
-            client: nil
-
-  @type t :: %__MODULE__{
-          api_key: String.t() | nil,
-          api_secret: String.t() | nil,
-          base_url: String.t() | nil,
-          client: Tesla.Client.t() | nil
-        }
+  defstruct [:base_url, :api_key, :api_secret, :client]
 
   @doc """
   Creates a new RoomServiceClient instance.
   """
   def new(base_url, api_key, api_secret) do
+    # Convert ws:// to http:// and wss:// to https://
+    base_url = base_url
+    |> String.replace(~r{^ws://}, "http://")
+    |> String.replace(~r{^wss://}, "https://")
+
     middleware = [
-      {Tesla.Middleware.BaseUrl, Utils.to_http_url(base_url)},
-      Tesla.Middleware.JSON,
-      {Tesla.Middleware.Opts, [adapter: [recv_timeout: 5000]]}
+      {Tesla.Middleware.BaseUrl, base_url},
+      {Tesla.Middleware.Headers, [
+        {"Content-Type", "application/protobuf"},
+        {"Accept", "application/protobuf"}
+      ]},
+      {Tesla.Middleware.Logger, debug: true}
     ]
 
-    client = Tesla.client(middleware)
+    client = Tesla.client(middleware, {Tesla.Adapter.Hackney, [recv_timeout: 30_000]})
 
     %__MODULE__{
-      base_url: Utils.to_http_url(base_url),
+      base_url: base_url,
       api_key: api_key,
       api_secret: api_secret,
       client: client
@@ -43,73 +44,231 @@ defmodule LiveKit.RoomServiceClient do
   end
 
   @doc """
-  Creates a new room with the specified options.
+  Creates a new room.
   """
   def create_room(%__MODULE__{} = client, name, opts \\ []) do
-    params = Enum.into(opts, %{name: name})
-    path = "/twirp/livekit.proto.RoomService/CreateRoom"
+    path = "/twirp/livekit.RoomService/CreateRoom"
+    request = struct(CreateRoomRequest, %{
+      name: name,
+      empty_timeout: Keyword.get(opts, :empty_timeout),
+      departure_timeout: Keyword.get(opts, :departure_timeout),
+      max_participants: Keyword.get(opts, :max_participants),
+      egress: Keyword.get(opts, :egress),
+      metadata: Keyword.get(opts, :metadata),
+      min_playout_delay: Keyword.get(opts, :min_playout_delay),
+      max_playout_delay: Keyword.get(opts, :max_playout_delay),
+      sync_streams: Keyword.get(opts, :sync_streams)
+    })
+    |> CreateRoomRequest.encode()
+    
+    headers = auth_header(client, %{room_create: true})
 
-    case do_request(client, :post, path, params) do
-      {:ok, body} -> {:ok, body}
-      {:error, reason} -> {:error, reason}
+    case Tesla.post(client.client, path, request, headers: headers) do
+      {:ok, %{status: 200, body: body}} -> {:ok, Room.decode(body)}
+      {:ok, %{status: status, body: body}} -> 
+        Logger.error("Request failed with status #{status}: #{inspect(body)}")
+        {:error, {status, body}}
+      {:error, reason} -> 
+        Logger.error("Request error: #{inspect(reason)}")
+        {:error, reason}
     end
   end
 
   @doc """
-  Lists all active rooms.
+  Lists all rooms.
   """
-  def list_rooms(%__MODULE__{} = client) do
-    path = "/twirp/livekit.proto.RoomService/ListRooms"
+  def list_rooms(%__MODULE__{} = client, names \\ nil) do
+    path = "/twirp/livekit.RoomService/ListRooms"
+    request = struct(ListRoomsRequest, %{names: names || []})
+    |> ListRoomsRequest.encode()
+    headers = auth_header(client, %{room_list: true})
 
-    case do_request(client, :get, path) do
-      {:ok, body} -> {:ok, body}
+    case Tesla.post(client.client, path, request, headers: headers) do
+      {:ok, %{status: 200, body: body}} -> {:ok, ListRoomsResponse.decode(body)}
+      {:ok, %{status: status, body: body}} -> {:error, {status, body}}
       {:error, reason} -> {:error, reason}
     end
   end
 
   @doc """
-  Deletes a room by name.
+  Deletes a room.
   """
   def delete_room(%__MODULE__{} = client, room) do
-    path = "/twirp/livekit.proto.RoomService/DeleteRoom"
+    path = "/twirp/livekit.RoomService/DeleteRoom"
+    request = struct(DeleteRoomRequest, %{room: room})
+    |> DeleteRoomRequest.encode()
+    headers = auth_header(client, %{room_create: true})
 
-    case do_request(client, :post, path, %{room: room}) do
-      {:ok, body} -> {:ok, body}
+    case Tesla.post(client.client, path, request, headers: headers) do
+      {:ok, %{status: 200}} -> :ok
+      {:ok, %{status: status, body: body}} -> {:error, {status, body}}
       {:error, reason} -> {:error, reason}
     end
   end
 
-  defp do_request(client, method, path, body \\ nil) do
-    headers = auth_header(client, method |> to_string |> String.upcase(), path)
+  @doc """
+  Updates room metadata.
+  """
+  def update_room_metadata(%__MODULE__{} = client, room, metadata) do
+    path = "/twirp/livekit.RoomService/UpdateRoomMetadata"
+    request = struct(UpdateRoomMetadataRequest, %{room: room, metadata: metadata})
+    |> UpdateRoomMetadataRequest.encode()
+    headers = auth_header(client, %{room_admin: true, room: room})
 
-    case apply(Tesla, method, [client.client, path] ++ request_args(body, headers)) do
-      {:ok, %{status: status}} when status != 200 ->
-        {:error, :request_failed}
-      {:ok, response} ->
-        {:ok, response.body}
-      {:error, _reason} ->
-        {:error, :request_failed}
+    case Tesla.post(client.client, path, request, headers: headers) do
+      {:ok, %{status: 200, body: body}} -> {:ok, Room.decode(body)}
+      {:ok, %{status: status, body: body}} -> {:error, {status, body}}
+      {:error, reason} -> {:error, reason}
     end
   end
 
-  defp request_args(nil, headers), do: [[headers: headers]]
-  defp request_args(body, headers), do: [body, [headers: headers]]
+  @doc """
+  Lists participants in a room.
+  """
+  def list_participants(%__MODULE__{} = client, room) do
+    path = "/twirp/livekit.RoomService/ListParticipants"
+    request = struct(ListParticipantsRequest, %{room: room})
+    |> ListParticipantsRequest.encode()
+    headers = auth_header(client, %{room_admin: true, room: room})
 
-  defp auth_header(client, method, path) do
-    timestamp = System.system_time(:second)
-    nonce = :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)
+    case Tesla.post(client.client, path, request, headers: headers) do
+      {:ok, %{status: 200, body: body}} -> {:ok, ListParticipantsResponse.decode(body)}
+      {:ok, %{status: status, body: body}} -> {:error, {status, body}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
 
-    signature =
-      [client.api_key, timestamp, nonce, method, path]
-      |> Enum.join(" ")
-      |> then(&:crypto.mac(:hmac, :sha256, client.api_secret, &1))
-      |> Base.encode16(case: :lower)
+  @doc """
+  Gets a participant from a room.
+  """
+  def get_participant(%__MODULE__{} = client, room, identity) do
+    path = "/twirp/livekit.RoomService/GetParticipant"
+    request = struct(RoomParticipantIdentity, %{room: room, identity: identity})
+    |> RoomParticipantIdentity.encode()
+    headers = auth_header(client, %{room_admin: true, room: room})
+
+    case Tesla.post(client.client, path, request, headers: headers) do
+      {:ok, %{status: 200, body: body}} -> {:ok, ParticipantInfo.decode(body)}
+      {:ok, %{status: status, body: body}} -> {:error, {status, body}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Removes a participant from a room.
+  """
+  def remove_participant(%__MODULE__{} = client, room, identity) do
+    path = "/twirp/livekit.RoomService/RemoveParticipant"
+    request = struct(RoomParticipantIdentity, %{room: room, identity: identity})
+    |> RoomParticipantIdentity.encode()
+    headers = auth_header(client, %{room_admin: true, room: room})
+
+    case Tesla.post(client.client, path, request, headers: headers) do
+      {:ok, %{status: 200, body: _body}} -> :ok
+      {:ok, %{status: status, body: body}} -> {:error, {status, body}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Mutes or unmutes a participant's track.
+  """
+  def mute_published_track(%__MODULE__{} = client, room, identity, track_sid, muted) do
+    path = "/twirp/livekit.RoomService/MutePublishedTrack"
+    request = struct(MuteRoomTrackRequest, %{
+      room: room,
+      identity: identity,
+      track_sid: track_sid,
+      muted: muted
+    })
+    |> MuteRoomTrackRequest.encode()
+    headers = auth_header(client, %{room_admin: true, room: room})
+
+    case Tesla.post(client.client, path, request, headers: headers) do
+      {:ok, %{status: 200, body: body}} -> {:ok, MuteRoomTrackResponse.decode(body)}
+      {:ok, %{status: status, body: body}} -> {:error, {status, body}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Updates a participant's metadata, permissions, or name.
+  """
+  def update_participant(%__MODULE__{} = client, room, identity, opts \\ []) do
+    path = "/twirp/livekit.RoomService/UpdateParticipant"
+    request = struct(UpdateParticipantRequest, %{
+      room: room,
+      identity: identity,
+      metadata: Keyword.get(opts, :metadata),
+      permission: Keyword.get(opts, :permission),
+      name: Keyword.get(opts, :name),
+      attributes: Keyword.get(opts, :attributes)
+    })
+    |> UpdateParticipantRequest.encode()
+    headers = auth_header(client, %{room_admin: true, room: room})
+
+    case Tesla.post(client.client, path, request, headers: headers) do
+      {:ok, %{status: 200, body: body}} -> {:ok, ParticipantInfo.decode(body)}
+      {:ok, %{status: status, body: body}} -> {:error, {status, body}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Updates track subscriptions for a participant.
+  """
+  def update_subscriptions(%__MODULE__{} = client, room, identity, track_sids, subscribe) do
+    path = "/twirp/livekit.RoomService/UpdateSubscriptions"
+    request = struct(UpdateSubscriptionsRequest, %{
+      room: room,
+      identity: identity,
+      track_sids: track_sids,
+      subscribe: subscribe
+    })
+    |> UpdateSubscriptionsRequest.encode()
+    headers = auth_header(client, %{room_admin: true, room: room})
+
+    case Tesla.post(client.client, path, request, headers: headers) do
+      {:ok, %{status: 200, body: _body}} -> :ok
+      {:ok, %{status: status, body: body}} -> {:error, {status, body}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Sends data to participants in a room.
+  """
+  def send_data(%__MODULE__{} = client, room, data, opts \\ []) do
+    path = "/twirp/livekit.RoomService/SendData"
+    request = struct(SendDataRequest, %{
+      room: room,
+      data: data,
+      kind: Keyword.get(opts, :kind, DataPacketKind.value(:RELIABLE)),
+      destination_sids: Keyword.get(opts, :destination_sids, []),
+      destination_identities: Keyword.get(opts, :destination_identities, [])
+    })
+    |> SendDataRequest.encode()
+    headers = auth_header(client, %{room_admin: true, room: room})
+
+    case Tesla.post(client.client, path, request, headers: headers) do
+      {:ok, %{status: 200, body: _body}} -> :ok
+      {:ok, %{status: status, body: body}} -> {:error, {status, body}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # Private functions
+
+  defp auth_header(client, video_grant) do
+    token = AccessToken.new(client.api_key, client.api_secret)
+    |> AccessToken.with_identity("service")
+    |> AccessToken.with_ttl(600)
+    |> AccessToken.add_grant(video_grant)
+    |> AccessToken.to_jwt()
 
     [
-      {"Authorization", "Bearer #{signature}"},
-      {"X-API-Key", client.api_key},
-      {"X-API-Nonce", nonce},
-      {"X-API-Timestamp", to_string(timestamp)}
+      {"Authorization", "Bearer #{token}"},
+      {"User-Agent", "LiveKit Elixir SDK"}
     ]
   end
 end

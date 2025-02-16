@@ -1,0 +1,172 @@
+syntax = "proto3";
+
+package livekit;
+
+import "google/protobuf/timestamp.proto";
+
+message Room {
+  string sid = 1;
+  string name = 2;
+  uint32 empty_timeout = 3;
+  uint32 departure_timeout = 14;
+  uint32 max_participants = 4;
+  int64 creation_time = 5;
+  int64 creation_time_ms = 15;
+  string turn_password = 6;
+  repeated Codec enabled_codecs = 7;
+  string metadata = 8;
+  uint32 num_participants = 9;
+  uint32 num_publishers = 11;
+  bool active_recording = 10;
+  TimedVersion version = 13;
+}
+
+message Codec {
+  string mime = 1;
+  string fmtp_line = 2;
+}
+
+message TimedVersion {
+  int64 unix_micro = 1;
+  int32 ticks = 2;
+}
+
+message PlayoutDelay {
+  bool enabled = 1;
+  uint32 min = 2;
+  uint32 max = 3;
+}
+
+message ParticipantPermission {
+  bool can_subscribe = 1;
+  bool can_publish = 2;
+  bool can_publish_data = 3;
+  repeated TrackSource can_publish_sources = 9;
+  bool hidden = 7;
+  bool recorder = 8 [deprecated = true];
+  bool can_update_metadata = 10;
+  bool agent = 11 [deprecated = true];
+  bool can_subscribe_metrics = 12;
+}
+
+message ParticipantInfo {
+  string sid = 1;
+  string identity = 2;
+  State state = 3;
+  repeated TrackInfo tracks = 4;
+  string metadata = 5;
+  int64 joined_at = 6;
+  int64 joined_at_ms = 17;
+  string name = 9;
+  uint32 version = 10;
+  ParticipantPermission permission = 11;
+  string region = 12;
+  bool is_publisher = 13;
+  Kind kind = 14;
+  map<string, string> attributes = 15;
+  DisconnectReason disconnect_reason = 16;
+
+  enum State {
+    JOINING = 0;
+    JOINED = 1;
+    ACTIVE = 2;
+    DISCONNECTED = 3;
+  }
+
+  enum Kind {
+    STANDARD = 0;
+    INGRESS = 1;
+    EGRESS = 2;
+    SIP = 3;
+    AGENT = 4;
+  }
+}
+
+enum DisconnectReason {
+  UNKNOWN_REASON = 0;
+  CLIENT_INITIATED = 1;
+  DUPLICATE_IDENTITY = 2;
+  SERVER_SHUTDOWN = 3;
+  PARTICIPANT_REMOVED = 4;
+  ROOM_DELETED = 5;
+  STATE_MISMATCH = 6;
+  JOIN_FAILURE = 7;
+}
+
+enum TrackSource {
+  UNKNOWN = 0;
+  CAMERA = 1;
+  MICROPHONE = 2;
+  SCREEN_SHARE = 3;
+  SCREEN_SHARE_AUDIO = 4;
+}
+
+enum TrackType {
+  AUDIO = 0;
+  VIDEO = 1;
+  DATA = 2;
+}
+
+message TrackInfo {
+  string sid = 1;
+  TrackType type = 2;
+  string name = 3;
+  bool muted = 4;
+  uint32 width = 5;
+  uint32 height = 6;
+  bool simulcast = 7;
+  bool disable_dtx = 8;
+  TrackSource source = 9;
+  repeated VideoLayer layers = 10;
+  string mime_type = 11;
+  string mid = 12;
+  repeated SimulcastCodecInfo codecs = 13;
+  bool stereo = 14;
+  bool disable_red = 15;
+  Encryption.Type encryption = 16;
+  string stream = 17;
+  TimedVersion version = 18;
+  repeated AudioTrackFeature audio_features = 19;
+}
+
+message VideoLayer {
+  VideoQuality quality = 1;
+  uint32 width = 2;
+  uint32 height = 3;
+  uint32 bitrate = 4;
+  uint32 ssrc = 5;
+}
+
+enum VideoQuality {
+  LOW = 0;
+  MEDIUM = 1;
+  HIGH = 2;
+}
+
+message SimulcastCodecInfo {
+  string mime_type = 1;
+  string mid = 2;
+  string cid = 3;
+  repeated VideoLayer layers = 4;
+}
+
+enum AudioTrackFeature {
+  UNSPECIFIED = 0;
+  VOICE_ACTIVITY_DETECTION = 1;
+  MUSIC_MODE = 2;
+}
+
+message Encryption {
+  enum Type {
+    NONE = 0;
+    GCM = 1;
+    CUSTOM = 2;
+  }
+}
+
+message DataPacket {
+  enum Kind {
+    RELIABLE = 0;
+    LOSSY = 1;
+  }
+}
