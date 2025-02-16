@@ -312,5 +312,70 @@ defmodule LiveKit.RoomServiceClientTest do
 
       assert :ok = RoomServiceClient.send_data(client, room_name, data, kind)
     end
+
+    test "sends data to specific participants by SIDs", %{bypass: bypass, client: client} do
+      room_name = "test_room"
+      data = "targeted data"
+      kind = :RELIABLE
+      destination_sids = ["sid1", "sid2"]
+
+      Bypass.expect_once(bypass, "POST", "/twirp/livekit.RoomService/SendData", fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        request = Livekit.SendDataRequest.decode(body)
+        assert request.room == room_name
+        assert request.data == data
+        assert request.kind == kind
+        assert request.destination_sids == destination_sids
+        assert request.destination_identities == []
+        assert byte_size(request.nonce) == 16
+
+        Plug.Conn.resp(conn, 200, "")
+      end)
+
+      assert :ok = RoomServiceClient.send_data(client, room_name, data, kind, destination_sids: destination_sids)
+    end
+
+    test "sends data to specific participants by identities", %{bypass: bypass, client: client} do
+      room_name = "test_room"
+      data = "targeted data"
+      kind = :RELIABLE
+      destination_identities = ["user1", "user2"]
+
+      Bypass.expect_once(bypass, "POST", "/twirp/livekit.RoomService/SendData", fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        request = Livekit.SendDataRequest.decode(body)
+        assert request.room == room_name
+        assert request.data == data
+        assert request.kind == kind
+        assert request.destination_sids == []
+        assert request.destination_identities == destination_identities
+        assert byte_size(request.nonce) == 16
+
+        Plug.Conn.resp(conn, 200, "")
+      end)
+
+      assert :ok = RoomServiceClient.send_data(client, room_name, data, kind, destination_identities: destination_identities)
+    end
+
+    test "sends lossy data successfully", %{bypass: bypass, client: client} do
+      room_name = "test_room"
+      data = "lossy data"
+      kind = :LOSSY
+
+      Bypass.expect_once(bypass, "POST", "/twirp/livekit.RoomService/SendData", fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        request = Livekit.SendDataRequest.decode(body)
+        assert request.room == room_name
+        assert request.data == data
+        assert request.kind == kind
+        assert request.destination_sids == []
+        assert request.destination_identities == []
+        assert byte_size(request.nonce) == 16
+
+        Plug.Conn.resp(conn, 200, "")
+      end)
+
+      assert :ok = RoomServiceClient.send_data(client, room_name, data, kind)
+    end
   end
 end

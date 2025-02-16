@@ -30,7 +30,13 @@ defmodule LiveKit.RoomServiceClient do
         {"Content-Type", "application/protobuf"},
         {"Accept", "application/protobuf"}
       ]},
-      {Tesla.Middleware.Logger, debug: true}
+      {Tesla.Middleware.Logger, [
+        filter_headers: ["authorization"],
+        format_options: [
+          format_response_body: false,
+          format_request_body: false
+        ]
+      ]}
     ]
 
     client = Tesla.client(middleware, {Tesla.Adapter.Hackney, [recv_timeout: 30_000]})
