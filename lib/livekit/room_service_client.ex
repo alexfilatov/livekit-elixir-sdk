@@ -24,19 +24,24 @@ defmodule LiveKit.RoomServiceClient do
     |> String.replace(~r{^ws://}, "http://")
     |> String.replace(~r{^wss://}, "https://")
 
+    # Get Tesla logger config from application config, with defaults
+    tesla_logging = Application.get_env(:livekit, __MODULE__, [])
+    |> Keyword.get(:tesla_logging, [
+      debug: false,
+      filter_headers: ["authorization"],
+      format_options: [
+        format_response_body: false,
+        format_request_body: false
+      ]
+    ])
+
     middleware = [
       {Tesla.Middleware.BaseUrl, base_url},
       {Tesla.Middleware.Headers, [
         {"Content-Type", "application/protobuf"},
         {"Accept", "application/protobuf"}
       ]},
-      {Tesla.Middleware.Logger, [
-        filter_headers: ["authorization"],
-        format_options: [
-          format_response_body: false,
-          format_request_body: false
-        ]
-      ]}
+      {Tesla.Middleware.Logger, tesla_logging}
     ]
 
     client = Tesla.client(middleware, {Tesla.Adapter.Hackney, [recv_timeout: 30_000]})
