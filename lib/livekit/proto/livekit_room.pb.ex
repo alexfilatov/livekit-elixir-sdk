@@ -191,6 +191,8 @@ defmodule Livekit.SendDataRequest do
     repeated: true,
     type: :string,
     json_name: "destinationIdentities"
+
+  field :nonce, 6, type: :bytes
 end
 
 defmodule Livekit.SendDataResponse do

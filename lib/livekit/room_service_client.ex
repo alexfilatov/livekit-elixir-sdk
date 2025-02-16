@@ -9,7 +9,7 @@ defmodule LiveKit.RoomServiceClient do
     CreateRoomRequest, Room, ListRoomsRequest, ListRoomsResponse, DeleteRoomRequest,
     UpdateRoomMetadataRequest, ListParticipantsRequest, ListParticipantsResponse,
     RoomParticipantIdentity, ParticipantInfo, MuteRoomTrackRequest, MuteRoomTrackResponse,
-    UpdateParticipantRequest, UpdateSubscriptionsRequest, SendDataRequest, DataPacketKind
+    UpdateParticipantRequest, UpdateSubscriptionsRequest, SendDataRequest
   }
   require Logger
 
@@ -196,13 +196,23 @@ defmodule LiveKit.RoomServiceClient do
   """
   def update_participant(%__MODULE__{} = client, room, identity, opts \\ []) do
     path = "/twirp/livekit.RoomService/UpdateParticipant"
+    
+    # Convert attributes to string key-value pairs if provided
+    attributes = case Keyword.get(opts, :attributes) do
+      nil -> nil
+      attrs when is_map(attrs) ->
+        attrs
+        |> Enum.map(fn {k, v} -> {to_string(k), to_string(v)} end)
+        |> Enum.into(%{})
+    end
+
     request = struct(UpdateParticipantRequest, %{
       room: room,
       identity: identity,
       metadata: Keyword.get(opts, :metadata),
       permission: Keyword.get(opts, :permission),
       name: Keyword.get(opts, :name),
-      attributes: Keyword.get(opts, :attributes)
+      attributes: attributes
     })
     |> UpdateParticipantRequest.encode()
     headers = auth_header(client, %{room_admin: true, room: room})
@@ -229,29 +239,30 @@ defmodule LiveKit.RoomServiceClient do
     headers = auth_header(client, %{room_admin: true, room: room})
 
     case Tesla.post(client.client, path, request, headers: headers) do
-      {:ok, %{status: 200, body: _body}} -> :ok
+      {:ok, %{status: 200}} -> :ok
       {:ok, %{status: status, body: body}} -> {:error, {status, body}}
       {:error, reason} -> {:error, reason}
     end
   end
 
   @doc """
-  Sends data to participants in a room.
+  Sends data to specific participants in a room.
   """
-  def send_data(%__MODULE__{} = client, room, data, opts \\ []) do
+  def send_data(%__MODULE__{} = client, room, data, kind, opts \\ []) do
     path = "/twirp/livekit.RoomService/SendData"
     request = struct(SendDataRequest, %{
       room: room,
       data: data,
-      kind: Keyword.get(opts, :kind, DataPacketKind.value(:RELIABLE)),
+      kind: kind,
       destination_sids: Keyword.get(opts, :destination_sids, []),
-      destination_identities: Keyword.get(opts, :destination_identities, [])
+      destination_identities: Keyword.get(opts, :destination_identities, []),
+      nonce: :crypto.strong_rand_bytes(16)
     })
     |> SendDataRequest.encode()
     headers = auth_header(client, %{room_admin: true, room: room})
 
     case Tesla.post(client.client, path, request, headers: headers) do
-      {:ok, %{status: 200, body: _body}} -> :ok
+      {:ok, %{status: 200}} -> :ok
       {:ok, %{status: status, body: body}} -> {:error, {status, body}}
       {:error, reason} -> {:error, reason}
     end

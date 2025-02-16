@@ -116,6 +116,7 @@ message SendDataRequest {
   DataPacketKind kind = 3;
   repeated string destination_sids = 4;
   repeated string destination_identities = 5;
+  bytes nonce = 6;
 }
 
 message SendDataResponse {}

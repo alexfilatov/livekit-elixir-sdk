@@ -32,7 +32,7 @@ defmodule LiveKit.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      extra_applications: [:logger]
+      extra_applications: [:logger, :crypto]
     ]
   end
 
@@ -51,7 +51,10 @@ defmodule LiveKit.MixProject do
       {:ex_doc, "~> 0.29", only: :dev, runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:excoveralls, "~> 0.18", only: :test},
-      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+      # Test dependencies
+      {:bypass, "~> 2.1", only: :test},
+      {:mock, "~> 0.3.0", only: :test}
     ]
   end
 

@@ -24,4 +24,4 @@ livekit-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
-vendor/
+# vendor/
