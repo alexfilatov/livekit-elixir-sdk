@@ -25,7 +25,7 @@ defmodule LiveKit.Grants do
   @doc """
   Creates a new grant for joining a room.
   """
-  def join_room(room_name, _can_publish \\ true, _can_subscribe \\ true) do
+  def join_room(room_name, can_publish \\ true, can_subscribe \\ true) do
     %__MODULE__{
       room: room_name,
       room_join: true
@@ -38,6 +38,15 @@ defmodule LiveKit.Grants do
   def room_admin do
     %__MODULE__{
       room_admin: true
+    }
+  end
+
+  @doc """
+  Creates a new grant for room recording.
+  """
+  def room_record do
+    %__MODULE__{
+      room_record: true
     }
   end
 
