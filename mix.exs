@@ -11,7 +11,7 @@ defmodule LiveKit.MixProject do
       description: description(),
       package: package(),
       name: "LiveKit",
-      source_url: "https://github.com/gymbile/livekit",
+      source_url: "https://github.com/alexfilatov/livekit",
       # Docs
       docs: [
         main: "LiveKit",
@@ -37,7 +37,7 @@ defmodule LiveKit.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      extra_applications: [:logger, :crypto]
+      extra_applications: [:logger, :crypto, :gun, :grpc]
     ]
   end
 
@@ -76,7 +76,7 @@ defmodule LiveKit.MixProject do
       files: ~w(lib priv mix.exs README.md LICENSE),
       licenses: ["Apache-2.0"],
       links: %{
-        "GitHub" => "https://github.com/gymbile/livekit"
+        "GitHub" => "https://github.com/alexfilatov/livekit"
       }
     ]
   end

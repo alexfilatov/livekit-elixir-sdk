@@ -3,9 +3,9 @@ defmodule Livekit.RoomAgentDispatch do
 
   use Protobuf, protoc_gen_elixir_version: "0.14.0", syntax: :proto3
 
-  field :name, 1, type: :string
-  field :identity, 2, type: :string
-  field :init_request, 3, type: Livekit.InitRequest, json_name: "initRequest"
+  field(:name, 1, type: :string)
+  field(:identity, 2, type: :string)
+  field(:init_request, 3, type: Livekit.InitRequest, json_name: "initRequest")
 end
 
 defmodule Livekit.InitRequest do
@@ -13,5 +13,5 @@ defmodule Livekit.InitRequest do
 
   use Protobuf, protoc_gen_elixir_version: "0.14.0", syntax: :proto3
 
-  field :prompt, 1, type: :string
+  field(:prompt, 1, type: :string)
 end

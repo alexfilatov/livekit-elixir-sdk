@@ -15,6 +15,7 @@ defmodule Mix.Tasks.Livekit do
   * `list-participants` - List participants in a room
   * `remove-participant` - Remove a participant from a room
 
+
   Egress Operations:
   * `start-room-recording` - Start recording a room
   * `start-track-recording` - Start recording specific tracks
@@ -22,6 +23,7 @@ defmodule Mix.Tasks.Livekit do
   * `start-track-stream` - Start streaming specific tracks to RTMP endpoints
   * `list-egress` - List active egress operations
   * `stop-egress` - Stop an egress operation
+
 
   Room Agents:
   * `add-agent` - Add an agent to a room
@@ -60,39 +62,44 @@ defmodule Mix.Tasks.Livekit do
 
   @impl Mix.Task
   def run(args) do
-    {opts, args, _} = OptionParser.parse(args,
-      strict: [
-        api_key: :string,
-        api_secret: :string,
-        url: :string,
-        room: :string,
-        identity: :string,
-        valid_for: :string,
-        join: :boolean,
-        name: :string,
-        output: :string,
-        rtmp: :string,
-        width: :integer,
-        height: :integer,
-        fps: :integer,
-        audio_bitrate: :integer,
-        video_bitrate: :integer,
-        track_id: :string,
-        egress_id: :string,
-        prompt: :string
-      ],
-      aliases: [
-        k: :api_key,
-        s: :api_secret,
-        u: :url,
-        r: :room,
-        i: :identity,
-        t: :valid_for,
-        j: :join,
-        n: :name,
-        o: :output
-      ]
-    )
+    # Start required applications
+    Application.ensure_all_started(:gun)
+    Application.ensure_all_started(:grpc)
+
+    {opts, args, _} =
+      OptionParser.parse(args,
+        strict: [
+          api_key: :string,
+          api_secret: :string,
+          url: :string,
+          room: :string,
+          identity: :string,
+          valid_for: :string,
+          join: :boolean,
+          name: :string,
+          output: :string,
+          rtmp: :string,
+          width: :integer,
+          height: :integer,
+          fps: :integer,
+          audio_bitrate: :integer,
+          video_bitrate: :integer,
+          track_id: :string,
+          egress_id: :string,
+          prompt: :string
+        ],
+        aliases: [
+          k: :api_key,
+          s: :api_secret,
+          u: :url,
+          r: :room,
+          i: :identity,
+          t: :valid_for,
+          j: :join,
+          n: :name,
+          o: :output
+        ]
+      )
 
     case args do
       # Room Management
@@ -102,20 +109,17 @@ defmodule Mix.Tasks.Livekit do
       ["delete-room" | _] -> delete_room(opts)
       ["list-participants" | _] -> list_participants(opts)
       ["remove-participant" | _] -> remove_participant(opts)
-      
       # Egress Operations
       ["start-room-recording" | _] -> start_room_recording(opts)
       ["start-track-recording" | _] -> start_track_recording(opts)
-      ["start-room-stream" | _] -> start_room_stream(opts)
+      ["start-room-streaming" | _] -> start_room_streaming(opts)
       ["start-track-stream" | _] -> start_track_stream(opts)
       ["list-egress" | _] -> list_egress(opts)
       ["stop-egress" | _] -> stop_egress(opts)
-      
       # Room Agents
       ["add-agent" | _] -> add_agent(opts)
       ["remove-agent" | _] -> remove_agent(opts)
       ["list-agents" | _] -> list_agents(opts)
-      
       _ -> print_help()
     end
   end
@@ -129,15 +133,17 @@ defmodule Mix.Tasks.Livekit do
       ttl = parse_duration(Keyword.get(opts, :valid_for, "6h"))
       join = Keyword.get(opts, :join, false)
 
-      token = LiveKit.AccessToken.new(api_key, api_secret)
-      |> LiveKit.AccessToken.with_identity(identity)
-      |> LiveKit.AccessToken.with_ttl(ttl)
+      token =
+        LiveKit.AccessToken.new(api_key, api_secret)
+        |> LiveKit.AccessToken.with_identity(identity)
+        |> LiveKit.AccessToken.with_ttl(ttl)
 
-      token = if join do
-        LiveKit.AccessToken.add_grant(token, LiveKit.Grants.join_room(room))
-      else
-        token
-      end
+      token =
+        if join do
+          LiveKit.AccessToken.add_grant(token, LiveKit.Grants.join_room(room))
+        else
+          token
+        end
 
       jwt = LiveKit.AccessToken.to_jwt(token)
       IO.puts(jwt)
@@ -157,7 +163,9 @@ defmodule Mix.Tasks.Livekit do
             IO.puts("  Created At: #{format_timestamp(room.creation_time)}")
             IO.puts("")
           end)
-        {:error, error} -> IO.puts("Error: #{inspect(error)}")
+
+        {:error, error} ->
+          IO.puts("Error: #{inspect(error)}")
       end
     end
   end
@@ -170,7 +178,9 @@ defmodule Mix.Tasks.Livekit do
           IO.puts("Created room:")
           IO.puts("  Name: #{room.name}")
           IO.puts("  SID: #{room.sid}")
-        {:error, error} -> IO.puts("Error: #{inspect(error)}")
+
+        {:error, error} ->
+          IO.puts("Error: #{inspect(error)}")
       end
     end
   end
@@ -198,7 +208,9 @@ defmodule Mix.Tasks.Livekit do
             IO.puts("  Joined At: #{format_timestamp(participant.joined_at)}")
             IO.puts("")
           end)
-        {:error, error} -> IO.puts("Error: #{inspect(error)}")
+
+        {:error, error} ->
+          IO.puts("Error: #{inspect(error)}")
       end
     end
   end
@@ -231,6 +243,7 @@ defmodule Mix.Tasks.Livekit do
 
   defp parse_duration(duration) when is_binary(duration) do
     {num, unit} = Integer.parse(duration)
+
     case unit do
       "h" <> _ -> num * 3600
       "m" <> _ -> num * 60
@@ -238,9 +251,12 @@ defmodule Mix.Tasks.Livekit do
       _ -> num
     end
   end
-  defp parse_duration(_), do: 21600 # 6 hours default
+
+  # 6 hours default
+  defp parse_duration(_), do: 21600
 
   defp format_timestamp(nil), do: "N/A"
+
   defp format_timestamp(timestamp) do
     DateTime.from_unix!(timestamp)
     |> DateTime.to_string()
@@ -257,7 +273,7 @@ defmodule Mix.Tasks.Livekit do
          {:ok, output} <- get_opt(opts, :output) do
       # Parse output URL to determine type (s3, local, etc)
       {file_type, output_config} = parse_output_url(output)
-      
+
       encoding_options = %Livekit.EncodingOptions{
         width: Keyword.get(opts, :width, 1280),
         height: Keyword.get(opts, :height, 720),
@@ -279,23 +295,23 @@ defmodule Mix.Tasks.Livekit do
       }
 
       case LiveKit.EgressServiceClient.start_room_composite_egress(
-        client,
-        request
-      ) do
+             client,
+             request
+           ) do
         {:ok, info} ->
           IO.puts("Started room recording:")
           IO.inspect(info)
+
         {:error, error} ->
           IO.puts("Failed to start room recording: #{error}")
       end
     end
   end
 
-  defp start_room_stream(opts) do
+  defp start_room_streaming(opts) do
     with {:ok, client} <- get_egress_client(opts),
          {:ok, room} <- get_opt(opts, :room),
          {:ok, rtmp} <- get_opt(opts, :rtmp) do
-      
       encoding_options = %Livekit.EncodingOptions{
         width: Keyword.get(opts, :width, 1280),
         height: Keyword.get(opts, :height, 720),
@@ -319,6 +335,7 @@ defmodule Mix.Tasks.Livekit do
         {:ok, info} ->
           IO.puts("Started room streaming:")
           IO.inspect(info)
+
         {:error, error} ->
           IO.puts("Failed to start room streaming: #{error}")
       end
@@ -337,7 +354,9 @@ defmodule Mix.Tasks.Livekit do
             IO.puts("  Started At: #{format_timestamp(item.started_at)}")
             IO.puts("")
           end)
-        {:error, error} -> IO.puts("Error: #{inspect(error)}")
+
+        {:error, error} ->
+          IO.puts("Error: #{inspect(error)}")
       end
     end
   end
@@ -350,7 +369,9 @@ defmodule Mix.Tasks.Livekit do
           IO.puts("Stopped egress:")
           IO.puts("  Egress ID: #{info.egress_id}")
           IO.puts("  Status: #{info.status}")
-        {:error, error} -> IO.puts("Error: #{inspect(error)}")
+
+        {:error, error} ->
+          IO.puts("Error: #{inspect(error)}")
       end
     end
   end
@@ -361,7 +382,6 @@ defmodule Mix.Tasks.Livekit do
          {:ok, room} <- get_opt(opts, :room),
          {:ok, name} <- get_opt(opts, :name),
          {:ok, prompt} <- get_opt(opts, :prompt) do
-      
       agent = %Livekit.RoomAgentDispatch{
         name: name,
         identity: "agent-#{name}",
@@ -375,7 +395,9 @@ defmodule Mix.Tasks.Livekit do
           IO.puts("Added agent to room:")
           IO.puts("  Room: #{room.name}")
           IO.puts("  Agent: #{name}")
-        {:error, error} -> IO.puts("Error: #{inspect(error)}")
+
+        {:error, error} ->
+          IO.puts("Error: #{inspect(error)}")
       end
     end
   end
@@ -395,7 +417,9 @@ defmodule Mix.Tasks.Livekit do
             IO.puts("  Joined At: #{participant.joined_at}")
             IO.puts("")
           end)
-        {:error, error} -> IO.puts("Error: #{inspect(error)}")
+
+        {:error, error} ->
+          IO.puts("Error: #{inspect(error)}")
       end
     end
   end
@@ -405,10 +429,13 @@ defmodule Mix.Tasks.Livekit do
          {:ok, room} <- get_opt(opts, :room),
          {:ok, name} <- get_opt(opts, :name) do
       identity = "agent-#{name}"
+
       case LiveKit.RoomServiceClient.remove_participant(client, room, identity) do
         {:ok, _} ->
           IO.puts("Removed agent #{name} from room #{room}")
-        {:error, error} -> IO.puts("Error: #{inspect(error)}")
+
+        {:error, error} ->
+          IO.puts("Error: #{inspect(error)}")
       end
     end
   end
@@ -417,19 +444,29 @@ defmodule Mix.Tasks.Livekit do
   defp get_egress_client(opts) do
     with {:ok, url} <- get_opt(opts, :url),
          {:ok, api_key} <- get_opt(opts, :api_key),
-         {:ok, api_secret} <- get_opt(opts, :api_secret) do
-      {:ok, LiveKit.EgressServiceClient.new(url, api_key, api_secret)}
+         {:ok, api_secret} <- get_opt(opts, :api_secret),
+         {:ok, client} <- LiveKit.EgressServiceClient.new(url, api_key, api_secret) do
+      {:ok, client}
+    else
+      {:error, message} when is_binary(message) ->
+        IO.puts("Error: #{message}")
+        {:error, message}
+
+      {:error, {:missing_option, opt}} ->
+        IO.puts("Error: Missing required option --#{opt}")
+        {:error, :missing_option}
     end
   end
 
   defp parse_output_url("s3://" <> path) do
     [_bucket | key_parts] = String.split(path, "/")
     _key = Enum.join(key_parts, "/")
-    
-    {:s3, %Livekit.S3Upload{
-      bucket: List.first(String.split(path, "/")),
-      aws_credentials: System.get_env("AWS_CREDENTIALS", "default")
-    }}
+
+    {:s3,
+     %Livekit.S3Upload{
+       bucket: List.first(String.split(path, "/")),
+       aws_credentials: System.get_env("AWS_CREDENTIALS", "default")
+     }}
   end
 
   defp parse_output_url(_path) do
@@ -441,7 +478,6 @@ defmodule Mix.Tasks.Livekit do
          {:ok, room} <- get_opt(opts, :room),
          {:ok, track_id} <- get_opt(opts, :track_id),
          {:ok, output} <- get_opt(opts, :output) do
-      
       request = %Livekit.TrackEgressRequest{
         room_name: room,
         track_id: track_id,
@@ -452,6 +488,7 @@ defmodule Mix.Tasks.Livekit do
         {:ok, info} ->
           IO.puts("Started track recording:")
           IO.inspect(info)
+
         {:error, error} ->
           IO.puts("Failed to start track recording: #{error}")
       end
@@ -461,9 +498,9 @@ defmodule Mix.Tasks.Livekit do
   defp start_track_stream(opts) do
     with {:ok, client} <- get_egress_client(opts),
          {:ok, room} <- get_opt(opts, :room),
-         {:ok, _track_id} <- get_opt(opts, :track_id),  # We don't use track_id with RoomCompositeEgressRequest
+         # We don't use track_id with RoomCompositeEgressRequest
+         {:ok, _track_id} <- get_opt(opts, :track_id),
          {:ok, rtmp} <- get_opt(opts, :rtmp) do
-      
       encoding_options = %Livekit.EncodingOptions{
         width: Keyword.get(opts, :width, 1280),
         height: Keyword.get(opts, :height, 720),
@@ -483,13 +520,15 @@ defmodule Mix.Tasks.Livekit do
             urls: [rtmp]
           }
         ],
-        video_only: true  # Since we're only streaming a single track
+        # Since we're only streaming a single track
+        video_only: true
       }
 
       case LiveKit.EgressServiceClient.start_room_composite_egress(client, request) do
         {:ok, info} ->
           IO.puts("Started track streaming:")
           IO.inspect(info)
+
         {:error, error} ->
           IO.puts("Failed to start track streaming: #{error}")
       end
