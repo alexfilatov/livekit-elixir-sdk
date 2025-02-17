@@ -6,7 +6,7 @@ config :logger,
   format: "$time $metadata[$level] $message\n"
 
 # Configure Tesla logger middleware for development
-config :livekit, LiveKit.RoomServiceClient,
+config :livekit, Livekit.RoomServiceClient,
   tesla_logging: [
     # Enable debug logging in development
     debug: true,

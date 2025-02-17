@@ -1,4 +1,4 @@
-defmodule LiveKit.TestFormatter do
+defmodule Livekit.TestFormatter do
   @moduledoc """
   Custom formatter for test environment that properly handles binary data in logs.
   """

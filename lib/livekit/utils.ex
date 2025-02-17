@@ -1,6 +1,6 @@
-defmodule LiveKit.Utils do
+defmodule Livekit.Utils do
   @moduledoc """
-  Utility functions for LiveKit SDK.
+  Utility functions for Livekit SDK.
   """
 
   @doc """

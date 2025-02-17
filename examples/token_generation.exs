@@ -4,10 +4,10 @@ Mix.install([
   {:twirp, "~> 0.8.0"}
 ])
 
-alias LiveKit.AccessToken
-alias LiveKit.Grants
+alias Livekit.AccessToken
+alias Livekit.Grants
 
-# Configure LiveKit credentials
+# Configure Livekit credentials
 api_key = "devkey"
 api_secret = "secret"
 

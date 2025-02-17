@@ -1,6 +1,6 @@
-defmodule LiveKit.UtilsTest do
+defmodule Livekit.UtilsTest do
   use ExUnit.Case
-  alias LiveKit.Utils
+  alias Livekit.Utils
 
   describe "to_http_url/1" do
     test "converts ws:// to http://" do

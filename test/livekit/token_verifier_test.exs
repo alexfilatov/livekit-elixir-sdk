@@ -1,8 +1,8 @@
-defmodule LiveKit.TokenVerifierTest do
+defmodule Livekit.TokenVerifierTest do
   use ExUnit.Case
-  alias LiveKit.AccessToken
-  alias LiveKit.Grants
-  alias LiveKit.TokenVerifier
+  alias Livekit.AccessToken
+  alias Livekit.Grants
+  alias Livekit.TokenVerifier
 
   @api_key "api_key_123"
   @api_secret "secret_456"

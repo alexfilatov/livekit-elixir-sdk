@@ -1,9 +1,9 @@
-defmodule LiveKit.AccessToken do
+defmodule Livekit.AccessToken do
   @moduledoc """
-  Handles generation and management of LiveKit access tokens.
+  Handles generation and management of Livekit access tokens.
   """
 
-  alias LiveKit.Grants
+  alias Livekit.Grants
 
   defstruct api_key: nil,
             api_secret: nil,
@@ -55,7 +55,7 @@ defmodule LiveKit.AccessToken do
   @doc """
   Sets the grants for the token.
   """
-  def with_grants(%__MODULE__{} = token, %LiveKit.Grants{} = grants) do
+  def with_grants(%__MODULE__{} = token, %Livekit.Grants{} = grants) do
     %{token | grants: grants}
   end
 

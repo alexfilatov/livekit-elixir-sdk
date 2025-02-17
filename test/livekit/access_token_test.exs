@@ -1,7 +1,7 @@
-defmodule LiveKit.AccessTokenTest do
+defmodule Livekit.AccessTokenTest do
   use ExUnit.Case
-  alias LiveKit.AccessToken
-  alias LiveKit.Grants
+  alias Livekit.AccessToken
+  alias Livekit.Grants
 
   @api_key "api_key_123"
   @api_secret "secret_456"
@@ -60,7 +60,7 @@ defmodule LiveKit.AccessTokenTest do
       assert is_binary(jwt)
 
       # Verify the token can be decoded
-      {:ok, claims} = LiveKit.TokenVerifier.verify(jwt, @api_secret)
+      {:ok, claims} = Livekit.TokenVerifier.verify(jwt, @api_secret)
       assert claims["sub"] == "user123"
       assert claims["iss"] == @api_key
       assert claims["video"]["room"] == "room123"

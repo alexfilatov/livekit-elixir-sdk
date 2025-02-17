@@ -1,7 +1,7 @@
-defmodule LiveKit.Config do
+defmodule Livekit.Config do
   @moduledoc """
-  Configuration module for LiveKit.
-  Handles configuration management and provides a unified interface for accessing LiveKit settings.
+  Configuration module for Livekit.
+  Handles configuration management and provides a unified interface for accessing Livekit settings.
   """
 
   @type t :: %__MODULE__{
@@ -37,13 +37,13 @@ defmodule LiveKit.Config do
   def validate(%__MODULE__{} = config) do
     cond do
       is_nil(config.url) or config.url == "" ->
-        {:error, "LiveKit URL is required"}
+        {:error, "Livekit URL is required"}
 
       is_nil(config.api_key) or config.api_key == "" ->
-        {:error, "LiveKit API key is required"}
+        {:error, "Livekit API key is required"}
 
       is_nil(config.api_secret) or config.api_secret == "" ->
-        {:error, "LiveKit API secret is required"}
+        {:error, "Livekit API secret is required"}
 
       true ->
         :ok

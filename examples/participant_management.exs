@@ -3,21 +3,21 @@ Mix.install([
   {:jason, "~> 1.4"}
 ])
 
-# Configure LiveKit credentials
+# Configure Livekit credentials
 api_key = "devkey"
 api_secret = "secret"
 livekit_url = "http://localhost:7880"
 
 # Create a client instance
-client = LiveKit.RoomServiceClient.new(livekit_url, api_key, api_secret)
+client = Livekit.RoomServiceClient.new(livekit_url, api_key, api_secret)
 
 # Create a test room
-{:ok, room} = LiveKit.RoomServiceClient.create_room(client, "test-room")
+{:ok, room} = Livekit.RoomServiceClient.create_room(client, "test-room")
 IO.puts("\nCreated room: #{room.name}\n")
 
 # Example 1: Update participant metadata and attributes
 IO.puts("=== Updating participant information ===\n")
-{:ok, updated_participant} = LiveKit.RoomServiceClient.update_participant(
+{:ok, updated_participant} = Livekit.RoomServiceClient.update_participant(
   client,
   "test-room",
   "participant-123",
@@ -33,7 +33,7 @@ IO.inspect(updated_participant, label: "Updated participant")
 
 # Example 2: Update track subscriptions
 IO.puts("\n=== Updating track subscriptions ===\n")
-:ok = LiveKit.RoomServiceClient.update_subscriptions(
+:ok = Livekit.RoomServiceClient.update_subscriptions(
   client,
   "test-room",
   "participant-123",
@@ -47,7 +47,7 @@ IO.puts("Successfully updated track subscriptions")
 IO.puts("\n=== Sending data to participants ===\n")
 
 # Send to specific participants by identity
-:ok = LiveKit.RoomServiceClient.send_data(
+:ok = Livekit.RoomServiceClient.send_data(
   client,
   "test-room",
   "Hello specific participants!",
@@ -58,7 +58,7 @@ IO.puts("\n=== Sending data to participants ===\n")
 IO.puts("Sent data to specific participants")
 
 # Broadcast to all participants in the room
-:ok = LiveKit.RoomServiceClient.send_data(
+:ok = Livekit.RoomServiceClient.send_data(
   client,
   "test-room",
   "Hello everyone!",
@@ -68,5 +68,5 @@ IO.puts("Sent data to specific participants")
 IO.puts("Broadcasted data to all participants")
 
 # Clean up: Delete the test room
-:ok = LiveKit.RoomServiceClient.delete_room(client, "test-room")
+:ok = Livekit.RoomServiceClient.delete_room(client, "test-room")
 IO.puts("\nDeleted test room")

@@ -1,4 +1,4 @@
-defmodule LiveKit.MixProject do
+defmodule Livekit.MixProject do
   use Mix.Project
 
   def project do
@@ -10,11 +10,11 @@ defmodule LiveKit.MixProject do
       deps: deps(),
       description: description(),
       package: package(),
-      name: "LiveKit",
+      name: "Livekit",
       source_url: "https://github.com/alexfilatov/livekit",
       # Docs
       docs: [
-        main: "LiveKit",
+        main: "Livekit",
         extras: ["README.md"]
       ],
       # Test coverage
@@ -66,7 +66,7 @@ defmodule LiveKit.MixProject do
 
   defp description do
     """
-    LiveKit server SDK for Elixir - enables you to build real-time video/audio applications with LiveKit.
+    Livekit server SDK for Elixir - enables you to build real-time video/audio applications with Livekit.
     """
   end
 

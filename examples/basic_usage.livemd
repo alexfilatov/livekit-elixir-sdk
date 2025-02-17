@@ -1,8 +1,8 @@
-# LiveKit Server SDK Basic Usage
+# Livekit Server SDK Basic Usage
 
 ## Setup
 
-First, let's install and set up our dependencies. We'll use the local LiveKit SDK package.
+First, let's install and set up our dependencies. We'll use the local Livekit SDK package.
 
 ```elixir
 Mix.install([
@@ -12,12 +12,12 @@ Mix.install([
   {:hackney, "~> 1.18"}
 ])
 
-alias LiveKit.{AccessToken, RoomServiceClient}
+alias Livekit.{AccessToken, RoomServiceClient}
 ```
 
 ## Configuration
 
-Set your LiveKit server credentials. You can modify these values to match your setup.
+Set your Livekit server credentials. You can modify these values to match your setup.
 
 ```elixir
 server_url = "http://localhost:7880"
@@ -85,7 +85,7 @@ end
 
 ## Listing Rooms
 
-View all active rooms on your LiveKit server.
+View all active rooms on your Livekit server.
 
 ```elixir
 case RoomServiceClient.list_rooms(client) do
@@ -158,7 +158,7 @@ end
 
 Now that you have a room and access tokens, you can:
 
-1. Connect to the room using a LiveKit client library
+1. Connect to the room using a Livekit client library
 2. Use the admin token to manage the room
 3. Monitor room activity and participants
 

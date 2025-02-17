@@ -1,4 +1,4 @@
-# LiveKit Server SDK Advanced Usage
+# Livekit Server SDK Advanced Usage
 
 ## Setup
 
@@ -12,7 +12,7 @@ Mix.install([
   {:hackney, "~> 1.18"}
 ])
 
-alias LiveKit.{AccessToken, RoomServiceClient}
+alias Livekit.{AccessToken, RoomServiceClient}
 ```
 
 ## Configuration

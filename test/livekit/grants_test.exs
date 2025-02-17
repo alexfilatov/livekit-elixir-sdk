@@ -1,6 +1,6 @@
-defmodule LiveKit.GrantsTest do
+defmodule Livekit.GrantsTest do
   use ExUnit.Case
-  alias LiveKit.Grants
+  alias Livekit.Grants
 
   describe "join_room/3" do
     test "creates a room join grant" do

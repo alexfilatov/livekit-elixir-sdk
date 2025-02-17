@@ -6,15 +6,15 @@ Mix.install(
   force: true
 )
 
-# Advanced example of using LiveKit SDK with error handling and retries
+# Advanced example of using Livekit SDK with error handling and retries
 #
 # To run this example:
-# 1. Set your LiveKit server URL, API key, and API secret
+# 1. Set your Livekit server URL, API key, and API secret
 # 2. Run with: `elixir advanced_room_management.exs`
 
-alias LiveKit.{AccessToken, RoomServiceClient, Grants}
+alias Livekit.{AccessToken, RoomServiceClient, Grants}
 
-# Replace these with your LiveKit server credentials
+# Replace these with your Livekit server credentials
 server_url = "ws://localhost:7880"
 api_key = "devkey"
 api_secret = "secret"

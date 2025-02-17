@@ -1,8 +1,8 @@
-# LiveKit Server SDK for Elixir
+# Livekit Server SDK for Elixir
 
 **⚠️ IMPORTANT DISCLAIMER: This is an early development version (v0.1.1) and is NOT intended for production use. The codebase is in active development, APIs may change without notice, and thorough testing in a production environment has not been conducted. Use at your own risk for development and testing purposes only. We strongly recommend waiting for a stable release before using this in any production environment.**
 
-This is *not* official Elixir server SDK for [LiveKit](https://livekit.io). This SDK allows you to manage rooms and create access tokens from your Elixir backend.
+This is *not* official Elixir server SDK for [Livekit](https://livekit.io). This SDK allows you to manage rooms and create access tokens from your Elixir backend.
 
 ## Installation
 
@@ -20,7 +20,7 @@ end
 
 ### Command Line Interface (CLI)
 
-The SDK includes a CLI for common LiveKit operations. Here are all available commands grouped by category:
+The SDK includes a CLI for common Livekit operations. Here are all available commands grouped by category:
 
 #### Room Management
 ```bash
@@ -79,9 +79,9 @@ mix livekit list-agents --api-key devkey --api-secret secret --url https://my.li
 ### Command Options
 
 #### Common Options
-- `--api-key` (`-k`): LiveKit API key (required)
-- `--api-secret` (`-s`): LiveKit API secret (required)
-- `--url` (`-u`): LiveKit server URL (required for most commands)
+- `--api-key` (`-k`): Livekit API key (required)
+- `--api-secret` (`-s`): Livekit API secret (required)
+- `--url` (`-u`): Livekit server URL (required for most commands)
 - `--room` (`-r`): Room name
 - `--identity` (`-i`): Participant identity
 - `--name` (`-n`): Name for new room or agent
@@ -110,8 +110,8 @@ mix help livekit
 ### Creating Access Tokens
 
 ```elixir
-alias LiveKit.AccessToken
-alias LiveKit.Grants
+alias Livekit.AccessToken
+alias Livekit.Grants
 
 # Create a new access token
 token = AccessToken.new("api-key", "api-secret")
@@ -126,7 +126,7 @@ jwt = AccessToken.to_jwt(token)
 ### Managing Rooms
 
 ```elixir
-alias LiveKit.RoomServiceClient
+alias Livekit.RoomServiceClient
 
 # Create a client
 client = RoomServiceClient.new("https://your-livekit-host", "api-key", "api-secret")
@@ -150,7 +150,7 @@ client = RoomServiceClient.new("https://your-livekit-host", "api-key", "api-secr
 ### Verifying Tokens
 
 ```elixir
-alias LiveKit.TokenVerifier
+alias Livekit.TokenVerifier
 
 # Verify a token
 case TokenVerifier.verify(jwt, "api-secret") do
@@ -168,13 +168,13 @@ end
 ```elixir
 # Configure automatic room recording
 {:ok, room} = RoomServiceClient.create_room(client, "room-name",
-  egress: %LiveKit.RoomEgress{
-    room: %LiveKit.RoomCompositeEgressRequest{
-      file: %LiveKit.EncodedFileOutput{
+  egress: %Livekit.RoomEgress{
+    room: %Livekit.RoomCompositeEgressRequest{
+      file: %Livekit.EncodedFileOutput{
         filepath: "recordings/room-name.mp4",
         disable_manifest: false
       },
-      options: %LiveKit.RoomCompositeEgressRequest.Options{
+      options: %Livekit.RoomCompositeEgressRequest.Options{
         video_width: 1280,
         video_height: 720,
         fps: 30,
@@ -192,7 +192,7 @@ end
 # Configure room agents
 {:ok, room} = RoomServiceClient.create_room(client, "room-name",
   agents: [
-    %LiveKit.RoomAgentDispatch{
+    %Livekit.RoomAgentDispatch{
       name: "my-agent",
       identity: "agent-1",
       init_request: %{
@@ -205,11 +205,11 @@ end
 
 ### Configuration
 
-The SDK supports multiple ways to configure LiveKit credentials and settings:
+The SDK supports multiple ways to configure Livekit credentials and settings:
 
 ### Environment Variables
 
-You can set your LiveKit configuration using environment variables:
+You can set your Livekit configuration using environment variables:
 
 ```bash
 export LIVEKIT_URL="wss://your-livekit-server.com"
@@ -219,7 +219,7 @@ export LIVEKIT_API_SECRET="your-api-secret"
 
 ### Application Configuration
 
-Add LiveKit configuration to your `config/config.exs` or environment-specific config file:
+Add Livekit configuration to your `config/config.exs` or environment-specific config file:
 
 ```elixir
 config :livekit,

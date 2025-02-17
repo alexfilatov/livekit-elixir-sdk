@@ -11,7 +11,7 @@ config :logger,
   ]
 
 # Configure Tesla logger middleware for production
-config :livekit, LiveKit.RoomServiceClient,
+config :livekit, Livekit.RoomServiceClient,
   tesla_logging: [
     # Disable debug logging in production
     debug: false,
