@@ -117,7 +117,8 @@ defmodule Mix.Tasks.Livekit do
         video_bitrate: :integer,
         track_id: :string,
         egress_id: :string,
-        prompt: :string
+        prompt: :string,
+        metadata: :string
       ],
       aliases: [
         k: :api_key,
@@ -192,84 +193,110 @@ defmodule Mix.Tasks.Livekit do
   end
 
   def handle_create_token(opts) do
-    with {:ok, api_key} <- get_opt(opts, :api_key),
-         {:ok, api_secret} <- get_opt(opts, :api_secret),
+    with {:ok, identity} <- get_opt(opts, :identity),
          {:ok, room} <- get_opt(opts, :room) do
-      identity = Keyword.get(opts, :identity, "anonymous")
-      ttl = parse_duration(Keyword.get(opts, :valid_for, "6h"))
-      join = Keyword.get(opts, :join, false)
+      config = LiveKit.Config.get(opts)
 
-      # Validate API key and secret
-      if String.length(api_key) < 8 or String.length(api_secret) < 8 do
-        {:error, "Invalid API key or secret"}
-      else
-        token =
-          LiveKit.AccessToken.new(api_key, api_secret)
-          |> LiveKit.AccessToken.with_identity(identity)
-          |> LiveKit.AccessToken.with_ttl(ttl)
+      case LiveKit.Config.validate(config) do
+        :ok ->
+          name = Keyword.get(opts, :name)
+          metadata = Keyword.get(opts, :metadata)
+          valid_for = Keyword.get(opts, :valid_for)
 
-        token =
-          if join do
-            LiveKit.AccessToken.add_grant(token, LiveKit.Grants.join_room(room))
-          else
-            token
-          end
+          grant = %LiveKit.Grants{
+            room: room,
+            room_join: true,
+            room_admin: Keyword.get(opts, :admin, false)
+          }
 
-        jwt = LiveKit.AccessToken.to_jwt(token)
-        {:ok, jwt}
+          token =
+            LiveKit.AccessToken.new(config.api_key, config.api_secret)
+            |> LiveKit.AccessToken.with_identity(identity)
+            |> LiveKit.AccessToken.with_grants(grant)
+            |> maybe_add_ttl(valid_for)
+            |> maybe_add_metadata(metadata)
+            |> LiveKit.AccessToken.to_jwt()
+
+          {:ok, token}
+
+        error ->
+          error
       end
-    else
-      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp maybe_add_ttl(token, nil), do: token
+
+  defp maybe_add_ttl(token, ttl) when is_binary(ttl) do
+    case parse_duration(ttl) do
+      {:ok, seconds} -> LiveKit.AccessToken.with_ttl(token, seconds)
+      _error -> token
+    end
+  end
+
+  defp maybe_add_metadata(token, nil), do: token
+
+  defp maybe_add_metadata(token, metadata) when is_binary(metadata) do
+    LiveKit.AccessToken.with_metadata(token, metadata)
+  end
+
+  defp parse_duration(duration) when is_binary(duration) do
+    case Regex.run(~r/^(\d+)([hms])$/, duration) do
+      [_, value, unit] ->
+        value = String.to_integer(value)
+
+        case unit do
+          "h" -> {:ok, value * 3600}
+          "m" -> {:ok, value * 60}
+          "s" -> {:ok, value}
+        end
+
+      _ ->
+        {:error, "Invalid duration format. Use <number>[h|m|s], e.g., 24h, 60m, or 3600s"}
     end
   end
 
   def handle_list_participants(opts) do
-    with {:ok, client} <- get_client(opts),
-         {:ok, room} <- get_opt(opts, :room) do
+    with {:ok, room} <- get_opt(opts, :room),
+         {:ok, client} <- get_client(opts) do
       case LiveKit.RoomServiceClient.list_participants(client, room) do
         {:ok, participants} -> {:ok, participants}
-        {:error, %{status: 401}} -> {:error, "Invalid API credentials"}
-        {:error, error} -> {:error, error}
+        {:error, reason} -> {:error, reason}
       end
-    else
-      {:error, reason} -> {:error, reason}
     end
   end
 
   def handle_start_room_recording(opts) do
-    with {:ok, client} <- get_egress_client(opts),
-         {:ok, room} <- get_opt(opts, :room),
-         {:ok, output} <- get_opt(opts, :output) do
-      # Parse output URL to determine type (s3, local, etc)
-      {file_type, output_config} = parse_output_url(output)
-
-      encoding_options = %Livekit.EncodingOptions{
-        width: Keyword.get(opts, :width, 1280),
-        height: Keyword.get(opts, :height, 720),
-        framerate: Keyword.get(opts, :fps, 30),
-        audio_bitrate: Keyword.get(opts, :audio_bitrate, 128),
-        video_bitrate: Keyword.get(opts, :video_bitrate, 3000)
-      }
-
+    with {:ok, room} <- get_opt(opts, :room),
+         {:ok, output} <- get_opt(opts, :output),
+         {:ok, client} <- get_egress_client(opts) do
       request = %Livekit.RoomCompositeEgressRequest{
         room_name: room,
-        options: {:advanced, encoding_options},
         file_outputs: [
           %Livekit.EncodedFileOutput{
-            file_type: file_type,
-            filepath: output,
-            output: output_config
+            filepath: output
           }
-        ]
+        ],
+        options:
+          {:advanced,
+           %Livekit.EncodingOptions{
+             width: 1280,
+             height: 720,
+             framerate: 30,
+             audio_bitrate: 128_000,
+             video_bitrate: 3_000_000
+           }}
       }
 
-      case LiveKit.EgressServiceClient.start_room_composite_egress(client, request) do
-        {:ok, info} -> {:ok, info}
-        {:error, %GRPC.RPCError{} = error} -> {:error, error.message}
-        {:error, error} -> {:error, error}
+      try do
+        case LiveKit.EgressServiceClient.start_room_composite_egress(client, request) do
+          {:ok, response} -> {:ok, response}
+          {:error, %GRPC.RPCError{} = error} -> {:error, error.message}
+          {:error, reason} -> {:error, reason}
+        end
+      rescue
+        error -> {:error, "Failed to start recording: #{inspect(error)}"}
       end
-    else
-      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -490,27 +517,19 @@ defmodule Mix.Tasks.Livekit do
   end
 
   defp get_client(opts) do
-    with {:ok, url} <- get_opt(opts, :url),
-         {:ok, api_key} <- get_opt(opts, :api_key),
-         {:ok, api_secret} <- get_opt(opts, :api_secret) do
-      {:ok, LiveKit.RoomServiceClient.new(url, api_key, api_secret)}
+    with {:ok, config} <- LiveKit.Config.get_validated(opts) do
+      {:ok, LiveKit.RoomServiceClient.new(config.url, config.api_key, config.api_secret)}
     end
   end
 
   defp get_egress_client(opts) do
-    with {:ok, url} <- get_opt(opts, :url),
-         {:ok, api_key} <- get_opt(opts, :api_key),
-         {:ok, api_secret} <- get_opt(opts, :api_secret),
-         {:ok, client} <- LiveKit.EgressServiceClient.new(url, api_key, api_secret) do
-      {:ok, client}
-    else
-      {:error, message} when is_binary(message) ->
-        IO.puts("Error: #{message}")
-        {:error, message}
-
-      {:error, {:missing_option, opt}} ->
-        IO.puts("Error: Missing required option --#{opt}")
-        {:error, :missing_option}
+    with {:ok, config} <- LiveKit.Config.get_validated(opts) do
+      try do
+        {:ok, LiveKit.EgressServiceClient.new(config.url, config.api_key, config.api_secret)}
+      rescue
+        error in [UndefinedFunctionError] ->
+          {:error, "Failed to connect to egress service: #{inspect(error)}"}
+      end
     end
   end
 
@@ -520,19 +539,6 @@ defmodule Mix.Tasks.Livekit do
       value -> {:ok, value}
     end
   end
-
-  defp parse_duration(duration) when is_binary(duration) do
-    {num, unit} = Integer.parse(duration)
-
-    case unit do
-      "h" <> _ -> num * 3600
-      "m" <> _ -> num * 60
-      "s" <> _ -> num
-      _ -> num
-    end
-  end
-
-  defp parse_duration(_), do: 21_600
 
   defp format_timestamp(nil), do: "N/A"
 

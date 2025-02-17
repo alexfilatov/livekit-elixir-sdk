@@ -53,6 +53,13 @@ defmodule LiveKit.AccessToken do
   end
 
   @doc """
+  Sets the grants for the token.
+  """
+  def with_grants(%__MODULE__{} = token, %LiveKit.Grants{} = grants) do
+    %{token | grants: grants}
+  end
+
+  @doc """
   Adds a grant to the token.
   """
   def add_grant(%__MODULE__{} = token, grant) do

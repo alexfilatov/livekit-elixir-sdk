@@ -201,6 +201,52 @@ end
 )
 ```
 
+### Configuration
+
+The SDK supports multiple ways to configure LiveKit credentials and settings:
+
+### Environment Variables
+
+You can set your LiveKit configuration using environment variables:
+
+```bash
+export LIVEKIT_URL="wss://your-livekit-server.com"
+export LIVEKIT_API_KEY="your-api-key"
+export LIVEKIT_API_SECRET="your-api-secret"
+```
+
+### Application Configuration
+
+Add LiveKit configuration to your `config/config.exs` or environment-specific config file:
+
+```elixir
+config :livekit,
+  url: "wss://your-livekit-server.com",
+  api_key: "your-api-key",
+  api_secret: "your-api-secret"
+```
+
+### Runtime Configuration
+
+You can override configuration at runtime by passing options to functions:
+
+```elixir
+opts = [
+  url: "wss://different-server.com",
+  api_key: "different-key",
+  api_secret: "different-secret"
+]
+
+# These options will override any environment or application config
+mix livekit create-token --room my-room --identity user1 --valid-for 24h
+```
+
+The configuration system follows this priority order:
+1. Runtime options (highest priority)
+2. Environment variables
+3. Application configuration
+4. Default values (lowest priority)
+
 ### Development
 
 #### Protobuf Compilation
