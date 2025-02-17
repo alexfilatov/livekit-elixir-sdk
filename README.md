@@ -9,7 +9,7 @@ Add `livekit` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:livekit, "~> 0.1.0"}
+    {:livekit, "~> 0.1"}
   ]
 end
 ```
