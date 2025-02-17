@@ -101,31 +101,29 @@ defmodule Mix.Tasks.Livekit do
         ]
       )
 
-    case args do
-      # Room Management
-      ["create-token" | _] -> create_token(opts)
-      ["list-rooms" | _] -> list_rooms(opts)
-      ["create-room" | _] -> create_room(opts)
-      ["delete-room" | _] -> delete_room(opts)
-      ["list-participants" | _] -> list_participants(opts)
-      ["remove-participant" | _] -> remove_participant(opts)
-      # Egress Operations
-      ["start-room-recording" | _] -> start_room_recording(opts)
-      ["start-track-recording" | _] -> start_track_recording(opts)
-      ["start-room-streaming" | _] -> start_room_streaming(opts)
-      ["start-track-stream" | _] -> start_track_stream(opts)
-      ["list-egress" | _] -> list_egress(opts)
-      ["stop-egress" | _] -> stop_egress(opts)
-      # Room Agents
-      ["add-agent" | _] -> add_agent(opts)
-      ["remove-agent" | _] -> remove_agent(opts)
-      ["list-agents" | _] -> list_agents(opts)
+    command = List.first(args)
+
+    case command do
+      "create-token" -> handle_create_token(opts)
+      "list-rooms" -> handle_list_rooms(opts)
+      "create-room" -> handle_create_room(opts)
+      "delete-room" -> handle_delete_room(opts)
+      "list-participants" -> handle_list_participants(opts)
+      "remove-participant" -> handle_remove_participant(opts)
+      "start-room-recording" -> handle_start_room_recording(opts)
+      "start-track-recording" -> handle_start_track_recording(opts)
+      "start-room-streaming" -> handle_start_room_streaming(opts)
+      "start-track-stream" -> handle_start_track_stream(opts)
+      "list-egress" -> handle_list_egress(opts)
+      "stop-egress" -> handle_stop_egress(opts)
+      "add-agent" -> handle_add_agent(opts)
+      "remove-agent" -> handle_remove_agent(opts)
+      "list-agents" -> handle_list_agents(opts)
       _ -> print_help()
     end
   end
 
-  # Existing command implementations...
-  defp create_token(opts) do
+  def handle_create_token(opts) do
     with {:ok, api_key} <- get_opt(opts, :api_key),
          {:ok, api_secret} <- get_opt(opts, :api_secret),
          {:ok, room} <- get_opt(opts, :room) do
@@ -133,141 +131,44 @@ defmodule Mix.Tasks.Livekit do
       ttl = parse_duration(Keyword.get(opts, :valid_for, "6h"))
       join = Keyword.get(opts, :join, false)
 
-      token =
-        LiveKit.AccessToken.new(api_key, api_secret)
-        |> LiveKit.AccessToken.with_identity(identity)
-        |> LiveKit.AccessToken.with_ttl(ttl)
+      # Validate API key and secret
+      if String.length(api_key) < 8 or String.length(api_secret) < 8 do
+        {:error, "Invalid API key or secret"}
+      else
+        token =
+          LiveKit.AccessToken.new(api_key, api_secret)
+          |> LiveKit.AccessToken.with_identity(identity)
+          |> LiveKit.AccessToken.with_ttl(ttl)
 
-      token =
-        if join do
-          LiveKit.AccessToken.add_grant(token, LiveKit.Grants.join_room(room))
-        else
-          token
-        end
+        token =
+          if join do
+            LiveKit.AccessToken.add_grant(token, LiveKit.Grants.join_room(room))
+          else
+            token
+          end
 
-      jwt = LiveKit.AccessToken.to_jwt(token)
-      IO.puts(jwt)
+        jwt = LiveKit.AccessToken.to_jwt(token)
+        {:ok, jwt}
+      end
     else
-      {:error, message} -> IO.puts("Error: #{message}")
+      {:error, reason} -> {:error, reason}
     end
   end
 
-  defp list_rooms(opts) do
-    with {:ok, client} <- get_client(opts) do
-      case LiveKit.RoomServiceClient.list_rooms(client) do
-        {:ok, rooms} ->
-          rooms
-          |> Enum.each(fn room ->
-            IO.puts("#{room.name} (#{room.sid})")
-            IO.puts("  Num Participants: #{room.num_participants}")
-            IO.puts("  Created At: #{format_timestamp(room.creation_time)}")
-            IO.puts("")
-          end)
-
-        {:error, error} ->
-          IO.puts("Error: #{inspect(error)}")
-      end
-    end
-  end
-
-  defp create_room(opts) do
-    with {:ok, client} <- get_client(opts),
-         {:ok, name} <- get_opt(opts, :name) do
-      case LiveKit.RoomServiceClient.create_room(client, name) do
-        {:ok, room} ->
-          IO.puts("Created room:")
-          IO.puts("  Name: #{room.name}")
-          IO.puts("  SID: #{room.sid}")
-
-        {:error, error} ->
-          IO.puts("Error: #{inspect(error)}")
-      end
-    end
-  end
-
-  defp delete_room(opts) do
-    with {:ok, client} <- get_client(opts),
-         {:ok, room} <- get_opt(opts, :room) do
-      case LiveKit.RoomServiceClient.delete_room(client, room) do
-        {:ok, _} -> IO.puts("Room #{room} deleted")
-        {:error, error} -> IO.puts("Error: #{inspect(error)}")
-      end
-    end
-  end
-
-  defp list_participants(opts) do
+  def handle_list_participants(opts) do
     with {:ok, client} <- get_client(opts),
          {:ok, room} <- get_opt(opts, :room) do
       case LiveKit.RoomServiceClient.list_participants(client, room) do
-        {:ok, participants} ->
-          participants
-          |> Enum.each(fn participant ->
-            IO.puts("#{participant.identity} (#{participant.sid})")
-            IO.puts("  Name: #{participant.name}")
-            IO.puts("  State: #{participant.state}")
-            IO.puts("  Joined At: #{format_timestamp(participant.joined_at)}")
-            IO.puts("")
-          end)
-
-        {:error, error} ->
-          IO.puts("Error: #{inspect(error)}")
+        {:ok, participants} -> {:ok, participants}
+        {:error, %{status: 401}} -> {:error, "Invalid API credentials"}
+        {:error, error} -> {:error, error}
       end
+    else
+      {:error, reason} -> {:error, reason}
     end
   end
 
-  defp remove_participant(opts) do
-    with {:ok, client} <- get_client(opts),
-         {:ok, room} <- get_opt(opts, :room),
-         {:ok, identity} <- get_opt(opts, :identity) do
-      case LiveKit.RoomServiceClient.remove_participant(client, room, identity) do
-        {:ok, _} -> IO.puts("Participant #{identity} removed from room #{room}")
-        {:error, error} -> IO.puts("Error: #{inspect(error)}")
-      end
-    end
-  end
-
-  defp get_client(opts) do
-    with {:ok, url} <- get_opt(opts, :url),
-         {:ok, api_key} <- get_opt(opts, :api_key),
-         {:ok, api_secret} <- get_opt(opts, :api_secret) do
-      {:ok, LiveKit.RoomServiceClient.new(url, api_key, api_secret)}
-    end
-  end
-
-  defp get_opt(opts, key) do
-    case Keyword.get(opts, key) do
-      nil -> {:error, "Missing required option: --#{key}"}
-      value -> {:ok, value}
-    end
-  end
-
-  defp parse_duration(duration) when is_binary(duration) do
-    {num, unit} = Integer.parse(duration)
-
-    case unit do
-      "h" <> _ -> num * 3600
-      "m" <> _ -> num * 60
-      "s" <> _ -> num
-      _ -> num
-    end
-  end
-
-  # 6 hours default
-  defp parse_duration(_), do: 21600
-
-  defp format_timestamp(nil), do: "N/A"
-
-  defp format_timestamp(timestamp) do
-    DateTime.from_unix!(timestamp)
-    |> DateTime.to_string()
-  end
-
-  defp print_help do
-    IO.puts(@moduledoc)
-  end
-
-  # New Egress commands
-  defp start_room_recording(opts) do
+  def handle_start_room_recording(opts) do
     with {:ok, client} <- get_egress_client(opts),
          {:ok, room} <- get_opt(opts, :room),
          {:ok, output} <- get_opt(opts, :output) do
@@ -294,21 +195,79 @@ defmodule Mix.Tasks.Livekit do
         ]
       }
 
-      case LiveKit.EgressServiceClient.start_room_composite_egress(
-             client,
-             request
-           ) do
-        {:ok, info} ->
-          IO.puts("Started room recording:")
-          IO.inspect(info)
+      case LiveKit.EgressServiceClient.start_room_composite_egress(client, request) do
+        {:ok, info} -> {:ok, info}
+        {:error, %GRPC.RPCError{} = error} -> {:error, error.message}
+        {:error, error} -> {:error, error}
+      end
+    else
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp handle_list_rooms(opts) do
+    with {:ok, client} <- get_client(opts) do
+      case LiveKit.RoomServiceClient.list_rooms(client) do
+        {:ok, rooms} ->
+          rooms
+          |> Enum.each(fn room ->
+            IO.puts("#{room.name} (#{room.sid})")
+            IO.puts("  Num Participants: #{room.num_participants}")
+            IO.puts("  Created At: #{format_timestamp(room.creation_time)}")
+            IO.puts("")
+          end)
 
         {:error, error} ->
-          IO.puts("Failed to start room recording: #{error}")
+          IO.puts("Error: #{inspect(error)}")
       end
     end
   end
 
-  defp start_room_streaming(opts) do
+  defp handle_create_room(opts) do
+    with {:ok, client} <- get_client(opts),
+         {:ok, name} <- get_opt(opts, :name) do
+      case LiveKit.RoomServiceClient.create_room(client, name) do
+        {:ok, room} ->
+          IO.puts("Created room:")
+          IO.puts("  Name: #{room.name}")
+          IO.puts("  SID: #{room.sid}")
+
+        {:error, error} ->
+          IO.puts("Error: #{inspect(error)}")
+      end
+    end
+  end
+
+  defp handle_delete_room(opts) do
+    with {:ok, client} <- get_client(opts),
+         {:ok, room} <- get_opt(opts, :room) do
+      case LiveKit.RoomServiceClient.delete_room(client, room) do
+        {:ok, _} -> 
+          IO.puts("Room #{room} deleted")
+          {:ok, room}  
+        {:error, error} -> 
+          IO.puts("Error: #{inspect(error)}")
+          {:error, error}  
+      end
+    else
+      {:error, reason} -> 
+        IO.puts("Error: #{inspect(reason)}")
+        {:error, reason}  
+    end
+  end
+
+  defp handle_remove_participant(opts) do
+    with {:ok, client} <- get_client(opts),
+         {:ok, room} <- get_opt(opts, :room),
+         {:ok, identity} <- get_opt(opts, :identity) do
+      case LiveKit.RoomServiceClient.remove_participant(client, room, identity) do
+        {:ok, _} -> IO.puts("Participant #{identity} removed from room #{room}")
+        {:error, error} -> IO.puts("Error: #{inspect(error)}")
+      end
+    end
+  end
+
+  defp handle_start_room_streaming(opts) do
     with {:ok, client} <- get_egress_client(opts),
          {:ok, room} <- get_opt(opts, :room),
          {:ok, rtmp} <- get_opt(opts, :rtmp) do
@@ -334,7 +293,7 @@ defmodule Mix.Tasks.Livekit do
       case LiveKit.EgressServiceClient.start_room_composite_egress(client, request) do
         {:ok, info} ->
           IO.puts("Started room streaming:")
-          IO.inspect(info)
+          IO.puts(inspect(info))
 
         {:error, error} ->
           IO.puts("Failed to start room streaming: #{error}")
@@ -342,138 +301,7 @@ defmodule Mix.Tasks.Livekit do
     end
   end
 
-  defp list_egress(opts) do
-    with {:ok, client} <- get_egress_client(opts) do
-      case LiveKit.EgressServiceClient.list_egress(client) do
-        {:ok, items} ->
-          items
-          |> Enum.each(fn item ->
-            IO.puts("#{item.egress_id}")
-            IO.puts("  Status: #{item.status}")
-            IO.puts("  Room Name: #{item.room_name}")
-            IO.puts("  Started At: #{format_timestamp(item.started_at)}")
-            IO.puts("")
-          end)
-
-        {:error, error} ->
-          IO.puts("Error: #{inspect(error)}")
-      end
-    end
-  end
-
-  defp stop_egress(opts) do
-    with {:ok, client} <- get_egress_client(opts),
-         {:ok, egress_id} <- get_opt(opts, :egress_id) do
-      case LiveKit.EgressServiceClient.stop_egress(client, egress_id) do
-        {:ok, info} ->
-          IO.puts("Stopped egress:")
-          IO.puts("  Egress ID: #{info.egress_id}")
-          IO.puts("  Status: #{info.status}")
-
-        {:error, error} ->
-          IO.puts("Error: #{inspect(error)}")
-      end
-    end
-  end
-
-  # Room Agent commands
-  defp add_agent(opts) do
-    with {:ok, client} <- get_client(opts),
-         {:ok, room} <- get_opt(opts, :room),
-         {:ok, name} <- get_opt(opts, :name),
-         {:ok, prompt} <- get_opt(opts, :prompt) do
-      agent = %Livekit.RoomAgentDispatch{
-        name: name,
-        identity: "agent-#{name}",
-        init_request: %Livekit.InitRequest{
-          prompt: prompt
-        }
-      }
-
-      case LiveKit.RoomServiceClient.create_room(client, room, agents: [agent]) do
-        {:ok, room} ->
-          IO.puts("Added agent to room:")
-          IO.puts("  Room: #{room.name}")
-          IO.puts("  Agent: #{name}")
-
-        {:error, error} ->
-          IO.puts("Error: #{inspect(error)}")
-      end
-    end
-  end
-
-  defp list_agents(opts) do
-    with {:ok, client} <- get_client(opts),
-         {:ok, room} <- get_opt(opts, :room) do
-      case LiveKit.RoomServiceClient.list_participants(client, room) do
-        {:ok, participants} ->
-          participants
-          |> Enum.filter(&(&1.name =~ ~r/^agent-/))
-          |> Enum.each(fn participant ->
-            IO.puts("Agent:")
-            IO.puts("  Name: #{participant.name}")
-            IO.puts("  Identity: #{participant.identity}")
-            IO.puts("  State: #{participant.state}")
-            IO.puts("  Joined At: #{participant.joined_at}")
-            IO.puts("")
-          end)
-
-        {:error, error} ->
-          IO.puts("Error: #{inspect(error)}")
-      end
-    end
-  end
-
-  defp remove_agent(opts) do
-    with {:ok, client} <- get_client(opts),
-         {:ok, room} <- get_opt(opts, :room),
-         {:ok, name} <- get_opt(opts, :name) do
-      identity = "agent-#{name}"
-
-      case LiveKit.RoomServiceClient.remove_participant(client, room, identity) do
-        {:ok, _} ->
-          IO.puts("Removed agent #{name} from room #{room}")
-
-        {:error, error} ->
-          IO.puts("Error: #{inspect(error)}")
-      end
-    end
-  end
-
-  # Helper functions
-  defp get_egress_client(opts) do
-    with {:ok, url} <- get_opt(opts, :url),
-         {:ok, api_key} <- get_opt(opts, :api_key),
-         {:ok, api_secret} <- get_opt(opts, :api_secret),
-         {:ok, client} <- LiveKit.EgressServiceClient.new(url, api_key, api_secret) do
-      {:ok, client}
-    else
-      {:error, message} when is_binary(message) ->
-        IO.puts("Error: #{message}")
-        {:error, message}
-
-      {:error, {:missing_option, opt}} ->
-        IO.puts("Error: Missing required option --#{opt}")
-        {:error, :missing_option}
-    end
-  end
-
-  defp parse_output_url("s3://" <> path) do
-    [_bucket | key_parts] = String.split(path, "/")
-    _key = Enum.join(key_parts, "/")
-
-    {:s3,
-     %Livekit.S3Upload{
-       bucket: List.first(String.split(path, "/")),
-       aws_credentials: System.get_env("AWS_CREDENTIALS", "default")
-     }}
-  end
-
-  defp parse_output_url(_path) do
-    {:DEFAULT_FILETYPE, nil}
-  end
-
-  defp start_track_recording(opts) do
+  defp handle_start_track_recording(opts) do
     with {:ok, client} <- get_egress_client(opts),
          {:ok, room} <- get_opt(opts, :room),
          {:ok, track_id} <- get_opt(opts, :track_id),
@@ -487,7 +315,7 @@ defmodule Mix.Tasks.Livekit do
       case LiveKit.EgressServiceClient.start_track_egress(client, request) do
         {:ok, info} ->
           IO.puts("Started track recording:")
-          IO.inspect(info)
+          IO.puts(inspect(info))
 
         {:error, error} ->
           IO.puts("Failed to start track recording: #{error}")
@@ -495,7 +323,7 @@ defmodule Mix.Tasks.Livekit do
     end
   end
 
-  defp start_track_stream(opts) do
+  defp handle_start_track_stream(opts) do
     with {:ok, client} <- get_egress_client(opts),
          {:ok, room} <- get_opt(opts, :room),
          # We don't use track_id with RoomCompositeEgressRequest
@@ -533,5 +361,174 @@ defmodule Mix.Tasks.Livekit do
           IO.puts("Failed to start track streaming: #{error}")
       end
     end
+  end
+
+  defp handle_list_egress(opts) do
+    with {:ok, client} <- get_egress_client(opts) do
+      case LiveKit.EgressServiceClient.list_egress(client) do
+        {:ok, items} ->
+          IO.puts("Egress operations:")
+
+          Enum.each(items, fn item ->
+            IO.puts("  Egress ID: #{item.egress_id}")
+            IO.puts("  Status: #{item.status}")
+            IO.puts("  Started At: #{format_timestamp(item.started_at)}")
+            IO.puts("")
+          end)
+
+        {:error, error} ->
+          IO.puts("Error: #{inspect(error)}")
+      end
+    end
+  end
+
+  defp handle_stop_egress(opts) do
+    with {:ok, client} <- get_egress_client(opts),
+         {:ok, egress_id} <- get_opt(opts, :egress_id) do
+      case LiveKit.EgressServiceClient.stop_egress(client, egress_id) do
+        {:ok, info} ->
+          IO.puts("Stopped egress:")
+          IO.puts("  Egress ID: #{info.egress_id}")
+          IO.puts("  Status: #{info.status}")
+
+        {:error, error} ->
+          IO.puts("Error: #{inspect(error)}")
+      end
+    end
+  end
+
+  defp handle_add_agent(opts) do
+    with {:ok, client} <- get_client(opts),
+         {:ok, room} <- get_opt(opts, :room),
+         {:ok, name} <- get_opt(opts, :name),
+         {:ok, prompt} <- get_opt(opts, :prompt) do
+      agent = %Livekit.RoomAgentDispatch{
+        name: name,
+        identity: "agent-#{name}",
+        init_request: %Livekit.InitRequest{
+          prompt: prompt
+        }
+      }
+
+      case LiveKit.RoomServiceClient.create_room(client, room, agents: [agent]) do
+        {:ok, room} ->
+          IO.puts("Added agent to room:")
+          IO.puts("  Room: #{room.name}")
+          IO.puts("  Agent: #{name}")
+
+        {:error, error} ->
+          IO.puts("Error: #{inspect(error)}")
+      end
+    end
+  end
+
+  defp handle_remove_agent(opts) do
+    with {:ok, client} <- get_client(opts),
+         {:ok, room} <- get_opt(opts, :room),
+         {:ok, name} <- get_opt(opts, :name) do
+      identity = "agent-#{name}"
+
+      case LiveKit.RoomServiceClient.remove_participant(client, room, identity) do
+        {:ok, _} ->
+          IO.puts("Removed agent #{name} from room #{room}")
+
+        {:error, error} ->
+          IO.puts("Error: #{inspect(error)}")
+      end
+    end
+  end
+
+  defp handle_list_agents(opts) do
+    with {:ok, client} <- get_client(opts),
+         {:ok, room} <- get_opt(opts, :room) do
+      case LiveKit.RoomServiceClient.list_participants(client, room) do
+        {:ok, participants} ->
+          participants
+          |> Enum.filter(&(&1.name =~ ~r/^agent-/))
+          |> Enum.each(fn participant ->
+            IO.puts("Agent:")
+            IO.puts("  Name: #{participant.name}")
+            IO.puts("  Identity: #{participant.identity}")
+            IO.puts("  State: #{participant.state}")
+            IO.puts("  Joined At: #{participant.joined_at}")
+            IO.puts("")
+          end)
+
+        {:error, error} ->
+          IO.puts("Error: #{inspect(error)}")
+      end
+    end
+  end
+
+  defp get_client(opts) do
+    with {:ok, url} <- get_opt(opts, :url),
+         {:ok, api_key} <- get_opt(opts, :api_key),
+         {:ok, api_secret} <- get_opt(opts, :api_secret) do
+      {:ok, LiveKit.RoomServiceClient.new(url, api_key, api_secret)}
+    end
+  end
+
+  defp get_egress_client(opts) do
+    with {:ok, url} <- get_opt(opts, :url),
+         {:ok, api_key} <- get_opt(opts, :api_key),
+         {:ok, api_secret} <- get_opt(opts, :api_secret),
+         {:ok, client} <- LiveKit.EgressServiceClient.new(url, api_key, api_secret) do
+      {:ok, client}
+    else
+      {:error, message} when is_binary(message) ->
+        IO.puts("Error: #{message}")
+        {:error, message}
+
+      {:error, {:missing_option, opt}} ->
+        IO.puts("Error: Missing required option --#{opt}")
+        {:error, :missing_option}
+    end
+  end
+
+  defp get_opt(opts, key) do
+    case Keyword.get(opts, key) do
+      nil -> {:error, "Missing required option: --#{key}"}
+      value -> {:ok, value}
+    end
+  end
+
+  defp parse_duration(duration) when is_binary(duration) do
+    {num, unit} = Integer.parse(duration)
+
+    case unit do
+      "h" <> _ -> num * 3600
+      "m" <> _ -> num * 60
+      "s" <> _ -> num
+      _ -> num
+    end
+  end
+
+  # 6 hours default
+  defp parse_duration(_), do: 21_600
+
+  defp format_timestamp(nil), do: "N/A"
+
+  defp format_timestamp(timestamp) do
+    DateTime.from_unix!(timestamp)
+    |> DateTime.to_string()
+  end
+
+  defp print_help do
+    IO.puts(@moduledoc)
+  end
+
+  defp parse_output_url("s3://" <> path) do
+    [_bucket | key_parts] = String.split(path, "/")
+    _key = Enum.join(key_parts, "/")
+
+    {:s3,
+     %Livekit.S3Upload{
+       bucket: List.first(String.split(path, "/")),
+       aws_credentials: System.get_env("AWS_CREDENTIALS", "default")
+     }}
+  end
+
+  defp parse_output_url(_path) do
+    {:DEFAULT_FILETYPE, nil}
   end
 end
