@@ -21,24 +21,47 @@ end
 The SDK includes a CLI for common LiveKit operations:
 
 ```bash
-# Create an access token
+# Room Management
 mix livekit create-token --api-key devkey --api-secret secret --join --room my-room --identity user1 --valid-for 24h
-
-# List all rooms
 mix livekit list-rooms --api-key devkey --api-secret secret --url https://my.livekit.server
-
-# Create a room
 mix livekit create-room --api-key devkey --api-secret secret --url https://my.livekit.server --name my-room
-
-# Delete a room
 mix livekit delete-room --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room
-
-# List participants in a room
 mix livekit list-participants --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room
-
-# Remove a participant from a room
 mix livekit remove-participant --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room --identity user1
+
+# Egress Operations
+mix livekit start-room-recording --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room --output s3://bucket/recording.mp4
+mix livekit start-track-recording --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room --track-id TR_1234 --output recordings/track.mp4
+mix livekit start-room-stream --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room --rtmp rtmp://stream.url/live
+mix livekit start-track-stream --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room --track-id TR_1234 --rtmp rtmp://stream.url/live
+mix livekit list-egress --api-key devkey --api-secret secret --url https://my.livekit.server
+mix livekit stop-egress --api-key devkey --api-secret secret --url https://my.livekit.server --egress-id EG_1234
+
+# Room Agents
+mix livekit add-agent --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room --name assistant --prompt "You are a helpful assistant"
+mix livekit remove-agent --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room --name assistant
+mix livekit list-agents --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room
 ```
+
+Common options:
+- `--api-key` (`-k`): LiveKit API key
+- `--api-secret` (`-s`): LiveKit API secret
+- `--url` (`-u`): LiveKit server URL
+- `--room` (`-r`): Room name
+- `--identity` (`-i`): Participant identity
+- `--valid-for` (`-t`): Token validity duration (e.g., "24h", "30m")
+- `--name` (`-n`): Name for new room or agent
+
+Egress options:
+- `--output` (`-o`): Output path (local file or s3://bucket/path)
+- `--rtmp`: RTMP streaming URL
+- `--width`: Video width (default: 1280)
+- `--height`: Video height (default: 720)
+- `--fps`: Frames per second (default: 30)
+- `--audio-bitrate`: Audio bitrate in bps (default: 128000)
+- `--video-bitrate`: Video bitrate in bps (default: 3000000)
+- `--track-id`: Track ID for track-specific operations
+- `--egress-id`: Egress ID for stopping operations
 
 For more information about available commands and options:
 ```bash

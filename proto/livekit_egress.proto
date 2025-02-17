@@ -2,8 +2,215 @@ syntax = "proto3";
 
 package livekit;
 
+import "livekit_models.proto";
+
+option go_package = "github.com/livekit/protocol/livekit";
+option csharp_namespace = "LiveKit.Proto";
+option ruby_package = "LiveKit::Proto";
+
+message EgressInfo {
+  string egress_id = 1;
+  string room_id = 2;
+  string room_name = 3;
+  EgressStatus status = 4;
+  string error = 5;
+}
+
+enum EgressStatus {
+  EGRESS_STARTING = 0;
+  EGRESS_ACTIVE = 1;
+  EGRESS_ENDING = 2;
+  EGRESS_COMPLETE = 3;
+  EGRESS_FAILED = 4;
+}
+
+service Egress {
+  // start recording or streaming a room, participant, or tracks
+  rpc StartRoomCompositeEgress(RoomCompositeEgressRequest) returns (EgressInfo);
+  rpc StartWebEgress(WebEgressRequest) returns (EgressInfo);
+  rpc StartParticipantEgress(ParticipantEgressRequest) returns (EgressInfo);
+  rpc StartTrackCompositeEgress(TrackCompositeEgressRequest) returns (EgressInfo);
+  rpc StartTrackEgress(TrackEgressRequest) returns (EgressInfo);
+
+  // update web composite layout
+  rpc UpdateLayout(UpdateLayoutRequest) returns (EgressInfo);
+
+  // add or remove stream endpoints
+  rpc UpdateStream(UpdateStreamRequest) returns (EgressInfo);
+
+  // list available egress
+  rpc ListEgress(ListEgressRequest) returns (ListEgressResponse);
+
+  // stop a recording or stream
+  rpc StopEgress(StopEgressRequest) returns (EgressInfo);
+}
+
+// composite using a web browser
 message RoomCompositeEgressRequest {
+  string room_name = 1;          // required
+  string layout = 2;             // (optional)
+  bool audio_only = 3;           // (default false)
+  AudioMixing audio_mixing = 15; // only applies to audio_only egress (default DEFAULT_MIXING)
+  bool video_only = 4;           // (default false)
+  string custom_base_url = 5;    // template base url (default https://recorder.livekit.io)
+  oneof output {                 // deprecated (use _output fields)
+    EncodedFileOutput file = 6 [deprecated = true];
+    StreamOutput stream = 7 [deprecated = true];
+    SegmentedFileOutput segments = 10 [deprecated = true];
+  }
+  oneof options {
+    EncodingOptionsPreset preset = 8; // (default H264_720P_30)
+    EncodingOptions advanced = 9;     // (optional)
+  }
+  repeated EncodedFileOutput file_outputs = 11;
+  repeated StreamOutput stream_outputs = 12;
+  repeated SegmentedFileOutput segment_outputs = 13;
+  repeated ImageOutput image_outputs = 14;
+}
+
+message WebEgressRequest {
+  string url = 1;
+  bool audio_only = 2;
+  bool video_only = 3;
+  oneof options {
+    EncodingOptionsPreset preset = 4;
+    EncodingOptions advanced = 5;
+  }
+}
+
+message ParticipantEgressRequest {
   string room_name = 1;
+  string identity = 2;
+  oneof options {
+    EncodingOptionsPreset preset = 3;
+    EncodingOptions advanced = 4;
+  }
+}
+
+message TrackCompositeEgressRequest {
+  string room_name = 1;
+  string audio_track_id = 2;
+  string video_track_id = 3;
+  oneof options {
+    EncodingOptionsPreset preset = 4;
+    EncodingOptions advanced = 5;
+  }
+}
+
+message TrackEgressRequest {
+  string room_name = 1;
+  string track_id = 2;
+  string filepath = 3;
+}
+
+message UpdateLayoutRequest {
+  string egress_id = 1;
+  string layout = 2;
+}
+
+message UpdateStreamRequest {
+  string egress_id = 1;
+  repeated string add_output_urls = 2;
+  repeated string remove_output_urls = 3;
+}
+
+message ListEgressRequest {
+  string room_name = 1;
+  string egress_id = 2;
+}
+
+message ListEgressResponse {
+  repeated EgressInfo items = 1;
+}
+
+message StopEgressRequest {
+  string egress_id = 1;
+}
+
+message EncodedFileOutput {
+  EncodedFileType file_type = 1;
+  string filepath = 2;
+  bool disable_manifest = 6;
+  oneof output {
+    S3Upload s3 = 3;
+    GCPUpload gcp = 4;
+    AzureBlobUpload azure = 5;
+    AliOSSUpload aliOSS = 7;
+  }
+}
+
+message S3Upload {
+  string bucket = 1;
+  string aws_credentials = 2;
+}
+
+message GCPUpload {
+  string bucket = 1;
+  string credentials = 2;
+}
+
+message AzureBlobUpload {
+  string container_name = 1;
+  string credentials = 2;
+}
+
+message AliOSSUpload {
+  string bucket = 1;
+  string credentials = 2;
+}
+
+message StreamOutput {
+  StreamProtocol protocol = 1;
+  repeated string urls = 2;
+}
+
+enum StreamProtocol {
+  DEFAULT_PROTOCOL = 0; // protocol chosen based on urls
+  RTMP = 1;
+  SRT = 2;
+}
+
+message SegmentedFileOutput {
+  string filepath = 1;
+  oneof output {
+    S3Upload s3 = 2;
+    GCPUpload gcp = 3;
+    AzureBlobUpload azure = 4;
+    AliOSSUpload aliOSS = 5;
+  }
+}
+
+message ImageOutput {
+  string filepath = 1;
+  oneof output {
+    S3Upload s3 = 2;
+    GCPUpload gcp = 3;
+    AzureBlobUpload azure = 4;
+    AliOSSUpload aliOSS = 5;
+  }
+}
+
+enum EncodedFileType {
+  DEFAULT_FILETYPE = 0; // file type chosen based on codecs
+  MP4 = 1;
+  OGG = 2;
+}
+
+enum EncodingOptionsPreset {
+  H264_720P_30 = 0;           //  1280x720, 30fps, 3000kpbs, H.264_MAIN / OPUS
+  H264_720P_60 = 1;           //  1280x720, 60fps, 4500kbps, H.264_MAIN / OPUS
+  H264_1080P_30 = 2;          // 1920x1080, 30fps, 4500kbps, H.264_MAIN / OPUS
+  H264_1080P_60 = 3;          // 1920x1080, 60fps, 6000kbps, H.264_MAIN / OPUS
+  PORTRAIT_H264_720P_30 = 4;  //  720x1280, 30fps, 3000kpbs, H.264_MAIN / OPUS
+  PORTRAIT_H264_720P_60 = 5;  //  720x1280, 60fps, 4500kbps, H.264_MAIN / OPUS
+  PORTRAIT_H264_1080P_30 = 6; // 1080x1920, 30fps, 4500kbps, H.264_MAIN / OPUS
+  PORTRAIT_H264_1080P_60 = 7; // 1080x1920, 60fps, 6000kbps, H.264_MAIN / OPUS
+}
+
+enum AudioMixing {
+  DEFAULT_MIXING = 0;         // all users are mixed together
+  DUAL_CHANNEL_AGENT = 1;     // agent audio in the left channel, all other audio in the right channel
+  DUAL_CHANNEL_ALTERNATE = 2; // each new audio track alternates between left and right channels
 }
 
 message AutoParticipantEgress {

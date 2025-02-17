@@ -4,4 +4,10 @@ package livekit;
 
 message RoomAgentDispatch {
   string name = 1;
+  string identity = 2;
+  InitRequest init_request = 3;
+}
+
+message InitRequest {
+  string prompt = 1;
 }
