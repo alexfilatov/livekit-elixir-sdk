@@ -11,6 +11,7 @@ defmodule LivekitTaskTest do
         identity: "test_identity",
         name: "test_name"
       ]
+
       assert {:ok, token} = Livekit.handle_create_token(opts)
       assert is_binary(token)
     end
@@ -22,6 +23,7 @@ defmodule LivekitTaskTest do
         identity: "test_identity",
         name: "test_name"
       ]
+
       assert {:error, _reason} = Livekit.handle_create_token(opts)
     end
   end
@@ -33,6 +35,7 @@ defmodule LivekitTaskTest do
         api_secret: "test_secret",
         room: "test_room"
       ]
+
       assert {:error, _reason} = Livekit.handle_list_participants(opts)
     end
 
@@ -43,6 +46,7 @@ defmodule LivekitTaskTest do
         room: "invalid_room",
         url: "invalid_url"
       ]
+
       assert {:error, _reason} = Livekit.handle_list_participants(opts)
     end
   end
@@ -54,6 +58,7 @@ defmodule LivekitTaskTest do
         api_secret: "test_secret",
         room: "test_room"
       ]
+
       assert {:error, _reason} = Livekit.handle_start_room_recording(opts)
     end
 
@@ -67,6 +72,7 @@ defmodule LivekitTaskTest do
         resolution: "hd",
         url: "invalid_url"
       ]
+
       assert {:error, _reason} = Livekit.handle_start_room_recording(opts)
     end
   end
