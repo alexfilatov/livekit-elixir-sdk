@@ -1,10 +1,10 @@
-defmodule LiveKit.RoomServiceClient do
+defmodule Livekit.RoomServiceClient do
   @moduledoc """
-  Client for the LiveKit Room Service API.
+  Client for the Livekit Room Service API.
   """
 
   use Tesla
-  alias LiveKit.AccessToken
+  alias Livekit.AccessToken
 
   alias Livekit.{
     CreateRoomRequest,
@@ -344,7 +344,7 @@ defmodule LiveKit.RoomServiceClient do
 
     [
       {"Authorization", "Bearer #{token}"},
-      {"User-Agent", "LiveKit Elixir SDK"}
+      {"User-Agent", "Livekit Elixir SDK"}
     ]
   end
 end

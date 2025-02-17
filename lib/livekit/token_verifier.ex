@@ -1,6 +1,6 @@
-defmodule LiveKit.TokenVerifier do
+defmodule Livekit.TokenVerifier do
   @moduledoc """
-  Verifies LiveKit access tokens.
+  Verifies Livekit access tokens.
   """
 
   @doc """

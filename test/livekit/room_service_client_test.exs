@@ -1,6 +1,6 @@
-defmodule LiveKit.RoomServiceClientTest do
+defmodule Livekit.RoomServiceClientTest do
   use ExUnit.Case
-  alias LiveKit.RoomServiceClient
+  alias Livekit.RoomServiceClient
 
   alias Livekit.{
     ListParticipantsResponse,

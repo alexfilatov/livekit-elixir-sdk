@@ -1,6 +1,6 @@
-defmodule LiveKit.EgressServiceClient do
+defmodule Livekit.EgressServiceClient do
   @moduledoc """
-  Client for interacting with the LiveKit Egress service.
+  Client for interacting with the Livekit Egress service.
   """
 
   alias Livekit.Egress
@@ -28,7 +28,7 @@ defmodule LiveKit.EgressServiceClient do
 
     case GRPC.Stub.connect("#{host}:#{port}", opts) do
       {:ok, channel} -> {:ok, {channel, metadata}}
-      {:error, reason} -> {:error, "Failed to connect to LiveKit server: #{inspect(reason)}"}
+      {:error, reason} -> {:error, "Failed to connect to Livekit server: #{inspect(reason)}"}
     end
   end
 

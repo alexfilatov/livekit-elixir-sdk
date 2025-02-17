@@ -5,8 +5,8 @@ package livekit;
 import "livekit_models.proto";
 
 option go_package = "github.com/livekit/protocol/livekit";
-option csharp_namespace = "LiveKit.Proto";
-option ruby_package = "LiveKit::Proto";
+option csharp_namespace = "Livekit.Proto";
+option ruby_package = "Livekit::Proto";
 
 message EgressInfo {
   string egress_id = 1;

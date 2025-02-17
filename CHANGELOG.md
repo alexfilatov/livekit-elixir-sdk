@@ -4,7 +4,7 @@
 
 ### Added
 
-- Configuration system for managing LiveKit settings
+- Configuration system for managing Livekit settings
 - Runtime configuration support through environment variables
 - Improved error handling for GRPC client operations
 - Better token generation with proper grant structure
@@ -20,7 +20,7 @@
 
 ### Added
 
-- Initial implementation of LiveKit client
+- Initial implementation of Livekit client
 - Basic room management functionality
 - Token generation
 - Room recording capabilities

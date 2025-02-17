@@ -4,9 +4,9 @@ Mix.install([
   {:twirp, "~> 0.8.0"}
 ])
 
-alias LiveKit.RoomServiceClient
+alias Livekit.RoomServiceClient
 
-# Configure LiveKit server URL and credentials
+# Configure Livekit server URL and credentials
 api_key = "devkey"
 api_secret = "secret"
 livekit_url = "http://localhost:7880"

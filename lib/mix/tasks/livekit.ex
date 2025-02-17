@@ -1,9 +1,9 @@
 defmodule Mix.Tasks.Livekit do
   use Mix.Task
 
-  @shortdoc "LiveKit CLI commands"
+  @shortdoc "Livekit CLI commands"
   @moduledoc """
-  Provides CLI commands for LiveKit operations.
+  Provides CLI commands for Livekit operations.
 
   ## Commands
 
@@ -31,9 +31,9 @@ defmodule Mix.Tasks.Livekit do
   ## Options
 
   Common Options:
-  * `--api-key` (`-k`) - LiveKit API key (required)
-  * `--api-secret` (`-s`) - LiveKit API secret (required)
-  * `--url` (`-u`) - LiveKit server URL (required for most commands)
+  * `--api-key` (`-k`) - Livekit API key (required)
+  * `--api-secret` (`-s`) - Livekit API secret (required)
+  * `--url` (`-u`) - Livekit server URL (required for most commands)
   * `--room` (`-r`) - Room name
   * `--identity` (`-i`) - Participant identity
   * `--name` (`-n`) - Name for new room or agent
@@ -195,27 +195,27 @@ defmodule Mix.Tasks.Livekit do
   def handle_create_token(opts) do
     with {:ok, identity} <- get_opt(opts, :identity),
          {:ok, room} <- get_opt(opts, :room) do
-      config = LiveKit.Config.get(opts)
+      config = Livekit.Config.get(opts)
 
-      case LiveKit.Config.validate(config) do
+      case Livekit.Config.validate(config) do
         :ok ->
           name = Keyword.get(opts, :name)
           metadata = Keyword.get(opts, :metadata)
           valid_for = Keyword.get(opts, :valid_for)
 
-          grant = %LiveKit.Grants{
+          grant = %Livekit.Grants{
             room: room,
             room_join: true,
             room_admin: Keyword.get(opts, :admin, false)
           }
 
           token =
-            LiveKit.AccessToken.new(config.api_key, config.api_secret)
-            |> LiveKit.AccessToken.with_identity(identity)
-            |> LiveKit.AccessToken.with_grants(grant)
+            Livekit.AccessToken.new(config.api_key, config.api_secret)
+            |> Livekit.AccessToken.with_identity(identity)
+            |> Livekit.AccessToken.with_grants(grant)
             |> maybe_add_ttl(valid_for)
             |> maybe_add_metadata(metadata)
-            |> LiveKit.AccessToken.to_jwt()
+            |> Livekit.AccessToken.to_jwt()
 
           {:ok, token}
 
@@ -229,7 +229,7 @@ defmodule Mix.Tasks.Livekit do
 
   defp maybe_add_ttl(token, ttl) when is_binary(ttl) do
     case parse_duration(ttl) do
-      {:ok, seconds} -> LiveKit.AccessToken.with_ttl(token, seconds)
+      {:ok, seconds} -> Livekit.AccessToken.with_ttl(token, seconds)
       _error -> token
     end
   end
@@ -237,7 +237,7 @@ defmodule Mix.Tasks.Livekit do
   defp maybe_add_metadata(token, nil), do: token
 
   defp maybe_add_metadata(token, metadata) when is_binary(metadata) do
-    LiveKit.AccessToken.with_metadata(token, metadata)
+    Livekit.AccessToken.with_metadata(token, metadata)
   end
 
   defp parse_duration(duration) when is_binary(duration) do
@@ -259,7 +259,7 @@ defmodule Mix.Tasks.Livekit do
   def handle_list_participants(opts) do
     with {:ok, room} <- get_opt(opts, :room),
          {:ok, client} <- get_client(opts) do
-      case LiveKit.RoomServiceClient.list_participants(client, room) do
+      case Livekit.RoomServiceClient.list_participants(client, room) do
         {:ok, participants} -> {:ok, participants}
         {:error, reason} -> {:error, reason}
       end
@@ -289,7 +289,7 @@ defmodule Mix.Tasks.Livekit do
       }
 
       try do
-        case LiveKit.EgressServiceClient.start_room_composite_egress(client, request) do
+        case Livekit.EgressServiceClient.start_room_composite_egress(client, request) do
           {:ok, response} -> {:ok, response}
           {:error, %GRPC.RPCError{} = error} -> {:error, error.message}
           {:error, reason} -> {:error, reason}
@@ -302,7 +302,7 @@ defmodule Mix.Tasks.Livekit do
 
   defp handle_list_rooms(opts) do
     with {:ok, client} <- get_client(opts) do
-      case LiveKit.RoomServiceClient.list_rooms(client) do
+      case Livekit.RoomServiceClient.list_rooms(client) do
         {:ok, rooms} ->
           Enum.each(rooms, fn room ->
             IO.puts("#{room.name} (#{room.sid})")
@@ -319,7 +319,7 @@ defmodule Mix.Tasks.Livekit do
   defp handle_create_room(opts) do
     with {:ok, client} <- get_client(opts),
          {:ok, name} <- get_opt(opts, :name) do
-      case LiveKit.RoomServiceClient.create_room(client, name) do
+      case Livekit.RoomServiceClient.create_room(client, name) do
         {:ok, room} ->
           IO.puts("Created room:")
           IO.puts("  Name: #{room.name}")
@@ -334,7 +334,7 @@ defmodule Mix.Tasks.Livekit do
   defp handle_delete_room(opts) do
     with {:ok, client} <- get_client(opts),
          {:ok, room} <- get_opt(opts, :room) do
-      case LiveKit.RoomServiceClient.delete_room(client, room) do
+      case Livekit.RoomServiceClient.delete_room(client, room) do
         :ok -> IO.puts("Room #{room} deleted")
         {:error, error} -> IO.puts("Error: #{inspect(error)}")
       end
@@ -347,7 +347,7 @@ defmodule Mix.Tasks.Livekit do
     with {:ok, client} <- get_client(opts),
          {:ok, room} <- get_opt(opts, :room),
          {:ok, identity} <- get_opt(opts, :identity) do
-      case LiveKit.RoomServiceClient.remove_participant(client, room, identity) do
+      case Livekit.RoomServiceClient.remove_participant(client, room, identity) do
         :ok -> IO.puts("Participant #{identity} removed from room #{room}")
         {:error, error} -> IO.puts("Error: #{inspect(error)}")
       end
@@ -378,7 +378,7 @@ defmodule Mix.Tasks.Livekit do
         ]
       }
 
-      case LiveKit.EgressServiceClient.start_room_composite_egress(client, request) do
+      case Livekit.EgressServiceClient.start_room_composite_egress(client, request) do
         :ok -> IO.puts("Started room streaming")
         {:error, error} -> IO.puts("Failed to start room streaming: #{error}")
       end
@@ -396,7 +396,7 @@ defmodule Mix.Tasks.Livekit do
         filepath: output
       }
 
-      case LiveKit.EgressServiceClient.start_track_egress(client, request) do
+      case Livekit.EgressServiceClient.start_track_egress(client, request) do
         :ok -> IO.puts("Started track recording")
         {:error, error} -> IO.puts("Failed to start track recording: #{error}")
       end
@@ -428,7 +428,7 @@ defmodule Mix.Tasks.Livekit do
         video_only: true
       }
 
-      case LiveKit.EgressServiceClient.start_room_composite_egress(client, request) do
+      case Livekit.EgressServiceClient.start_room_composite_egress(client, request) do
         :ok -> IO.puts("Started track streaming")
         {:error, error} -> IO.puts("Failed to start track streaming: #{error}")
       end
@@ -437,7 +437,7 @@ defmodule Mix.Tasks.Livekit do
 
   defp handle_list_egress(opts) do
     with {:ok, client} <- get_egress_client(opts) do
-      case LiveKit.EgressServiceClient.list_egress(client) do
+      case Livekit.EgressServiceClient.list_egress(client) do
         {:ok, items} ->
           Enum.each(items, fn item ->
             IO.puts("Egress ID: #{item.egress_id}")
@@ -454,7 +454,7 @@ defmodule Mix.Tasks.Livekit do
   defp handle_stop_egress(opts) do
     with {:ok, client} <- get_egress_client(opts),
          {:ok, egress_id} <- get_opt(opts, :egress_id) do
-      case LiveKit.EgressServiceClient.stop_egress(client, egress_id) do
+      case Livekit.EgressServiceClient.stop_egress(client, egress_id) do
         :ok -> IO.puts("Stopped egress")
         {:error, error} -> IO.puts("Error: #{inspect(error)}")
       end
@@ -474,7 +474,7 @@ defmodule Mix.Tasks.Livekit do
         }
       }
 
-      case LiveKit.RoomServiceClient.create_room(client, room, agents: [agent]) do
+      case Livekit.RoomServiceClient.create_room(client, room, agents: [agent]) do
         {:ok, _room} -> IO.puts("Added agent to room")
         {:error, error} -> IO.puts("Error: #{inspect(error)}")
       end
@@ -485,7 +485,7 @@ defmodule Mix.Tasks.Livekit do
     with {:ok, client} <- get_client(opts),
          {:ok, room} <- get_opt(opts, :room),
          {:ok, name} <- get_opt(opts, :name) do
-      case LiveKit.RoomServiceClient.remove_participant(client, room, name) do
+      case Livekit.RoomServiceClient.remove_participant(client, room, name) do
         :ok -> IO.puts("Removed agent #{name} from room #{room}")
         {:error, error} -> IO.puts("Error: #{inspect(error)}")
       end
@@ -495,7 +495,7 @@ defmodule Mix.Tasks.Livekit do
   defp handle_list_agents(opts) do
     with {:ok, client} <- get_client(opts),
          {:ok, room} <- get_opt(opts, :room) do
-      case LiveKit.RoomServiceClient.list_participants(client, room) do
+      case Livekit.RoomServiceClient.list_participants(client, room) do
         {:ok, participants} ->
           participants
           |> Enum.filter(&(&1.name =~ ~r/^agent-/))
@@ -517,15 +517,15 @@ defmodule Mix.Tasks.Livekit do
   end
 
   defp get_client(opts) do
-    with {:ok, config} <- LiveKit.Config.get_validated(opts) do
-      {:ok, LiveKit.RoomServiceClient.new(config.url, config.api_key, config.api_secret)}
+    with {:ok, config} <- Livekit.Config.get_validated(opts) do
+      {:ok, Livekit.RoomServiceClient.new(config.url, config.api_key, config.api_secret)}
     end
   end
 
   defp get_egress_client(opts) do
-    with {:ok, config} <- LiveKit.Config.get_validated(opts) do
+    with {:ok, config} <- Livekit.Config.get_validated(opts) do
       try do
-        {:ok, LiveKit.EgressServiceClient.new(config.url, config.api_key, config.api_secret)}
+        {:ok, Livekit.EgressServiceClient.new(config.url, config.api_key, config.api_secret)}
       rescue
         error in [UndefinedFunctionError] ->
           {:error, "Failed to connect to egress service: #{inspect(error)}"}

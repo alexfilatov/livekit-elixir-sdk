@@ -1,6 +1,6 @@
-defmodule LiveKit.ConfigTest do
+defmodule Livekit.ConfigTest do
   use ExUnit.Case
-  alias LiveKit.Config
+  alias Livekit.Config
 
   describe "get/1" do
     test "returns config with runtime options" do
@@ -72,7 +72,7 @@ defmodule LiveKit.ConfigTest do
         api_secret: "test_secret"
       }
 
-      assert {:error, "LiveKit URL is required"} = Config.validate(config)
+      assert {:error, "Livekit URL is required"} = Config.validate(config)
     end
 
     test "returns error for missing api_key" do
@@ -81,7 +81,7 @@ defmodule LiveKit.ConfigTest do
         api_secret: "test_secret"
       }
 
-      assert {:error, "LiveKit API key is required"} = Config.validate(config)
+      assert {:error, "Livekit API key is required"} = Config.validate(config)
     end
 
     test "returns error for missing api_secret" do
@@ -90,7 +90,7 @@ defmodule LiveKit.ConfigTest do
         api_key: "test_key"
       }
 
-      assert {:error, "LiveKit API secret is required"} = Config.validate(config)
+      assert {:error, "Livekit API secret is required"} = Config.validate(config)
     end
   end
 end

@@ -1,6 +1,6 @@
-defmodule LiveKit.Grants do
+defmodule Livekit.Grants do
   @moduledoc """
-  Defines the structure and types for LiveKit access token grants.
+  Defines the structure and types for Livekit access token grants.
   """
 
   @derive {Jason.Encoder, keys: :camel}
