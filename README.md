@@ -16,6 +16,35 @@ end
 
 ## Usage
 
+### Command Line Interface (CLI)
+
+The SDK includes a CLI for common LiveKit operations:
+
+```bash
+# Create an access token
+mix livekit create-token --api-key devkey --api-secret secret --join --room my-room --identity user1 --valid-for 24h
+
+# List all rooms
+mix livekit list-rooms --api-key devkey --api-secret secret --url https://my.livekit.server
+
+# Create a room
+mix livekit create-room --api-key devkey --api-secret secret --url https://my.livekit.server --name my-room
+
+# Delete a room
+mix livekit delete-room --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room
+
+# List participants in a room
+mix livekit list-participants --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room
+
+# Remove a participant from a room
+mix livekit remove-participant --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room --identity user1
+```
+
+For more information about available commands and options:
+```bash
+mix help livekit
+```
+
 ### Creating Access Tokens
 
 ```elixir
