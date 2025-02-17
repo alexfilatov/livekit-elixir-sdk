@@ -8,27 +8,51 @@ defmodule Mix.Tasks.Livekit do
   ## Commands
 
   Room Management:
-  * `create-token` - Create an access token
+  * `create-token` - Create an access token for room access
   * `list-rooms` - List all rooms
   * `create-room` - Create a new room
   * `delete-room` - Delete a room
   * `list-participants` - List participants in a room
   * `remove-participant` - Remove a participant from a room
 
-
-  Egress Operations:
+  Recording and Streaming:
   * `start-room-recording` - Start recording a room
   * `start-track-recording` - Start recording specific tracks
-  * `start-room-stream` - Start streaming a room to RTMP endpoints
+  * `start-room-streaming` - Start streaming a room to RTMP endpoints
   * `start-track-stream` - Start streaming specific tracks to RTMP endpoints
   * `list-egress` - List active egress operations
   * `stop-egress` - Stop an egress operation
-
 
   Room Agents:
   * `add-agent` - Add an agent to a room
   * `remove-agent` - Remove an agent from a room
   * `list-agents` - List agents in a room
+
+  ## Options
+
+  Common Options:
+  * `--api-key` (`-k`) - LiveKit API key (required)
+  * `--api-secret` (`-s`) - LiveKit API secret (required)
+  * `--url` (`-u`) - LiveKit server URL (required for most commands)
+  * `--room` (`-r`) - Room name
+  * `--identity` (`-i`) - Participant identity
+  * `--name` (`-n`) - Name for new room or agent
+  * `--valid-for` (`-t`) - Token validity duration (e.g., "24h", "30m")
+
+  Recording and Streaming Options:
+  * `--output` (`-o`) - Output path (local file or s3://bucket/path)
+  * `--rtmp` - RTMP streaming URL
+  * `--width` - Video width (default: 1280)
+  * `--height` - Video height (default: 720)
+  * `--fps` - Frames per second (default: 30)
+  * `--audio-bitrate` - Audio bitrate in bps (default: 128000)
+  * `--video-bitrate` - Video bitrate in bps (default: 3000000)
+  * `--track-id` - Track ID for track-specific operations
+  * `--egress-id` - Egress ID for stopping operations
+
+  Agent Options:
+  * `--prompt` - Initial prompt for the agent (required for add-agent)
+  * `--name` - Agent name (required for add/remove agent)
 
   ## Examples
 
@@ -54,7 +78,7 @@ defmodule Mix.Tasks.Livekit do
       mix livekit start-room-recording --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room --output s3://bucket/recording.mp4
 
       # Start room streaming
-      mix livekit start-room-stream --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room --rtmp rtmp://stream.url/live
+      mix livekit start-room-streaming --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room --rtmp rtmp://stream.url/live
 
       # Add an agent to a room
       mix livekit add-agent --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room --name assistant --prompt "You are a helpful assistant"
@@ -135,7 +159,7 @@ defmodule Mix.Tasks.Livekit do
 
   defp handle_command("add-agent", opts), do: handle_agent_commands("add-agent", opts)
   defp handle_command("remove-agent", opts), do: handle_agent_commands("remove-agent", opts)
-  defp handle_command("list-agents", opts), do: handle_agent_commands("list-agents", opts)
+  defp handle_agent_commands("list-agents", opts), do: handle_agent_commands("list-agents", opts)
 
   defp handle_command(_, _), do: print_help()
 
