@@ -81,7 +81,7 @@ defmodule Mix.Tasks.Livekit do
       mix livekit start-room-streaming --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room --rtmp rtmp://stream.url/live
 
       # Add an agent to a room
-      mix livekit add-agent --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room --name assistant --prompt "You are a helpful assistant"
+      mix livekit add-agent --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room --prompt "You are a helpful assistant"
   """
 
   @impl Mix.Task
@@ -135,33 +135,24 @@ defmodule Mix.Tasks.Livekit do
   end
 
   defp handle_command("create-token", opts), do: handle_create_token(opts)
-
   defp handle_command("list-rooms", opts), do: handle_room_commands("list-rooms", opts)
   defp handle_command("create-room", opts), do: handle_room_commands("create-room", opts)
   defp handle_command("delete-room", opts), do: handle_room_commands("delete-room", opts)
-
   defp handle_command("list-participants", opts),
     do: handle_room_commands("list-participants", opts)
-
   defp handle_command("remove-participant", opts),
     do: handle_room_commands("remove-participant", opts)
-
   defp handle_command("start-room-recording", opts), do: handle_start_room_recording(opts)
   defp handle_command("start-track-recording", opts), do: handle_start_track_recording(opts)
-
   defp handle_command("start-room-streaming", opts),
     do: handle_streaming_commands("start-room-streaming", opts)
-
   defp handle_command("start-track-stream", opts),
     do: handle_streaming_commands("start-track-stream", opts)
-
   defp handle_command("list-egress", opts), do: handle_list_egress(opts)
   defp handle_command("stop-egress", opts), do: handle_stop_egress(opts)
-
   defp handle_command("add-agent", opts), do: handle_agent_commands("add-agent", opts)
   defp handle_command("remove-agent", opts), do: handle_agent_commands("remove-agent", opts)
-  defp handle_agent_commands("list-agents", opts), do: handle_agent_commands("list-agents", opts)
-
+  defp handle_command("list-agents", opts), do: handle_agent_commands("list-agents", opts)
   defp handle_command(_, _), do: print_help()
 
   defp handle_room_commands(command, opts) do
@@ -183,14 +174,10 @@ defmodule Mix.Tasks.Livekit do
     end
   end
 
-  defp handle_agent_commands(command, opts) do
-    case command do
-      "add-agent" -> handle_add_agent(opts)
-      "remove-agent" -> handle_remove_agent(opts)
-      "list-agents" -> handle_list_agents(opts)
-      _ -> :unknown_command
-    end
-  end
+  defp handle_agent_commands("add-agent", opts), do: handle_add_agent(opts)
+  defp handle_agent_commands("remove-agent", opts), do: handle_remove_agent(opts)
+  defp handle_agent_commands("list-agents", opts), do: handle_list_agents(opts)
+  defp handle_agent_commands(_, _), do: :unknown_command
 
   def handle_create_token(opts) do
     with {:ok, identity} <- get_opt(opts, :identity),
@@ -199,7 +186,6 @@ defmodule Mix.Tasks.Livekit do
 
       case Livekit.Config.validate(config) do
         :ok ->
-          name = Keyword.get(opts, :name)
           metadata = Keyword.get(opts, :metadata)
           valid_for = Keyword.get(opts, :valid_for)
 
@@ -464,11 +450,11 @@ defmodule Mix.Tasks.Livekit do
   defp handle_add_agent(opts) do
     with {:ok, client} <- get_client(opts),
          {:ok, room} <- get_opt(opts, :room),
-         {:ok, name} <- get_opt(opts, :name),
          {:ok, prompt} <- get_opt(opts, :prompt) do
+      random_id = :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)
       agent = %Livekit.RoomAgentDispatch{
-        name: name,
-        identity: "agent-#{name}",
+        name: "agent-#{random_id}",
+        identity: "agent-#{random_id}",
         init_request: %Livekit.InitRequest{
           prompt: prompt
         }
@@ -484,9 +470,9 @@ defmodule Mix.Tasks.Livekit do
   defp handle_remove_agent(opts) do
     with {:ok, client} <- get_client(opts),
          {:ok, room} <- get_opt(opts, :room),
-         {:ok, name} <- get_opt(opts, :name) do
-      case Livekit.RoomServiceClient.remove_participant(client, room, name) do
-        :ok -> IO.puts("Removed agent #{name} from room #{room}")
+         {:ok, identity} <- get_opt(opts, :identity) do
+      case Livekit.RoomServiceClient.remove_participant(client, room, identity) do
+        :ok -> IO.puts("Removed agent #{identity} from room #{room}")
         {:error, error} -> IO.puts("Error: #{inspect(error)}")
       end
     end
@@ -549,20 +535,5 @@ defmodule Mix.Tasks.Livekit do
 
   defp print_help do
     IO.puts(@moduledoc)
-  end
-
-  defp parse_output_url("s3://" <> path) do
-    [_bucket | key_parts] = String.split(path, "/")
-    _key = Enum.join(key_parts, "/")
-
-    {:s3,
-     %Livekit.S3Upload{
-       bucket: List.first(String.split(path, "/")),
-       aws_credentials: System.get_env("AWS_CREDENTIALS", "default")
-     }}
-  end
-
-  defp parse_output_url(_path) do
-    {:DEFAULT_FILETYPE, nil}
   end
 end
