@@ -6,7 +6,8 @@ config :logger,
   format: :json,
   backends: [:console],
   compile_time_purge_matching: [
-    [level_lower_than: :info]  # Only log info and above in production
+    # Only log info and above in production
+    [level_lower_than: :info]
   ]
 
 # Configure Tesla logger middleware for production

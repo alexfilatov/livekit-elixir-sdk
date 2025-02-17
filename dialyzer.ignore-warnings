@@ -1,0 +1,1 @@
+{"lib/mix/tasks/compile.proto.ex:1:callback_info_missing", "Callback info about the Mix.Task.Compiler behaviour is not available."}

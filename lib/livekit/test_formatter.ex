@@ -14,8 +14,10 @@ defmodule LiveKit.TestFormatter do
   end
 
   defp format_timestamp({date, {hour, minute, second, _millisecond}}) do
-    :io_lib.format("~4..0B-~2..0B-~2..0B ~2..0B:~2..0B:~2..0B",
-      [date |> elem(0), date |> elem(1), date |> elem(2), hour, minute, second])
+    :io_lib.format(
+      "~4..0B-~2..0B-~2..0B ~2..0B:~2..0B:~2..0B",
+      [date |> elem(0), date |> elem(1), date |> elem(2), hour, minute, second]
+    )
     |> to_string()
   end
 end

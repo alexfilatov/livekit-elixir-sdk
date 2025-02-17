@@ -1,7 +1,14 @@
 defmodule LiveKit.RoomServiceClientTest do
   use ExUnit.Case
   alias LiveKit.RoomServiceClient
-  alias Livekit.{Room, ParticipantInfo, ListRoomsResponse, ListParticipantsResponse, MuteRoomTrackResponse}
+
+  alias Livekit.{
+    ListParticipantsResponse,
+    ListRoomsResponse,
+    MuteRoomTrackResponse,
+    ParticipantInfo,
+    Room
+  }
 
   @api_key "api_key_123"
   @api_secret "secret_456"
@@ -37,12 +44,12 @@ defmodule LiveKit.RoomServiceClientTest do
     test "creates a room successfully", %{bypass: bypass, client: client} do
       room_name = "test_room"
       room = %Room{name: room_name, sid: "room123"}
-      
+
       Bypass.expect_once(bypass, "POST", "/twirp/livekit.RoomService/CreateRoom", fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         request = Livekit.CreateRoomRequest.decode(body)
         assert request.name == room_name
-        
+
         conn
         |> Plug.Conn.put_resp_content_type("application/protobuf")
         |> Plug.Conn.resp(200, Livekit.Room.encode(room))
@@ -60,6 +67,7 @@ defmodule LiveKit.RoomServiceClientTest do
         %Room{name: "room1", sid: "sid1"},
         %Room{name: "room2", sid: "sid2"}
       ]
+
       response = %ListRoomsResponse{rooms: rooms}
 
       Bypass.expect_once(bypass, "POST", "/twirp/livekit.RoomService/ListRooms", fn conn ->
@@ -97,16 +105,21 @@ defmodule LiveKit.RoomServiceClientTest do
       metadata = "new metadata"
       room = %Room{name: room_name, metadata: metadata}
 
-      Bypass.expect_once(bypass, "POST", "/twirp/livekit.RoomService/UpdateRoomMetadata", fn conn ->
-        {:ok, body, conn} = Plug.Conn.read_body(conn)
-        request = Livekit.UpdateRoomMetadataRequest.decode(body)
-        assert request.room == room_name
-        assert request.metadata == metadata
+      Bypass.expect_once(
+        bypass,
+        "POST",
+        "/twirp/livekit.RoomService/UpdateRoomMetadata",
+        fn conn ->
+          {:ok, body, conn} = Plug.Conn.read_body(conn)
+          request = Livekit.UpdateRoomMetadataRequest.decode(body)
+          assert request.room == room_name
+          assert request.metadata == metadata
 
-        conn
-        |> Plug.Conn.put_resp_content_type("application/protobuf")
-        |> Plug.Conn.resp(200, Livekit.Room.encode(room))
-      end)
+          conn
+          |> Plug.Conn.put_resp_content_type("application/protobuf")
+          |> Plug.Conn.resp(200, Livekit.Room.encode(room))
+        end
+      )
 
       assert {:ok, response} = RoomServiceClient.update_room_metadata(client, room_name, metadata)
       assert response.name == room_name
@@ -117,10 +130,12 @@ defmodule LiveKit.RoomServiceClientTest do
   describe "list_participants/2" do
     test "lists participants successfully", %{bypass: bypass, client: client} do
       room_name = "test_room"
+
       participants = [
         %ParticipantInfo{identity: "user1", name: "User 1"},
         %ParticipantInfo{identity: "user2", name: "User 2"}
       ]
+
       response = %ListParticipantsResponse{participants: participants}
 
       Bypass.expect_once(bypass, "POST", "/twirp/livekit.RoomService/ListParticipants", fn conn ->
@@ -168,14 +183,19 @@ defmodule LiveKit.RoomServiceClientTest do
       room_name = "test_room"
       identity = "user1"
 
-      Bypass.expect_once(bypass, "POST", "/twirp/livekit.RoomService/RemoveParticipant", fn conn ->
-        {:ok, body, conn} = Plug.Conn.read_body(conn)
-        request = Livekit.RoomParticipantIdentity.decode(body)
-        assert request.room == room_name
-        assert request.identity == identity
+      Bypass.expect_once(
+        bypass,
+        "POST",
+        "/twirp/livekit.RoomService/RemoveParticipant",
+        fn conn ->
+          {:ok, body, conn} = Plug.Conn.read_body(conn)
+          request = Livekit.RoomParticipantIdentity.decode(body)
+          assert request.room == room_name
+          assert request.identity == identity
 
-        Plug.Conn.resp(conn, 200, "")
-      end)
+          Plug.Conn.resp(conn, 200, "")
+        end
+      )
 
       assert :ok = RoomServiceClient.remove_participant(client, room_name, identity)
     end
@@ -188,20 +208,32 @@ defmodule LiveKit.RoomServiceClientTest do
       track_sid = "track1"
       response = %MuteRoomTrackResponse{}
 
-      Bypass.expect_once(bypass, "POST", "/twirp/livekit.RoomService/MutePublishedTrack", fn conn ->
-        {:ok, body, conn} = Plug.Conn.read_body(conn)
-        request = Livekit.MuteRoomTrackRequest.decode(body)
-        assert request.room == room_name
-        assert request.identity == identity
-        assert request.track_sid == track_sid
-        assert request.muted == true
+      Bypass.expect_once(
+        bypass,
+        "POST",
+        "/twirp/livekit.RoomService/MutePublishedTrack",
+        fn conn ->
+          {:ok, body, conn} = Plug.Conn.read_body(conn)
+          request = Livekit.MuteRoomTrackRequest.decode(body)
+          assert request.room == room_name
+          assert request.identity == identity
+          assert request.track_sid == track_sid
+          assert request.muted == true
 
-        conn
-        |> Plug.Conn.put_resp_content_type("application/protobuf")
-        |> Plug.Conn.resp(200, MuteRoomTrackResponse.encode(response))
-      end)
+          conn
+          |> Plug.Conn.put_resp_content_type("application/protobuf")
+          |> Plug.Conn.resp(200, MuteRoomTrackResponse.encode(response))
+        end
+      )
 
-      assert {:ok, _result} = RoomServiceClient.mute_published_track(client, room_name, identity, track_sid, true)
+      assert {:ok, _result} =
+               RoomServiceClient.mute_published_track(
+                 client,
+                 room_name,
+                 identity,
+                 track_sid,
+                 true
+               )
     end
   end
 
@@ -212,31 +244,39 @@ defmodule LiveKit.RoomServiceClientTest do
       metadata = "new metadata"
       name = "New Name"
       attributes = %{"avatar" => "url", "role" => "admin"}
+
       participant = %ParticipantInfo{
         identity: identity,
         name: name,
         metadata: metadata
       }
 
-      Bypass.expect_once(bypass, "POST", "/twirp/livekit.RoomService/UpdateParticipant", fn conn ->
-        {:ok, body, conn} = Plug.Conn.read_body(conn)
-        request = Livekit.UpdateParticipantRequest.decode(body)
-        assert request.room == room_name
-        assert request.identity == identity
-        assert request.metadata == metadata
-        assert request.name == name
-        assert request.attributes == attributes
+      Bypass.expect_once(
+        bypass,
+        "POST",
+        "/twirp/livekit.RoomService/UpdateParticipant",
+        fn conn ->
+          {:ok, body, conn} = Plug.Conn.read_body(conn)
+          request = Livekit.UpdateParticipantRequest.decode(body)
+          assert request.room == room_name
+          assert request.identity == identity
+          assert request.metadata == metadata
+          assert request.name == name
+          assert request.attributes == attributes
 
-        conn
-        |> Plug.Conn.put_resp_content_type("application/protobuf")
-        |> Plug.Conn.resp(200, ParticipantInfo.encode(participant))
-      end)
-
-      assert {:ok, response} = RoomServiceClient.update_participant(client, room_name, identity,
-        metadata: metadata,
-        name: name,
-        attributes: attributes
+          conn
+          |> Plug.Conn.put_resp_content_type("application/protobuf")
+          |> Plug.Conn.resp(200, ParticipantInfo.encode(participant))
+        end
       )
+
+      assert {:ok, response} =
+               RoomServiceClient.update_participant(client, room_name, identity,
+                 metadata: metadata,
+                 name: name,
+                 attributes: attributes
+               )
+
       assert response.identity == identity
       assert response.name == name
       assert response.metadata == metadata
@@ -250,18 +290,30 @@ defmodule LiveKit.RoomServiceClientTest do
       track_sids = ["track1", "track2"]
       subscribe = true
 
-      Bypass.expect_once(bypass, "POST", "/twirp/livekit.RoomService/UpdateSubscriptions", fn conn ->
-        {:ok, body, conn} = Plug.Conn.read_body(conn)
-        request = Livekit.UpdateSubscriptionsRequest.decode(body)
-        assert request.room == room_name
-        assert request.identity == identity
-        assert request.track_sids == track_sids
-        assert request.subscribe == subscribe
+      Bypass.expect_once(
+        bypass,
+        "POST",
+        "/twirp/livekit.RoomService/UpdateSubscriptions",
+        fn conn ->
+          {:ok, body, conn} = Plug.Conn.read_body(conn)
+          request = Livekit.UpdateSubscriptionsRequest.decode(body)
+          assert request.room == room_name
+          assert request.identity == identity
+          assert request.track_sids == track_sids
+          assert request.subscribe == subscribe
 
-        Plug.Conn.resp(conn, 200, "")
-      end)
+          Plug.Conn.resp(conn, 200, "")
+        end
+      )
 
-      assert :ok = RoomServiceClient.update_subscriptions(client, room_name, identity, track_sids, subscribe)
+      assert :ok =
+               RoomServiceClient.update_subscriptions(
+                 client,
+                 room_name,
+                 identity,
+                 track_sids,
+                 subscribe
+               )
     end
   end
 
@@ -286,10 +338,11 @@ defmodule LiveKit.RoomServiceClientTest do
         Plug.Conn.resp(conn, 200, "")
       end)
 
-      assert :ok = RoomServiceClient.send_data(client, room_name, data, kind,
-        destination_sids: destination_sids,
-        destination_identities: destination_identities
-      )
+      assert :ok =
+               RoomServiceClient.send_data(client, room_name, data, kind,
+                 destination_sids: destination_sids,
+                 destination_identities: destination_identities
+               )
     end
 
     test "sends broadcast data successfully", %{bypass: bypass, client: client} do
@@ -332,7 +385,10 @@ defmodule LiveKit.RoomServiceClientTest do
         Plug.Conn.resp(conn, 200, "")
       end)
 
-      assert :ok = RoomServiceClient.send_data(client, room_name, data, kind, destination_sids: destination_sids)
+      assert :ok =
+               RoomServiceClient.send_data(client, room_name, data, kind,
+                 destination_sids: destination_sids
+               )
     end
 
     test "sends data to specific participants by identities", %{bypass: bypass, client: client} do
@@ -354,7 +410,10 @@ defmodule LiveKit.RoomServiceClientTest do
         Plug.Conn.resp(conn, 200, "")
       end)
 
-      assert :ok = RoomServiceClient.send_data(client, room_name, data, kind, destination_identities: destination_identities)
+      assert :ok =
+               RoomServiceClient.send_data(client, room_name, data, kind,
+                 destination_identities: destination_identities
+               )
     end
 
     test "sends lossy data successfully", %{bypass: bypass, client: client} do

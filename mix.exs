@@ -25,7 +25,12 @@ defmodule LiveKit.MixProject do
         "coveralls.post": :test,
         "coveralls.html": :test
       ],
-      compilers: Mix.compilers() ++ [:proto]
+      compilers: Mix.compilers() ++ [:proto],
+      # Dialyzer configuration
+      dialyzer: [
+        ignore_warnings: "dialyzer.ignore-warnings",
+        plt_add_apps: [:mix]
+      ]
     ]
   end
 
@@ -47,6 +52,7 @@ defmodule LiveKit.MixProject do
       {:joken, "~> 2.6"},
       {:inflex, "~> 2.1"},
       {:twirp, "~> 0.8"},
+      {:grpc, "~> 0.7.0"},
       # Development dependencies
       {:ex_doc, "~> 0.29", only: :dev, runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
