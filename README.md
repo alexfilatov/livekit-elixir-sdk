@@ -18,41 +18,74 @@ end
 
 ### Command Line Interface (CLI)
 
-The SDK includes a CLI for common LiveKit operations:
+The SDK includes a CLI for common LiveKit operations. Here are all available commands grouped by category:
 
+#### Room Management
 ```bash
-# Room Management
+# Create an access token for room access
 mix livekit create-token --api-key devkey --api-secret secret --join --room my-room --identity user1 --valid-for 24h
+
+# List all rooms
 mix livekit list-rooms --api-key devkey --api-secret secret --url https://my.livekit.server
+
+# Create a new room
 mix livekit create-room --api-key devkey --api-secret secret --url https://my.livekit.server --name my-room
+
+# Delete a room
 mix livekit delete-room --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room
+
+# List participants in a room
 mix livekit list-participants --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room
+
+# Remove a participant from a room
 mix livekit remove-participant --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room --identity user1
+```
 
-# Egress Operations
+#### Recording and Streaming
+```bash
+# Start recording a room
 mix livekit start-room-recording --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room --output s3://bucket/recording.mp4
-mix livekit start-track-recording --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room --track-id TR_1234 --output recordings/track.mp4
-mix livekit start-room-stream --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room --rtmp rtmp://stream.url/live
-mix livekit start-track-stream --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room --track-id TR_1234 --rtmp rtmp://stream.url/live
-mix livekit list-egress --api-key devkey --api-secret secret --url https://my.livekit.server
-mix livekit stop-egress --api-key devkey --api-secret secret --url https://my.livekit.server --egress-id EG_1234
 
-# Room Agents
+# Start recording specific tracks
+mix livekit start-track-recording --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room --track-id TR_1234 --output recordings/track.mp4
+
+# Start streaming a room to RTMP endpoints
+mix livekit start-room-streaming --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room --rtmp rtmp://stream.url/live
+
+# Start streaming specific tracks to RTMP endpoints
+mix livekit start-track-stream --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room --track-id TR_1234 --rtmp rtmp://stream.url/live
+
+# List active egress operations
+mix livekit list-egress --api-key devkey --api-secret secret --url https://my.livekit.server
+
+# Stop an egress operation
+mix livekit stop-egress --api-key devkey --api-secret secret --url https://my.livekit.server --egress-id EG_1234
+```
+
+#### Room Agents
+```bash
+# Add an agent to a room
 mix livekit add-agent --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room --name assistant --prompt "You are a helpful assistant"
+
+# Remove an agent from a room
 mix livekit remove-agent --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room --name assistant
+
+# List agents in a room
 mix livekit list-agents --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room
 ```
 
-Common options:
-- `--api-key` (`-k`): LiveKit API key
-- `--api-secret` (`-s`): LiveKit API secret
-- `--url` (`-u`): LiveKit server URL
+### Command Options
+
+#### Common Options
+- `--api-key` (`-k`): LiveKit API key (required)
+- `--api-secret` (`-s`): LiveKit API secret (required)
+- `--url` (`-u`): LiveKit server URL (required for most commands)
 - `--room` (`-r`): Room name
 - `--identity` (`-i`): Participant identity
-- `--valid-for` (`-t`): Token validity duration (e.g., "24h", "30m")
 - `--name` (`-n`): Name for new room or agent
+- `--valid-for` (`-t`): Token validity duration (e.g., "24h", "30m")
 
-Egress options:
+#### Recording and Streaming Options
 - `--output` (`-o`): Output path (local file or s3://bucket/path)
 - `--rtmp`: RTMP streaming URL
 - `--width`: Video width (default: 1280)
@@ -63,7 +96,11 @@ Egress options:
 - `--track-id`: Track ID for track-specific operations
 - `--egress-id`: Egress ID for stopping operations
 
-For more information about available commands and options:
+#### Agent Options
+- `--prompt`: Initial prompt for the agent (required for add-agent)
+- `--name`: Agent name (required for add/remove agent)
+
+For more detailed information about available commands and options:
 ```bash
 mix help livekit
 ```
@@ -101,42 +138,11 @@ client = RoomServiceClient.new("https://your-livekit-host", "api-key", "api-secr
 # Delete a room
 {:ok, _} = RoomServiceClient.delete_room(client, "room-name")
 
-# Update room metadata
-{:ok, room} = RoomServiceClient.update_room_metadata(client, "room-name", "new metadata")
-
 # List participants in a room
 {:ok, participants} = RoomServiceClient.list_participants(client, "room-name")
 
-# Get a specific participant
-{:ok, participant} = RoomServiceClient.get_participant(client, "room-name", "participant-identity")
-
 # Remove a participant from a room
 {:ok, _} = RoomServiceClient.remove_participant(client, "room-name", "participant-identity")
-
-# Mute/unmute a participant's track
-{:ok, track} = RoomServiceClient.mute_published_track(client, "room-name", "participant-identity", "track-sid", true)
-
-# Update participant information
-{:ok, participant} = RoomServiceClient.update_participant(client, "room-name", "participant-identity",
-  metadata: "new metadata",
-  permission: %LiveKit.ParticipantPermission{
-    can_publish: true,
-    can_subscribe: true,
-    can_publish_data: true
-  }
-)
-
-# Update participant subscriptions
-{:ok, _} = RoomServiceClient.update_subscriptions(client, "room-name", "participant-identity",
-  track_sids: ["track-1", "track-2"],
-  subscribe: true
-)
-
-# Send data to participants
-{:ok, _} = RoomServiceClient.send_data(client, "room-name", "Hello, participants!",
-  kind: :RELIABLE,
-  destination_identities: ["participant-1", "participant-2"]
-)
 ```
 
 ### Verifying Tokens
