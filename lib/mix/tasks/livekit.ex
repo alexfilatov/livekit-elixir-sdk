@@ -1,5 +1,6 @@
 defmodule Mix.Tasks.Livekit do
   use Mix.Task
+  require Logger
 
   @shortdoc "Livekit CLI commands"
   @moduledoc """
@@ -57,36 +58,37 @@ defmodule Mix.Tasks.Livekit do
   ## Examples
 
       # Create a token
-      mix livekit create-token --api-key devkey --api-secret secret --join --room my-room --identity user1 --valid-for 24h
+      mix livekit create-token --api-key devkey --api-secret secret --url http://localhost:7880 --join --room my-room --identity user1 --valid-for 24h
 
       # List rooms
-      mix livekit list-rooms --api-key devkey --api-secret secret --url https://my.livekit.server
+      mix livekit list-rooms --api-key devkey --api-secret secret --url http://localhost:7880
 
       # Create a room
-      mix livekit create-room --api-key devkey --api-secret secret --url https://my.livekit.server --name my-room
+      mix livekit create-room --api-key devkey --api-secret secret --url http://localhost:7880 --name my-room
 
       # Delete a room
-      mix livekit delete-room --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room
+      mix livekit delete-room --api-key devkey --api-secret secret --url http://localhost:7880 --room my-room
 
       # List participants
-      mix livekit list-participants --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room
+      mix livekit list-participants --api-key devkey --api-secret secret --url http://localhost:7880 --room my-room
 
       # Remove a participant
-      mix livekit remove-participant --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room --identity user1
+      mix livekit remove-participant --api-key devkey --api-secret secret --url http://localhost:7880 --room my-room --identity user1
 
       # Start room recording
-      mix livekit start-room-recording --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room --output s3://bucket/recording.mp4
+      mix livekit start-room-recording --api-key devkey --api-secret secret --url http://localhost:7880 --room my-room --output s3://bucket/recording.mp4
 
       # Start room streaming
-      mix livekit start-room-streaming --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room --rtmp rtmp://stream.url/live
+      mix livekit start-room-streaming --api-key devkey --api-secret secret --url http://localhost:7880 --room my-room --rtmp rtmp://stream.url/live
 
       # Add an agent to a room
-      mix livekit add-agent --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room --prompt "You are a helpful assistant"
+      mix livekit add-agent --api-key devkey --api-secret secret --url http://localhost:7880 --room my-room --prompt "You are a helpful assistant"
   """
 
   @impl Mix.Task
   def run(args) do
     # Start required applications
+    Application.ensure_all_started(:hackney)
     Application.ensure_all_started(:gun)
     Application.ensure_all_started(:grpc)
 
@@ -138,16 +140,22 @@ defmodule Mix.Tasks.Livekit do
   defp handle_command("list-rooms", opts), do: handle_room_commands("list-rooms", opts)
   defp handle_command("create-room", opts), do: handle_room_commands("create-room", opts)
   defp handle_command("delete-room", opts), do: handle_room_commands("delete-room", opts)
+
   defp handle_command("list-participants", opts),
     do: handle_room_commands("list-participants", opts)
+
   defp handle_command("remove-participant", opts),
     do: handle_room_commands("remove-participant", opts)
+
   defp handle_command("start-room-recording", opts), do: handle_start_room_recording(opts)
   defp handle_command("start-track-recording", opts), do: handle_start_track_recording(opts)
+
   defp handle_command("start-room-streaming", opts),
     do: handle_streaming_commands("start-room-streaming", opts)
+
   defp handle_command("start-track-stream", opts),
     do: handle_streaming_commands("start-track-stream", opts)
+
   defp handle_command("list-egress", opts), do: handle_list_egress(opts)
   defp handle_command("stop-egress", opts), do: handle_stop_egress(opts)
   defp handle_command("add-agent", opts), do: handle_agent_commands("add-agent", opts)
@@ -203,9 +211,11 @@ defmodule Mix.Tasks.Livekit do
             |> maybe_add_metadata(metadata)
             |> Livekit.AccessToken.to_jwt()
 
+          Logger.info("Successfully created token: #{token}; grant: #{inspect(grant)}")
           {:ok, token}
 
         error ->
+          Logger.error("Failed to create token: #{inspect(error)}")
           error
       end
     end
@@ -276,12 +286,25 @@ defmodule Mix.Tasks.Livekit do
 
       try do
         case Livekit.EgressServiceClient.start_room_composite_egress(client, request) do
-          {:ok, response} -> {:ok, response}
-          {:error, %GRPC.RPCError{} = error} -> {:error, error.message}
-          {:error, reason} -> {:error, reason}
+          {:ok, response} ->
+            Logger.info("Successfully started room recording, response: #{inspect(response)}")
+            {:ok, response}
+
+          {:error, %GRPC.RPCError{} = error} ->
+            Logger.error(
+              "Failed to start room recording because of GRPC error: #{inspect(error)}"
+            )
+
+            {:error, error.message}
+
+          {:error, reason} ->
+            Logger.error("Failed to start room recording: #{inspect(reason)}")
+            {:error, reason}
         end
       rescue
-        error -> {:error, "Failed to start recording: #{inspect(error)}"}
+        error ->
+          Logger.error("Failed to start room recording because of: #{inspect(error)}")
+          {:error, "Failed to start recording: #{inspect(error)}"}
       end
     end
   end
@@ -289,10 +312,10 @@ defmodule Mix.Tasks.Livekit do
   defp handle_list_rooms(opts) do
     with {:ok, client} <- get_client(opts) do
       case Livekit.RoomServiceClient.list_rooms(client) do
-        {:ok, rooms} ->
-          Enum.each(rooms, fn room ->
+        {:ok, list_rooms_response} ->
+          Enum.each(list_rooms_response.rooms, fn room ->
             IO.puts("#{room.name} (#{room.sid})")
-            IO.puts("  Num Participants: #{room.num_participants}")
+            IO.puts("  Num Participants: #{length(room.participants)}")
             IO.puts("  Created At: #{format_timestamp(room.creation_time)}")
           end)
 
@@ -310,8 +333,11 @@ defmodule Mix.Tasks.Livekit do
           IO.puts("Created room:")
           IO.puts("  Name: #{room.name}")
           IO.puts("  SID: #{room.sid}")
+          Logger.info("Successfully created room '#{name}' with SID: #{room.sid}")
+          {:ok, room}
 
         {:error, error} ->
+          Logger.error("Failed to create room: #{inspect(error)}")
           IO.puts("Error: #{inspect(error)}")
       end
     end
@@ -321,11 +347,18 @@ defmodule Mix.Tasks.Livekit do
     with {:ok, client} <- get_client(opts),
          {:ok, room} <- get_opt(opts, :room) do
       case Livekit.RoomServiceClient.delete_room(client, room) do
-        :ok -> IO.puts("Room #{room} deleted")
-        {:error, error} -> IO.puts("Error: #{inspect(error)}")
+        :ok ->
+          Logger.info("Successfully deleted room: #{room}")
+          IO.puts("Room #{room} deleted")
+
+        {:error, error} ->
+          Logger.error("Failed to delete room: #{inspect(error)}")
+          IO.puts("Error: #{inspect(error)}")
       end
     else
-      {:error, reason} -> IO.puts("Error: #{inspect(reason)}")
+      {:error, reason} ->
+        Logger.error("Failed to initialize room client: #{inspect(reason)}")
+        IO.puts("Error: #{inspect(reason)}")
     end
   end
 
@@ -334,8 +367,13 @@ defmodule Mix.Tasks.Livekit do
          {:ok, room} <- get_opt(opts, :room),
          {:ok, identity} <- get_opt(opts, :identity) do
       case Livekit.RoomServiceClient.remove_participant(client, room, identity) do
-        :ok -> IO.puts("Participant #{identity} removed from room #{room}")
-        {:error, error} -> IO.puts("Error: #{inspect(error)}")
+        :ok ->
+          Logger.info("Successfully removed participant #{identity} from room #{room}")
+          IO.puts("Participant #{identity} removed from room #{room}")
+
+        {:error, error} ->
+          Logger.error("Failed to remove participant: #{inspect(error)}")
+          IO.puts("Error: #{inspect(error)}")
       end
     end
   end
@@ -383,8 +421,16 @@ defmodule Mix.Tasks.Livekit do
       }
 
       case Livekit.EgressServiceClient.start_track_egress(client, request) do
-        :ok -> IO.puts("Started track recording")
-        {:error, error} -> IO.puts("Failed to start track recording: #{error}")
+        :ok ->
+          Logger.info(
+            "Successfully started track recording for track #{track_id} in room #{room}"
+          )
+
+          IO.puts("Started track recording")
+
+        {:error, error} ->
+          Logger.error("Failed to start track recording: #{inspect(error)}")
+          IO.puts("Failed to start track recording: #{error}")
       end
     end
   end
@@ -392,7 +438,7 @@ defmodule Mix.Tasks.Livekit do
   defp handle_start_track_stream(opts) do
     with {:ok, client} <- get_egress_client(opts),
          {:ok, room} <- get_opt(opts, :room),
-         {:ok, _track_id} <- get_opt(opts, :track_id),
+         {:ok, track_id} <- get_opt(opts, :track_id),
          {:ok, rtmp} <- get_opt(opts, :rtmp) do
       encoding_options = %Livekit.EncodingOptions{
         width: Keyword.get(opts, :width, 1280),
@@ -415,8 +461,16 @@ defmodule Mix.Tasks.Livekit do
       }
 
       case Livekit.EgressServiceClient.start_room_composite_egress(client, request) do
-        :ok -> IO.puts("Started track streaming")
-        {:error, error} -> IO.puts("Failed to start track streaming: #{error}")
+        :ok ->
+          Logger.info(
+            "Successfully started track streaming for track #{track_id} in room #{room}"
+          )
+
+          IO.puts("Started track streaming")
+
+        {:error, error} ->
+          Logger.error("Failed to start track streaming: #{inspect(error)}")
+          IO.puts("Failed to start track streaming: #{error}")
       end
     end
   end
@@ -452,6 +506,7 @@ defmodule Mix.Tasks.Livekit do
          {:ok, room} <- get_opt(opts, :room),
          {:ok, prompt} <- get_opt(opts, :prompt) do
       random_id = :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)
+
       agent = %Livekit.RoomAgentDispatch{
         name: "agent-#{random_id}",
         identity: "agent-#{random_id}",
