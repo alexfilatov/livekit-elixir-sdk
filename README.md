@@ -23,57 +23,60 @@ end
 The SDK includes a CLI for common Livekit operations. Here are all available commands grouped by category:
 
 #### Room Management
+
 ```bash
 # Create an access token for room access
-mix livekit create-token --api-key devkey --api-secret secret --join --room my-room --identity user1 --valid-for 24h
+mix livekit create-token --api-key devkey --api-secret secret --url http://localhost:7880 --join --room my-room --identity user1 --valid-for 24h --identity user1 --valid-for 24h
 
 # List all rooms
-mix livekit list-rooms --api-key devkey --api-secret secret --url https://my.livekit.server
+mix livekit list-rooms --api-key devkey --api-secret secret --url http://localhost:7880
 
 # Create a new room
-mix livekit create-room --api-key devkey --api-secret secret --url https://my.livekit.server --name my-room
+mix livekit create-room --api-key devkey --api-secret secret --url http://localhost:7880 --name my-room
 
 # Delete a room
-mix livekit delete-room --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room
+mix livekit delete-room --api-key devkey --api-secret secret --url http://localhost:7880 --room my-room
 
 # List participants in a room
-mix livekit list-participants --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room
+mix livekit list-participants --api-key devkey --api-secret secret --url http://localhost:7880 --room my-room
 
 # Remove a participant from a room
-mix livekit remove-participant --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room --identity user1
+mix livekit remove-participant --api-key devkey --api-secret secret --url http://localhost:7880 --room my-room --identity user1
 ```
 
 #### Recording and Streaming
+
 ```bash
 # Start recording a room
-mix livekit start-room-recording --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room --output s3://bucket/recording.mp4
+mix livekit start-room-recording --api-key devkey --api-secret secret --url http://localhost:7880 --room my-room --output s3://bucket/recording.mp4
 
 # Start recording specific tracks
-mix livekit start-track-recording --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room --track-id TR_1234 --output recordings/track.mp4
+mix livekit start-track-recording --api-key devkey --api-secret secret --url http://localhost:7880 --room my-room --track-id TR_1234 --output recordings/track.mp4
 
 # Start streaming a room to RTMP endpoints
-mix livekit start-room-streaming --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room --rtmp rtmp://stream.url/live
+mix livekit start-room-streaming --api-key devkey --api-secret secret --url http://localhost:7880 --room my-room --rtmp rtmp://stream.url/live
 
 # Start streaming specific tracks to RTMP endpoints
-mix livekit start-track-stream --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room --track-id TR_1234 --rtmp rtmp://stream.url/live
+mix livekit start-track-stream --api-key devkey --api-secret secret --url http://localhost:7880 --room my-room --track-id TR_1234 --rtmp rtmp://stream.url/live
 
 # List active egress operations
-mix livekit list-egress --api-key devkey --api-secret secret --url https://my.livekit.server
+mix livekit list-egress --api-key devkey --api-secret secret --url http://localhost:7880
 
 # Stop an egress operation
-mix livekit stop-egress --api-key devkey --api-secret secret --url https://my.livekit.server --egress-id EG_1234
+mix livekit stop-egress --api-key devkey --api-secret secret --url http://localhost:7880 --egress-id EG_1234
 ```
 
 #### Room Agents
+
 ```bash
 # Add an agent to a room
-mix livekit add-agent --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room --name assistant --prompt "You are a helpful assistant"
+mix livekit add-agent --api-key devkey --api-secret secret --url http://localhost:7880 --room my-room --name assistant --prompt "You are a helpful assistant"
 
 # Remove an agent from a room
-mix livekit remove-agent --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room --name assistant
+mix livekit remove-agent --api-key devkey --api-secret secret --url http://localhost:7880 --room my-room --name assistant
 
 # List agents in a room
-mix livekit list-agents --api-key devkey --api-secret secret --url https://my.livekit.server --room my-room
+mix livekit list-agents --api-key devkey --api-secret secret --url http://localhost:7880 --room my-room
 ```
 
 ### Command Options
@@ -103,6 +106,7 @@ mix livekit list-agents --api-key devkey --api-secret secret --url https://my.li
 - `--name`: Agent name (required for add/remove agent)
 
 For more detailed information about available commands and options:
+
 ```bash
 mix help livekit
 ```
