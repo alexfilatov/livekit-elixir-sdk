@@ -4,6 +4,53 @@
 
 This is *not* official Elixir server SDK for [Livekit](https://livekit.io). This SDK allows you to manage rooms and create access tokens from your Elixir backend.
 
+## Feature Support
+
+The following table shows which LiveKit features are currently supported in this Elixir SDK:
+
+### Core Features
+
+- [x] Access Token Generation and Management
+- [x] Room Management (create, list, delete)
+- [x] Participant Management (list, remove)
+- [x] Token Verification
+- [x] Configuration via Environment Variables
+- [x] Configuration via Application Config
+- [x] Runtime Configuration Options
+
+### Media Features
+
+- [x] Room Composite Egress (recording rooms)
+- [x] Track Composite Egress (recording specific tracks)
+- [x] Room Streaming to RTMP
+- [x] Track Streaming to RTMP
+- [x] Custom Encoding Options for Egress
+- [ ] WebRTC Ingress
+- [ ] RTMP Ingress
+- [ ] WHIP Ingress
+
+### AI Features
+
+- [x] Room Agents (add, remove, list)
+- [x] Agent Configuration and Initialization
+
+### Integration Features
+
+- [ ] SIP Inbound Trunks
+- [ ] SIP Outbound Trunks
+- [ ] SIP Call Management
+- [ ] Webhook Support and Validation
+- [ ] Webhook Event Processing
+
+### Advanced Features
+
+- [ ] Advanced Room Configuration
+- [ ] Room Presets
+- [ ] Detailed Codec Configuration
+- [ ] Advanced Participant Permissions
+- [ ] Data Message Handling with Reliability Options
+- [ ] Additional Grant Types (SIPGrant, etc.)
+
 ## Installation
 
 Add `livekit` to your list of dependencies in `mix.exs`:
@@ -114,6 +161,8 @@ For more detailed information about available commands and options:
 mix help livekit
 ```
 
+## Code Examples
+
 ### Creating Access Tokens
 
 ```elixir
@@ -125,6 +174,7 @@ token = Livekit.AccessToken.new("devkey", "secret")
 
 # Convert to JWT
 jwt = Livekit.AccessToken.to_jwt(token)
+```
 
 ### Managing Rooms
 
@@ -204,7 +254,7 @@ end
 )
 ```
 
-### Configuration
+## Configuration
 
 The SDK supports multiple ways to configure Livekit credentials and settings:
 
@@ -251,9 +301,9 @@ The configuration system follows this priority order:
 3. Application configuration
 4. Default values (lowest priority)
 
-### Development
+## Development
 
-#### Protobuf Compilation
+### Protobuf Compilation
 
 The SDK includes a Mix task for compiling protobuf definitions:
 
@@ -263,56 +313,9 @@ mix compile.proto
 
 This will compile all `.proto` files in the `proto/` directory and generate Elixir modules in `lib/livekit/proto/`.
 
-## Features Not Yet Implemented
+## Future Development Roadmap
 
-The following features are available in other LiveKit SDKs but not yet implemented in this Elixir SDK:
-
-### SIP Service Integration
-
-Features available for SIP integration:
-
-- Creating SIP inbound trunks
-- Creating SIP outbound trunks
-- Managing SIP trunks (listing, deleting, updating)
-- Making SIP calls
-- Handling SIP participants
-
-### Ingress Service
-
-Ingress service capabilities include:
-
-- Creating ingress points for various input types
-- Updating ingress configurations
-- Listing and managing ingress points
-- Handling streaming inputs from external sources
-
-### Additional Grant Types
-
-Additional grant types not yet available in the Elixir SDK:
-
-- `SIPGrant` - For SIP-related permissions
-- More granular `VideoGrant` permissions like `ingressAdmin`
-
-### Webhook Support
-
-Webhook functionality for:
-
-- Receiving and validating webhook events from LiveKit
-- Processing various event types (participant joined/left, track published/unpublished, etc.)
-- Verifying webhook authenticity using API credentials
-
-### Advanced Room Configuration
-
-Some advanced room configuration options available:
-
-- Room presets
-- Detailed codec configuration
-- Advanced participant permissions management
-- Data message handling with reliability options
-
-### Future Development Roadmap
-
-These features are planned for future releases of the Elixir SDK. If you need these features immediately, consider using one of the other official SDKs.
+The features marked as not implemented in the feature checklist are planned for future releases of the Elixir SDK. If you need these features immediately, consider using one of the other official SDKs.
 
 Contributions to implement these features are welcome! Please see the repository for contribution guidelines.
 
