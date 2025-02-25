@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package livekit;
+
+import "livekit_models.proto";
+import "livekit_egress.proto";
+
+// WebhookEvent represents a webhook event sent by LiveKit
+message WebhookEvent {
+  // type of event
+  string event = 1;
+  
+  // room details, available for room_* events and participant_* events
+  Room room = 2;
+  
+  // participant details, available for participant_* events and track_* events
+  ParticipantInfo participant = 3;
+  
+  // egress info, available for egress_* events
+  EgressInfo egress_info = 9;
+  
+  // track info, available for track_* events
+  TrackInfo track = 8;
+  
+  // unique ID for the event
+  string id = 6;
+  
+  // timestamp when the event was created, in seconds
+  int64 created_at = 7;
+  
+  // number of events dropped prior to this one
+  int32 num_dropped = 11;
+}

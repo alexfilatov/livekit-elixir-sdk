@@ -29,6 +29,10 @@ defmodule Mix.Tasks.Livekit do
   * `remove-agent` - Remove an agent from a room
   * `list-agents` - List agents in a room
 
+  Webhooks:
+  * `verify-webhook` - Verify a webhook payload with a given token
+  * `generate-webhook-config` - Generate webhook configuration for config.exs
+
   ## Options
 
   Common Options:
@@ -54,6 +58,11 @@ defmodule Mix.Tasks.Livekit do
   Agent Options:
   * `--prompt` - Initial prompt for the agent (required for add-agent)
   * `--name` - Agent name (required for add/remove agent)
+
+  Webhook Options:
+  * `--payload` - Webhook payload to verify
+  * `--token` - Webhook token to verify with
+  * `--webhook-url` - Webhook URL to generate configuration for
 
   ## Examples
 
@@ -83,6 +92,12 @@ defmodule Mix.Tasks.Livekit do
 
       # Add an agent to a room
       mix livekit add-agent --api-key devkey --api-secret secret --url http://localhost:7880 --room my-room --prompt "You are a helpful assistant"
+
+      # Verify a webhook payload
+      mix livekit verify-webhook --api-key devkey --api-secret secret --payload '{"event": "room-created", "room": {"name": "my-room"}}' --token my-webhook-token
+
+      # Generate webhook configuration
+      mix livekit generate-webhook-config --api-key devkey --api-secret secret --webhook-url https://example.com/webhook
   """
 
   @impl Mix.Task
@@ -100,40 +115,51 @@ defmodule Mix.Tasks.Livekit do
   end
 
   defp parse_options(args) do
-    OptionParser.parse(args,
-      strict: [
-        api_key: :string,
-        api_secret: :string,
-        url: :string,
-        room: :string,
-        identity: :string,
-        valid_for: :string,
-        join: :boolean,
-        name: :string,
-        output: :string,
-        rtmp: :string,
-        width: :integer,
-        height: :integer,
-        fps: :integer,
-        audio_bitrate: :integer,
-        video_bitrate: :integer,
-        track_id: :string,
-        egress_id: :string,
-        prompt: :string,
-        metadata: :string
-      ],
-      aliases: [
-        k: :api_key,
-        s: :api_secret,
-        u: :url,
-        r: :room,
-        i: :identity,
-        t: :valid_for,
-        j: :join,
-        n: :name,
-        o: :output
-      ]
-    )
+    {opts, args, invalid} =
+      OptionParser.parse(args,
+        strict: [
+          api_key: :string,
+          api_secret: :string,
+          url: :string,
+          room: :string,
+          identity: :string,
+          name: :string,
+          valid_for: :string,
+          join: :boolean,
+          can_publish: :boolean,
+          can_subscribe: :boolean,
+          can_publish_data: :boolean,
+          output: :string,
+          rtmp: :string,
+          width: :integer,
+          height: :integer,
+          fps: :integer,
+          audio_bitrate: :integer,
+          video_bitrate: :integer,
+          track_id: :string,
+          egress_id: :string,
+          prompt: :string,
+          payload: :string,
+          token: :string,
+          webhook_url: :string
+        ],
+        aliases: [
+          k: :api_key,
+          s: :api_secret,
+          u: :url,
+          r: :room,
+          i: :identity,
+          n: :name,
+          t: :valid_for,
+          o: :output
+        ]
+      )
+
+    if invalid != [] do
+      IO.puts("Invalid options: #{inspect(invalid)}")
+    end
+
+    {opts, args, invalid}
   end
 
   defp handle_command("create-token", opts), do: handle_create_token(opts)
@@ -161,6 +187,8 @@ defmodule Mix.Tasks.Livekit do
   defp handle_command("add-agent", opts), do: handle_agent_commands("add-agent", opts)
   defp handle_command("remove-agent", opts), do: handle_agent_commands("remove-agent", opts)
   defp handle_command("list-agents", opts), do: handle_agent_commands("list-agents", opts)
+  defp handle_command("verify-webhook", opts), do: handle_verify_webhook(opts)
+  defp handle_command("generate-webhook-config", opts), do: handle_generate_webhook_config(opts)
   defp handle_command(_, _), do: print_help()
 
   defp handle_room_commands(command, opts) do
@@ -552,6 +580,86 @@ defmodule Mix.Tasks.Livekit do
           IO.puts("Error: #{inspect(error)}")
           {:error, error}
       end
+    end
+  end
+
+  defp handle_verify_webhook(opts) do
+    with {:ok, token} <- get_opt(opts, :token),
+         {:ok, payload} <- get_opt(opts, :payload),
+         {:ok, _api_key} <- get_opt(opts, :api_key),
+         {:ok, _api_secret} <- get_opt(opts, :api_secret) do
+      # Configure the webhook receiver with the API key and secret from opts
+      Application.put_env(:livekit, :webhook, %{
+        api_key: Keyword.get(opts, :api_key),
+        api_secret: Keyword.get(opts, :api_secret)
+      })
+
+      case Livekit.WebhookReceiver.receive(payload, token) do
+        {:ok, event} ->
+          IO.puts("Webhook verification successful!")
+          IO.puts("Event type: #{event.event}")
+          IO.puts("Event ID: #{event.id}")
+          IO.puts("Created at: #{event.created_at}")
+
+          if event.room do
+            IO.puts("\nRoom information:")
+            IO.puts("  Name: #{event.room.name}")
+            IO.puts("  SID: #{event.room.sid}")
+          end
+
+          if event.participant do
+            IO.puts("\nParticipant information:")
+            IO.puts("  Identity: #{event.participant.identity}")
+            IO.puts("  Name: #{event.participant.name}")
+            IO.puts("  SID: #{event.participant.sid}")
+          end
+
+          if event.track do
+            IO.puts("\nTrack information:")
+            IO.puts("  SID: #{event.track.sid}")
+            IO.puts("  Name: #{event.track.name}")
+            IO.puts("  Type: #{event.track.type}")
+          end
+
+          if event.egress_info do
+            IO.puts("\nEgress information:")
+            IO.puts("  Egress ID: #{event.egress_info.egress_id}")
+            IO.puts("  Room name: #{event.egress_info.room_name}")
+            IO.puts("  Status: #{event.egress_info.status}")
+          end
+
+        {:error, reason} ->
+          IO.puts("Webhook verification failed: #{inspect(reason)}")
+      end
+    else
+      {:error, reason} ->
+        IO.puts("Error: #{inspect(reason)}")
+    end
+  end
+
+  defp handle_generate_webhook_config(opts) do
+    with {:ok, api_key} <- get_opt(opts, :api_key),
+         {:ok, api_secret} <- get_opt(opts, :api_secret),
+         webhook_urls <- Keyword.get_values(opts, :webhook_url) do
+      if webhook_urls == [] do
+        IO.puts(
+          "Warning: No webhook URLs specified. Use --webhook-url to specify one or more webhook endpoints."
+        )
+      end
+
+      config = """
+      # LiveKit Webhook Configuration
+      config :livekit, :webhook,
+        api_key: "#{api_key}",
+        api_secret: "#{api_secret}"#{if webhook_urls != [], do: ",", else: ""}
+      #{if webhook_urls != [], do: "  urls: #{inspect(webhook_urls)}", else: ""}
+      """
+
+      IO.puts("Add the following to your config.exs file:")
+      IO.puts(config)
+    else
+      {:error, reason} ->
+        IO.puts("Error: #{inspect(reason)}")
     end
   end
 
