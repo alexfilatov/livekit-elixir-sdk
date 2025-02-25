@@ -93,4 +93,37 @@ defmodule Livekit.AccessToken do
     {:ok, jwt, _claims} = Joken.encode_and_sign(claims, signer)
     jwt
   end
+
+  @doc """
+  Verifies a JWT token and returns its claims.
+
+  ## Parameters
+
+  - `token`: The JWT token to verify
+  - `api_key`: The API key to verify against
+  - `api_secret`: The API secret to verify with
+
+  ## Returns
+
+  - `{:ok, claims}`: If the token is valid, returns the decoded claims
+  - `{:error, reason}`: If the token is invalid
+  """
+  @spec verify(String.t(), String.t(), String.t()) :: {:ok, map()} | {:error, any()}
+  def verify(token, api_key, api_secret)
+      when is_binary(token) and is_binary(api_key) and is_binary(api_secret) do
+    signer = Joken.Signer.create("HS256", api_secret)
+
+    case Joken.verify(token, signer) do
+      {:ok, claims} ->
+        # Verify that the issuer matches the API key
+        if claims["iss"] == api_key do
+          {:ok, claims}
+        else
+          {:error, :invalid_issuer}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
 end
