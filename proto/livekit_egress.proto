@@ -66,6 +66,17 @@ message RoomCompositeEgressRequest {
   repeated StreamOutput stream_outputs = 12;
   repeated SegmentedFileOutput segment_outputs = 13;
   repeated ImageOutput image_outputs = 14;
+  
+  // Options for video and audio encoding
+  message Options {
+    int32 video_width = 1;    // width of the video
+    int32 video_height = 2;   // height of the video
+    int32 fps = 3;            // frames per second
+    int32 audio_bitrate = 4;  // audio bitrate in bps
+    int32 video_bitrate = 5;  // video bitrate in bps
+  }
+  
+  Options encoding_options = 16;       // custom encoding options
 }
 
 message WebEgressRequest {

@@ -67,6 +67,18 @@ defmodule Livekit.EgressInfo do
   field(:error, 5, type: :string)
 end
 
+defmodule Livekit.RoomCompositeEgressRequest.Options do
+  @moduledoc false
+
+  use Protobuf, protoc_gen_elixir_version: "0.14.0", syntax: :proto3
+
+  field(:video_width, 1, type: :int32, json_name: "videoWidth")
+  field(:video_height, 2, type: :int32, json_name: "videoHeight")
+  field(:fps, 3, type: :int32)
+  field(:audio_bitrate, 4, type: :int32, json_name: "audioBitrate")
+  field(:video_bitrate, 5, type: :int32, json_name: "videoBitrate")
+end
+
 defmodule Livekit.RoomCompositeEgressRequest do
   @moduledoc false
 
@@ -107,6 +119,11 @@ defmodule Livekit.RoomCompositeEgressRequest do
   )
 
   field(:image_outputs, 14, repeated: true, type: Livekit.ImageOutput, json_name: "imageOutputs")
+
+  field(:encoding_options, 16,
+    type: Livekit.RoomCompositeEgressRequest.Options,
+    json_name: "encodingOptions"
+  )
 end
 
 defmodule Livekit.WebEgressRequest do

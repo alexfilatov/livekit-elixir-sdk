@@ -273,15 +273,13 @@ defmodule Mix.Tasks.Livekit do
             filepath: output
           }
         ],
-        options:
-          {:advanced,
-           %Livekit.EncodingOptions{
-             width: 1280,
-             height: 720,
-             framerate: 30,
-             audio_bitrate: 128_000,
-             video_bitrate: 3_000_000
-           }}
+        options: %Livekit.RoomCompositeEgressRequest.Options{
+          video_width: 1280,
+          video_height: 720,
+          fps: 30,
+          audio_bitrate: 128_000,
+          video_bitrate: 3_000_000
+        }
       }
 
       try do
