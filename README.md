@@ -82,6 +82,7 @@ mix livekit list-agents --api-key devkey --api-secret secret --url http://localh
 ### Command Options
 
 #### Common Options
+
 - `--api-key` (`-k`): Livekit API key (required)
 - `--api-secret` (`-s`): Livekit API secret (required)
 - `--url` (`-u`): Livekit server URL (required for most commands)
@@ -91,6 +92,7 @@ mix livekit list-agents --api-key devkey --api-secret secret --url http://localh
 - `--valid-for` (`-t`): Token validity duration (e.g., "24h", "30m")
 
 #### Recording and Streaming Options
+
 - `--output` (`-o`): Output path (local file or s3://bucket/path)
 - `--rtmp`: RTMP streaming URL
 - `--width`: Video width (default: 1280)
@@ -102,6 +104,7 @@ mix livekit list-agents --api-key devkey --api-secret secret --url http://localh
 - `--egress-id`: Egress ID for stopping operations
 
 #### Agent Options
+
 - `--prompt`: Initial prompt for the agent (required for add-agent)
 - `--name`: Agent name (required for add/remove agent)
 
@@ -114,50 +117,42 @@ mix help livekit
 ### Creating Access Tokens
 
 ```elixir
-alias Livekit.AccessToken
-alias Livekit.Grants
-
 # Create a new access token
-token = AccessToken.new("api-key", "api-secret")
-  |> AccessToken.with_identity("user-id")
-  |> AccessToken.with_ttl(3600) # 1 hour
-  |> AccessToken.add_grant(Grants.join_room("room-name"))
+token = Livekit.AccessToken.new("devkey", "secret")
+  |> Livekit.AccessToken.with_identity("user-id")
+  |> Livekit.AccessToken.with_ttl(3600) # 1 hour
+  |> Livekit.AccessToken.add_grant(Livekit.Grants.join_room("room-name"))
 
 # Convert to JWT
-jwt = AccessToken.to_jwt(token)
-```
+jwt = Livekit.AccessToken.to_jwt(token)
 
 ### Managing Rooms
 
 ```elixir
-alias Livekit.RoomServiceClient
-
 # Create a client
-client = RoomServiceClient.new("https://your-livekit-host", "api-key", "api-secret")
+client = Livekit.RoomServiceClient.new("http://localhost:7880", "devkey", "secret")
 
 # Create a room
-{:ok, room} = RoomServiceClient.create_room(client, "room-name", empty_timeout: 300)
+{:ok, room} = Livekit.RoomServiceClient.create_room(client, "room-name", empty_timeout: 300)
 
 # List rooms
-{:ok, rooms} = RoomServiceClient.list_rooms(client)
+{:ok, rooms} = Livekit.RoomServiceClient.list_rooms(client)
 
 # Delete a room
-{:ok, _} = RoomServiceClient.delete_room(client, "room-name")
+{:ok, _} = Livekit.RoomServiceClient.delete_room(client, "room-name")
 
 # List participants in a room
-{:ok, participants} = RoomServiceClient.list_participants(client, "room-name")
+{:ok, participants} = Livekit.RoomServiceClient.list_participants(client, "room-name")
 
 # Remove a participant from a room
-{:ok, _} = RoomServiceClient.remove_participant(client, "room-name", "participant-identity")
+{:ok, _} = Livekit.RoomServiceClient.remove_participant(client, "room-name", "participant-identity")
 ```
 
 ### Verifying Tokens
 
 ```elixir
-alias Livekit.TokenVerifier
-
 # Verify a token
-case TokenVerifier.verify(jwt, "api-secret") do
+case Livekit.TokenVerifier.verify(jwt, "secret") do
   {:ok, claims} ->
     # Token is valid, claims contains the decoded data
     IO.inspect(claims)
@@ -171,14 +166,16 @@ end
 
 ```elixir
 # Configure automatic room recording
-{:ok, room} = RoomServiceClient.create_room(client, "room-name",
+{:ok, room} = Livekit.RoomServiceClient.create_room(client, "room-name",
   egress: %Livekit.RoomEgress{
     room: %Livekit.RoomCompositeEgressRequest{
-      file: %Livekit.EncodedFileOutput{
-        filepath: "recordings/room-name.mp4",
-        disable_manifest: false
-      },
-      options: %Livekit.RoomCompositeEgressRequest.Options{
+      file_outputs: [
+        %Livekit.EncodedFileOutput{
+          filepath: "recordings/room-name.mp4",
+          disable_manifest: false
+        }
+      ],
+      encoding_options: %Livekit.RoomCompositeEgressRequest.Options{
         video_width: 1280,
         video_height: 720,
         fps: 30,
@@ -194,7 +191,7 @@ end
 
 ```elixir
 # Configure room agents
-{:ok, room} = RoomServiceClient.create_room(client, "room-name",
+{:ok, room} = Livekit.RoomServiceClient.create_room(client, "room-with-agents",
   agents: [
     %Livekit.RoomAgentDispatch{
       name: "my-agent",
@@ -248,6 +245,7 @@ mix livekit create-token --room my-room --identity user1 --valid-for 24h
 ```
 
 The configuration system follows this priority order:
+
 1. Runtime options (highest priority)
 2. Environment variables
 3. Application configuration
@@ -264,6 +262,59 @@ mix compile.proto
 ```
 
 This will compile all `.proto` files in the `proto/` directory and generate Elixir modules in `lib/livekit/proto/`.
+
+## Features Not Yet Implemented
+
+The following features are available in other LiveKit SDKs but not yet implemented in this Elixir SDK:
+
+### SIP Service Integration
+
+Features available for SIP integration:
+
+- Creating SIP inbound trunks
+- Creating SIP outbound trunks
+- Managing SIP trunks (listing, deleting, updating)
+- Making SIP calls
+- Handling SIP participants
+
+### Ingress Service
+
+Ingress service capabilities include:
+
+- Creating ingress points for various input types
+- Updating ingress configurations
+- Listing and managing ingress points
+- Handling streaming inputs from external sources
+
+### Additional Grant Types
+
+Additional grant types not yet available in the Elixir SDK:
+
+- `SIPGrant` - For SIP-related permissions
+- More granular `VideoGrant` permissions like `ingressAdmin`
+
+### Webhook Support
+
+Webhook functionality for:
+
+- Receiving and validating webhook events from LiveKit
+- Processing various event types (participant joined/left, track published/unpublished, etc.)
+- Verifying webhook authenticity using API credentials
+
+### Advanced Room Configuration
+
+Some advanced room configuration options available:
+
+- Room presets
+- Detailed codec configuration
+- Advanced participant permissions management
+- Data message handling with reliability options
+
+### Future Development Roadmap
+
+These features are planned for future releases of the Elixir SDK. If you need these features immediately, consider using one of the other official SDKs.
+
+Contributions to implement these features are welcome! Please see the repository for contribution guidelines.
 
 ## License
 
