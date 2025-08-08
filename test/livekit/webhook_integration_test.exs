@@ -2,8 +2,8 @@ defmodule Livekit.WebhookIntegrationTest do
   # Change async to false to avoid conflicts with other tests mocking the same modules
   use ExUnit.Case, async: false
 
-  alias Livekit.WebhookReceiver
   alias Livekit.AccessToken
+  alias Livekit.WebhookReceiver
 
   import Mock
 

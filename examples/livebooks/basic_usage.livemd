@@ -6,7 +6,7 @@ First, let's install and set up our dependencies. We'll use the local Livekit SD
 
 ```elixir
 Mix.install([
-  {:livekit, path: "/Users/alex/Projects/my/livekit/livekit"},
+  {:livekit, path: "../.."},
   {:jason, "~> 1.4"},
   {:tesla, "~> 1.7"},
   {:hackney, "~> 1.18"}
