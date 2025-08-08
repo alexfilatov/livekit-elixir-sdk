@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  livekit:
+    image: livekit/livekit-server:latest
+    ports:
+      - "7880:7880"   # HTTP API
+      - "7881:7881"   # RTC TCP
+      - "7882-7999:7882-7999/udp"  # RTC UDP range
+    environment:
+      - "LIVEKIT_KEYS=devkey: secret"
+      - LIVEKIT_REDIS_HOST=redis
+      - LIVEKIT_REDIS_PORT=6379
+      - LIVEKIT_INGRESS_RTMP_BASE_URL=rtmp://localhost:1935/live
+      - LIVEKIT_INGRESS_WHIP_BASE_URL=http://localhost:8080/whip
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:7880/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  ingress:
+    image: livekit/ingress:latest
+    ports:
+      - "1935:1935"   # RTMP
+      - "8080:8080"   # WHIP
+      - "9885:7885/udp"  # WebRTC UDP
+    environment:
+      - INGRESS_CONFIG_FILE=/etc/ingress.yaml
+    volumes:
+      - ./ingress.yaml:/etc/ingress.yaml
+    depends_on:
+      livekit:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  redis_data:

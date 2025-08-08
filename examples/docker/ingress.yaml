@@ -1,0 +1,29 @@
+api_key: devkey
+api_secret: secret
+ws_url: ws://livekit:7880
+
+redis:
+  address: redis:6379
+
+# Port configuration
+rtmp_port: 1935
+whip_port: 8080
+http_relay_port: 9090
+
+# Health check port
+health_port: 8081
+
+# WebRTC configuration
+rtc_config:
+  udp_port: 7885
+  use_external_ip: false
+
+# CPU cost configuration for resource management
+cpu_cost:
+  rtmp_cpu_cost: 0.5
+  whip_cpu_cost: 0.3
+  whip_bypass_transcoding_cpu_cost: 0.1
+
+# Logging
+logging:
+  level: info

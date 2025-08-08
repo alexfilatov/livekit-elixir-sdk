@@ -25,9 +25,9 @@ The following table shows which LiveKit features are currently supported in this
 - [x] Room Streaming to RTMP
 - [x] Track Streaming to RTMP
 - [x] Custom Encoding Options for Egress
-- [ ] WebRTC Ingress
-- [ ] RTMP Ingress
-- [ ] WHIP Ingress
+- [x] WebRTC Ingress
+- [x] RTMP Ingress
+- [x] WHIP Ingress
 
 ### AI Features
 
@@ -46,7 +46,7 @@ The following table shows which LiveKit features are currently supported in this
 
 ### Advanced Features
 
-- [ ] Ingress Service (external stream input)
+- [x] Ingress Service (external stream input)
 - [ ] Advanced Room Configuration
 - [ ] Room Presets
 - [ ] Detailed Codec Configuration
@@ -78,7 +78,7 @@ The SDK includes a CLI for common Livekit operations. Here are all available com
 
 ```bash
 # Create an access token for room access
-mix livekit create-token --api-key devkey --api-secret secret --url http://localhost:7880 --join --room my-room --identity user1 --valid-for 24h --identity user1 --valid-for 24h
+mix livekit create-token --api-key devkey --api-secret secret --url http://localhost:7880 --join --room my-room --identity user1 --valid-for 24h
 
 # List all rooms
 mix livekit list-rooms --api-key devkey --api-secret secret --url http://localhost:7880
@@ -118,7 +118,38 @@ mix livekit list-egress --api-key devkey --api-secret secret --url http://localh
 mix livekit stop-egress --api-key devkey --api-secret secret --url http://localhost:7880 --egress-id EG_1234
 ```
 
-#### Room Agents (Basic Implementation)
+#### Ingress Management
+
+```bash
+# Create RTMP ingress
+mix livekit create-ingress --api-key devkey --api-secret secret --url http://localhost:7880 --input-type RTMP --name my-stream --room my-room --identity streamer
+
+# Create WebRTC (WHIP) ingress
+mix livekit create-ingress --api-key devkey --api-secret secret --url http://localhost:7880 --input-type WHIP --name whip-stream --room my-room --identity whip-user
+
+# Create URL ingress (e.g., HLS)
+mix livekit create-ingress --api-key devkey --api-secret secret --url http://localhost:7880 --input-type URL --source-url https://example.com/stream.m3u8 --name url-stream --room my-room --identity url-user
+
+# List ingress endpoints (optionally filter by room or ingress id)
+mix livekit list-ingress --api-key devkey --api-secret secret --url http://localhost:7880
+
+# Update ingress metadata or encoding presets
+mix livekit update-ingress --api-key devkey --api-secret secret --url http://localhost:7880 --ingress-id ingress_123 --name updated-stream
+
+# Delete an ingress endpoint
+mix livekit delete-ingress --api-key devkey --api-secret secret --url http://localhost:7880 --ingress-id ingress_123
+```
+
+See example Livebooks in `examples/livebooks/`:
+
+- `ingress_basic_setup.livemd`
+- `ingress_webrtc_input.livemd`
+- `ingress_rtmp_streaming.livemd`
+- `ingress_management.livemd`
+- `ingress_file_processing.livemd`
+- `ingress_troubleshooting.livemd`
+
+#### Room Agents (CLI)
 
 ```bash
 # Add an agent to a room (via room configuration)
@@ -180,6 +211,16 @@ webhook:
 - `--video-bitrate`: Video bitrate in bps (default: 3000000)
 - `--track-id`: Track ID for track-specific operations
 - `--egress-id`: Egress ID for stopping operations
+
+#### Ingress Options
+
+- `--ingress-id`: Ingress ID for update/delete operations
+- `--input-type`: Input type (RTMP, WHIP, URL)
+- `--source-url`: Source URL for URL input type
+- `--participant-metadata`: Metadata for the publishing participant
+- `--enable-transcoding`: Enable transcoding (true/false)
+- `--audio-preset`: Audio encoding preset
+- `--video-preset`: Video encoding preset
 
 #### Agent Options
 
@@ -268,6 +309,38 @@ end
 )
 ```
 
+### Ingress Service Client
+
+```elixir
+# Connect to Ingress service (ws/wss will be converted to http/https automatically)
+{:ok, client} = Livekit.IngressServiceClient.new("http://localhost:7880", "devkey", "secret")
+
+# Create RTMP ingress
+request = %Livekit.CreateIngressRequest{
+  input_type: :RTMP_INPUT,
+  name: "my-stream",
+  room_name: "room-name",
+  participant_identity: "streamer"
+}
+{:ok, ingress} = Livekit.IngressServiceClient.create_ingress(client, request)
+IO.inspect({ingress.url, ingress.stream_key})
+
+# List ingress endpoints
+{:ok, resp} = Livekit.IngressServiceClient.list_ingress(client)
+Enum.each(resp.items, &IO.puts(&1.ingress_id))
+
+# Update ingress
+{:ok, _} = Livekit.IngressServiceClient.update_ingress(client, %Livekit.UpdateIngressRequest{
+  ingress_id: ingress.ingress_id,
+  name: "updated-stream"
+})
+
+# Delete ingress
+{:ok, _} = Livekit.IngressServiceClient.delete_ingress(client, %Livekit.DeleteIngressRequest{
+  ingress_id: ingress.ingress_id
+})
+```
+
 ### Room Agents (Basic Implementation)
 
 ```elixir
@@ -287,7 +360,7 @@ end
 
 **Note**: This is a basic implementation that configures agents during room creation. Advanced agent dispatch service with explicit agent management, lifecycle control, and metadata support is planned for future releases.
 
-### Webhooks
+### Webhooks (Example)
 
 The SDK provides support for receiving and validating webhook events from LiveKit:
 
@@ -589,14 +662,14 @@ This will compile all `.proto` files in the `proto/` directory and generate Elix
 This SDK currently provides approximately **60-70%** of LiveKit's full server API functionality. Key limitations include:
 
 - **Agent Features**: Basic room-level agent configuration only (no advanced dispatch service)
-- **Missing Services**: Ingress (external stream input), SIP (telephony), and Real-Time Client SDK
+- **Missing Services**: SIP (telephony) and Real-Time Client SDK
 - **Advanced Features**: Limited to core room management, egress, and webhook functionality
 
 ## Future Development Roadmap
 
 Priority development areas for future releases:
 
-1. **Ingress Service** - External stream input (RTMP, WebRTC, files)
+1. **Ingress Service Enhancements** - Advanced encoding presets, update semantics, telemetry
 2. **Enhanced Agent Dispatch** - Advanced agent lifecycle management
 3. **SIP Service** - Telephony integration and PSTN connectivity  
 4. **Real-Time Client SDK** - Direct participant connections and WebRTC support
