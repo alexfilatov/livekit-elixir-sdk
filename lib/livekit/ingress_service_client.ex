@@ -1,31 +1,31 @@
 defmodule Livekit.IngressServiceClient do
   @moduledoc """
   Client for interacting with the LiveKit Ingress service.
-  
+
   The Ingress service enables bringing external streams into LiveKit rooms,
   including RTMP streams, WebRTC ingress, and file-based input sources.
   """
 
   alias Livekit.{AccessToken, Grants, Ingress}
-  
+
   require Logger
 
   @doc """
   Creates a new IngressServiceClient.
-  
+
   ## Parameters
-  
+
   - `url` - The LiveKit server URL (can be ws:// or wss://, will be converted to appropriate format)
   - `api_key` - The API key for authentication
   - `api_secret` - The API secret for authentication
-  
+
   ## Returns
-  
+
   - `{:ok, client}` - On successful connection
   - `{:error, reason}` - On connection failure
-  
+
   ## Examples
-  
+
       iex> {:ok, client} = Livekit.IngressServiceClient.new("wss://my-livekit.com", "api_key", "secret")
       {:ok, {#PID<0.123.0>, %{}}}
   """
@@ -72,22 +72,22 @@ defmodule Livekit.IngressServiceClient do
 
   @doc """
   Creates a new ingress endpoint.
-  
+
   ## Parameters
-  
+
   - `client` - The client connection tuple returned from `new/3`
   - `request` - A `Livekit.CreateIngressRequest` struct
-  
+
   ## Returns
-  
+
   - `{:ok, ingress_info}` - On success, returns `Livekit.IngressInfo`
   - `{:error, reason}` - On failure
-  
+
   ## Examples
-  
+
       request = %Livekit.CreateIngressRequest{
         input_type: :RTMP_INPUT,
-        name: "my-stream", 
+        name: "my-stream",
         room_name: "my-room",
         participant_identity: "streamer"
       }
@@ -109,16 +109,16 @@ defmodule Livekit.IngressServiceClient do
 
   @doc """
   Updates an existing ingress endpoint.
-  
+
   Note: Ingress can only be updated when it's in ENDPOINT_INACTIVE state.
-  
+
   ## Parameters
-  
+
   - `client` - The client connection tuple returned from `new/3`
   - `request` - A `Livekit.UpdateIngressRequest` struct
-  
+
   ## Returns
-  
+
   - `{:ok, ingress_info}` - On success, returns updated `Livekit.IngressInfo`
   - `{:error, reason}` - On failure
   """
@@ -138,22 +138,22 @@ defmodule Livekit.IngressServiceClient do
 
   @doc """
   Lists ingress endpoints.
-  
+
   ## Parameters
-  
+
   - `client` - The client connection tuple returned from `new/3`
   - `request` - A `Livekit.ListIngressRequest` struct (optional, defaults to empty request)
-  
+
   ## Returns
-  
+
   - `{:ok, list_response}` - On success, returns `Livekit.ListIngressResponse`
   - `{:error, reason}` - On failure
-  
+
   ## Examples
-  
+
       # List all ingress endpoints
       {:ok, response} = Livekit.IngressServiceClient.list_ingress(client)
-      
+
       # Filter by room name
       request = %Livekit.ListIngressRequest{room_name: "my-room"}
       {:ok, response} = Livekit.IngressServiceClient.list_ingress(client, request)
@@ -174,19 +174,19 @@ defmodule Livekit.IngressServiceClient do
 
   @doc """
   Deletes an ingress endpoint.
-  
+
   ## Parameters
-  
+
   - `client` - The client connection tuple returned from `new/3`
   - `request` - A `Livekit.DeleteIngressRequest` struct
-  
+
   ## Returns
-  
+
   - `{:ok, ingress_info}` - On success, returns the deleted `Livekit.IngressInfo`
   - `{:error, reason}` - On failure
-  
+
   ## Examples
-  
+
       request = %Livekit.DeleteIngressRequest{ingress_id: "ingress_123"}
       {:ok, ingress} = Livekit.IngressServiceClient.delete_ingress(client, request)
   """
