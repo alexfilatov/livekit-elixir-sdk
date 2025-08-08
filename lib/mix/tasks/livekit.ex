@@ -772,9 +772,11 @@ defmodule Mix.Tasks.Livekit do
           IO.puts("✅ Ingress created successfully!")
           IO.puts("Ingress ID: #{ingress.ingress_id}")
           IO.puts("Stream URL: #{ingress.url}")
+
           if ingress.stream_key && ingress.stream_key != "" do
             IO.puts("Stream Key: #{ingress.stream_key}")
           end
+
           IO.puts("Input Type: #{ingress.input_type}")
           IO.puts("Room: #{ingress.room_name}")
           IO.puts("Participant: #{ingress.participant_identity}")
@@ -832,7 +834,9 @@ defmodule Mix.Tasks.Livekit do
           {:ok, response} -> print_ingress_list(response.items)
           {:error, error} -> IO.puts("❌ Error listing ingress: #{inspect(error)}")
         end
-      {:error, reason} -> IO.puts("❌ Error: #{reason}")
+
+      {:error, reason} ->
+        IO.puts("❌ Error: #{reason}")
     end
   end
 
@@ -898,7 +902,9 @@ defmodule Mix.Tasks.Livekit do
   defp parse_input_type("RTMP"), do: {:ok, :RTMP_INPUT}
   defp parse_input_type("WHIP"), do: {:ok, :WHIP_INPUT}
   defp parse_input_type("URL"), do: {:ok, :URL_INPUT}
-  defp parse_input_type(type), do: {:error, "Invalid input type '#{type}'. Valid types: RTMP, WHIP, URL"}
+
+  defp parse_input_type(type),
+    do: {:error, "Invalid input type '#{type}'. Valid types: RTMP, WHIP, URL"}
 
   defp add_encoding_options(request, opts) do
     audio_options = build_audio_options(opts)

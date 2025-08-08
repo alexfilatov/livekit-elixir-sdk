@@ -1,0 +1,1602 @@
+# LiveKit Ingress Service - Troubleshooting & Debugging
+
+```elixir
+Mix.install([
+  {:livekit, path: "../.."},
+  {:kino, "~> 0.12"}
+])
+```
+
+## Introduction to Ingress Troubleshooting
+
+This Livebook provides comprehensive troubleshooting tools and debugging strategies for LiveKit Ingress Service issues. You'll learn to diagnose problems, fix common issues, and implement monitoring to prevent future problems.
+
+### What You'll Learn:
+
+- 🔍 Systematic problem diagnosis techniques
+- 🛠️ Common ingress issues and their solutions
+- 📊 Advanced debugging tools and monitoring
+- 🚨 Error analysis and resolution strategies
+- 🔧 Network and connectivity troubleshooting
+- 📈 Performance debugging and optimization
+- 🔬 Deep inspection of ingress states and logs
+- 🚑 Emergency recovery procedures
+
+## Configuration & Diagnostic Client Setup
+
+```elixir
+# Enhanced diagnostic configuration
+diagnostic_form = Kino.Control.form(
+  [
+    api_key: Kino.Input.password("LiveKit API Key"),
+    api_secret: Kino.Input.password("LiveKit API Secret"), 
+    url: Kino.Input.text("LiveKit Server URL", default: "wss://your-server.livekit.cloud"),
+    debug_level: Kino.Input.select("Debug Level", [
+      {"Basic - Standard troubleshooting", :basic},
+      {"Advanced - Detailed diagnostics", :advanced},
+      {"Expert - Deep system analysis", :expert}
+    ]),
+    enable_network_tests: Kino.Input.checkbox("Enable Network Diagnostics", default: true)
+  ],
+  submit: "Initialize Diagnostic Client"
+)
+```
+
+```elixir
+# Establish diagnostic connection
+config = Kino.Control.read(diagnostic_form)
+Process.put(:config, config)
+Process.put(:debug_level, config.debug_level)
+
+IO.puts("🔍 Initializing Diagnostic System...")
+IO.puts("Debug Level: #{String.upcase(to_string(config.debug_level))}")
+IO.puts("")
+
+case Livekit.IngressServiceClient.new(config.url, config.api_key, config.api_secret) do
+  {:ok, client} ->
+    Process.put(:client, client)
+    IO.puts("✅ Diagnostic Client Connected!")
+    IO.puts("🎯 Server: #{config.url}")
+    IO.puts("🔧 Diagnostic mode ready")
+    
+    if config.enable_network_tests do
+      IO.puts("🌐 Network diagnostics enabled")
+    end
+    
+  {:error, reason} ->
+    IO.puts("❌ Connection failed: #{reason}")
+    IO.puts("")
+    IO.puts("🔍 **Initial Troubleshooting Steps:**")
+    IO.puts("   1. Verify API key and secret are correct")
+    IO.puts("   2. Check server URL format (should start with wss://)")
+    IO.puts("   3. Confirm network connectivity")
+    IO.puts("   4. Verify LiveKit server is running")
+end
+```
+
+## System Health Check & Initial Diagnostics
+
+```elixir
+# Comprehensive system health check
+defmodule HealthDiagnostics do
+  def run_comprehensive_health_check(client, debug_level) do
+    IO.puts("🏥 Running Comprehensive Health Check...")
+    IO.puts("=" |> String.duplicate(50))
+    IO.puts("")
+    
+    # Check 1: Service Connectivity
+    connectivity_result = check_service_connectivity(client)
+    display_check_result("Service Connectivity", connectivity_result, debug_level)
+    
+    # Check 2: Ingress Inventory
+    inventory_result = check_ingress_inventory(client)
+    display_check_result("Ingress Inventory", inventory_result, debug_level)
+    
+    # Check 3: Endpoint Health
+    health_result = check_endpoint_health(client)
+    display_check_result("Endpoint Health", health_result, debug_level)
+    
+    # Check 4: Configuration Validation  
+    config_result = check_configuration_health(client)
+    display_check_result("Configuration", config_result, debug_level)
+    
+    # Generate overall assessment
+    overall_assessment = assess_overall_health([
+      connectivity_result, inventory_result, health_result, config_result
+    ])
+    
+    IO.puts("")
+    IO.puts("📋 **Overall Health Assessment:**")
+    display_overall_assessment(overall_assessment)
+    
+    overall_assessment
+  end
+  
+  defp check_service_connectivity(client) do
+    case Livekit.IngressServiceClient.list_ingress(client) do
+      {:ok, _response} ->
+        {:ok, "Service responding normally"}
+      {:error, reason} ->
+        {:error, "Connection failed: #{inspect(reason)}"}
+    end
+  end
+  
+  defp check_ingress_inventory(client) do
+    case Livekit.IngressServiceClient.list_ingress(client) do
+      {:ok, response} ->
+        count = length(response.items)
+        if count > 0 do
+          {:ok, "#{count} ingress endpoints found"}
+        else
+          {:warning, "No ingress endpoints found"}
+        end
+      {:error, reason} ->
+        {:error, "Failed to retrieve inventory: #{inspect(reason)}"}
+    end
+  end
+  
+  defp check_endpoint_health(client) do
+    case Livekit.IngressServiceClient.list_ingress(client) do
+      {:ok, response} ->
+        if Enum.empty?(response.items) do
+          {:warning, "No endpoints to assess"}
+        else
+          active = count_by_status(response.items, :ENDPOINT_PUBLISHING)
+          inactive = count_by_status(response.items, :ENDPOINT_INACTIVE)
+          errors = count_by_status(response.items, :ENDPOINT_ERROR)
+          
+          cond do
+            errors > 0 ->
+              {:error, "#{errors} endpoints in error state, #{active} active, #{inactive} inactive"}
+            active > 0 ->
+              {:ok, "#{active} active streams, #{inactive} inactive endpoints"}
+            true ->
+              {:warning, "All endpoints inactive (#{inactive} total)"}
+          end
+        end
+      {:error, reason} ->
+        {:error, "Health check failed: #{inspect(reason)}"}
+    end
+  end
+  
+  defp check_configuration_health(_client) do
+    config = Process.get(:config)
+    
+    issues = []
+    |> add_if(!String.starts_with?(config.url, "wss://"), "URL should use WSS protocol")
+    |> add_if(String.length(config.api_key) < 20, "API key appears too short")
+    
+    if Enum.empty?(issues) do
+      {:ok, "Configuration appears valid"}
+    else
+      {:warning, "Configuration issues: #{Enum.join(issues, ", ")}"}
+    end
+  end
+  
+  defp count_by_status(ingress_list, target_status) do
+    Enum.count(ingress_list, fn ingress ->
+      ingress.state && ingress.state.status == target_status
+    end)
+  end
+  
+  defp add_if(list, condition, item) do
+    if condition, do: [item | list], else: list
+  end
+  
+  defp display_check_result(check_name, result, debug_level) do
+    {status_icon, message} = case result do
+      {:ok, msg} -> {"✅", msg}
+      {:warning, msg} -> {"⚠️", msg}
+      {:error, msg} -> {"❌", msg}
+    end
+    
+    IO.puts("#{status_icon} **#{check_name}**: #{message}")
+    
+    if debug_level in [:advanced, :expert] do
+      IO.puts("   Debug: #{inspect(result)}")
+    end
+    
+    IO.puts("")
+  end
+  
+  defp assess_overall_health(results) do
+    error_count = Enum.count(results, fn {status, _} -> status == :error end)
+    warning_count = Enum.count(results, fn {status, _} -> status == :warning end)
+    
+    cond do
+      error_count > 0 -> {:critical, "System has critical issues requiring immediate attention"}
+      warning_count > 2 -> {:degraded, "System has multiple warnings - investigation recommended"}
+      warning_count > 0 -> {:warning, "System operational with minor issues"}
+      true -> {:healthy, "System is healthy and operating normally"}
+    end
+  end
+  
+  defp display_overall_assessment({status, message}) do
+    {icon, color} = case status do
+      :healthy -> {"✅", "GREEN"}
+      :warning -> {"⚠️", "YELLOW"}
+      :degraded -> {"🟠", "ORANGE"}
+      :critical -> {"🚨", "RED"}
+    end
+    
+    IO.puts("#{icon} **Status**: #{String.upcase(to_string(status))} (#{color})")
+    IO.puts("   #{message}")
+  end
+end
+
+# Run comprehensive health check
+client = Process.get(:client)
+debug_level = Process.get(:debug_level)
+
+if client do
+  health_assessment = HealthDiagnostics.run_comprehensive_health_check(client, debug_level)
+  Process.put(:health_assessment, health_assessment)
+else
+  IO.puts("⚠️  Please initialize the diagnostic client first")
+end
+```
+
+## Common Issue Analyzer & Resolver
+
+```elixir
+# Common issues analysis and resolution system
+issue_analyzer_form = Kino.Control.form(
+  [
+    issue_type: Kino.Input.select("Issue Type", [
+      {"Ingress not creating", :creation_failure},
+      {"Stream not connecting", :connection_failure},
+      {"Stream keeps disconnecting", :disconnection_issues},
+      {"Poor video/audio quality", :quality_issues},
+      {"Ingress stuck in buffering", :buffering_issues},
+      {"Error state endpoints", :error_state},
+      {"Performance problems", :performance_issues},
+      {"Network connectivity issues", :network_issues}
+    ]),
+    specific_ingress_id: Kino.Input.text("Specific Ingress ID (optional)", default: ""),
+    symptoms: Kino.Input.textarea("Describe symptoms", default: ""),
+    auto_fix: Kino.Input.checkbox("Attempt automatic fixes", default: false)
+  ],
+  submit: "Analyze & Resolve Issue"
+)
+```
+
+```elixir
+# Issue analysis and resolution system
+defmodule IssueResolver do
+  def analyze_and_resolve(client, issue_type, params) do
+    IO.puts("🔍 Analyzing Issue: #{String.upcase(to_string(issue_type))}")
+    IO.puts("=" |> String.duplicate(60))
+    IO.puts("")
+    
+    case issue_type do
+      :creation_failure ->
+        diagnose_creation_failure(client, params)
+      :connection_failure ->
+        diagnose_connection_failure(client, params)
+      :disconnection_issues ->
+        diagnose_disconnection_issues(client, params)
+      :quality_issues ->
+        diagnose_quality_issues(client, params)
+      :buffering_issues ->
+        diagnose_buffering_issues(client, params)
+      :error_state ->
+        diagnose_error_state(client, params)
+      :performance_issues ->
+        diagnose_performance_issues(client, params)
+      :network_issues ->
+        diagnose_network_issues(client, params)
+    end
+  end
+  
+  defp diagnose_creation_failure(_client, params) do
+    IO.puts("🚫 **Ingress Creation Failure Diagnosis**")
+    IO.puts("")
+    
+    IO.puts("🔍 **Common Causes:**")
+    IO.puts("   1. Invalid API credentials or permissions")
+    IO.puts("   2. Missing required parameters")
+    IO.puts("   3. Room name conflicts or restrictions")
+    IO.puts("   4. Server resource limitations")
+    IO.puts("   5. Network connectivity issues")
+    IO.puts("")
+    
+    IO.puts("🛠️ **Resolution Steps:**")
+    IO.puts("   1. **Verify API Credentials:**")
+    IO.puts("      • Check API key and secret are correct")
+    IO.puts("      • Ensure token has ingress_admin permissions")
+    IO.puts("      • Verify token hasn't expired")
+    IO.puts("")
+    IO.puts("   2. **Check Required Parameters:**")
+    IO.puts("      • input_type: Must be valid (RTMP_INPUT, WHIP_INPUT, URL_INPUT)")
+    IO.puts("      • name: Must be unique and follow naming rules")
+    IO.puts("      • room_name: Must be valid room identifier")
+    IO.puts("      • participant_identity: Must be unique in room")
+    IO.puts("")
+    IO.puts("   3. **Test with Minimal Configuration:**")
+    
+    test_config = """
+    request = %Livekit.CreateIngressRequest{
+      input_type: :RTMP_INPUT,
+      name: "test-#{System.system_time(:second)}",
+      room_name: "test-room",
+      participant_identity: "test-participant"
+    }
+    """
+    
+    IO.puts("      ```elixir")
+    IO.puts("      #{test_config}")
+    IO.puts("      ```")
+    IO.puts("")
+    
+    if params.symptoms != "" do
+      IO.puts("📝 **Symptoms Analysis:**")
+      analyze_symptoms(params.symptoms, :creation_failure)
+      IO.puts("")
+    end
+    
+    if params.auto_fix do
+      IO.puts("🔧 **Attempting Automatic Fixes:**")
+      IO.puts("   • Testing API connectivity...")
+      IO.puts("   • Validating configuration...")
+      IO.puts("   ⚠️  Manual verification recommended for production issues")
+    end
+  end
+  
+  defp diagnose_connection_failure(client, params) do
+    IO.puts("🔌 **Stream Connection Failure Diagnosis**")
+    IO.puts("")
+    
+    # Check specific ingress if provided
+    if params.specific_ingress_id != "" do
+      case get_ingress_details(client, params.specific_ingress_id) do
+        {:ok, ingress} ->
+          IO.puts("📡 **Ingress Details:**")
+          IO.puts("   ID: #{ingress.ingress_id}")
+          IO.puts("   Name: #{ingress.name}")
+          IO.puts("   Type: #{ingress.input_type}")
+          IO.puts("   URL: #{ingress.url}")
+          IO.puts("   Status: #{ingress.state && ingress.state.status}")
+          
+          if ingress.state && ingress.state.error do
+            IO.puts("   Error: #{ingress.state.error}")
+          end
+          IO.puts("")
+          
+        {:error, reason} ->
+          IO.puts("❌ Could not retrieve ingress details: #{inspect(reason)}")
+          IO.puts("")
+      end
+    end
+    
+    IO.puts("🔍 **Common Connection Issues:**")
+    IO.puts("")
+    IO.puts("   **For RTMP Streams:**")
+    IO.puts("   • Incorrect RTMP URL or stream key")
+    IO.puts("   • Firewall blocking port 1935")
+    IO.puts("   • OBS/FFmpeg configuration errors")
+    IO.puts("   • Encoder settings incompatibility")
+    IO.puts("")
+    IO.puts("   **For WHIP Streams:**")
+    IO.puts("   • WebRTC connection failures")
+    IO.puts("   • ICE candidate gathering issues")
+    IO.puts("   • Browser security restrictions")
+    IO.puts("   • STUN/TURN server problems")
+    IO.puts("")
+    IO.puts("   **For URL Streams:**")
+    IO.puts("   • Source URL not accessible")
+    IO.puts("   • Unsupported stream format")
+    IO.puts("   • Authentication issues with source")
+    IO.puts("   • Bandwidth or timeout problems")
+    IO.puts("")
+    
+    IO.puts("🛠️ **Resolution Steps:**")
+    IO.puts("   1. **Test Connectivity:**")
+    IO.puts("      • Verify network connectivity to LiveKit server")
+    IO.puts("      • Test with minimal FFmpeg command")
+    IO.puts("      • Check firewall and proxy settings")
+    IO.puts("")
+    IO.puts("   2. **Validate Configuration:**")
+    IO.puts("      • Double-check RTMP URL and stream key")
+    IO.puts("      • Verify encoder settings (codec, bitrate, resolution)")
+    IO.puts("      • Test with different streaming software")
+    IO.puts("")
+    IO.puts("   3. **Debug Commands:**")
+    
+    debug_commands = """
+    # Test RTMP connectivity
+    ffmpeg -re -f lavfi -i testsrc2 -f lavfi -i sine \\
+      -c:v libx264 -preset veryfast -b:v 1000k \\
+      -c:a aac -b:a 128k -f flv \\
+      rtmp://your-server/your-stream-key
+    
+    # Test network connectivity
+    telnet your-livekit-server.com 1935
+    """
+    
+    IO.puts("      ```bash")
+    IO.puts("      #{debug_commands}")
+    IO.puts("      ```")
+  end
+  
+  defp diagnose_disconnection_issues(_client, params) do
+    IO.puts("🔄 **Stream Disconnection Issues Diagnosis**")
+    IO.puts("")
+    
+    IO.puts("🔍 **Common Causes:**")
+    IO.puts("   • Unstable network connection")
+    IO.puts("   • Insufficient bandwidth")
+    IO.puts("   • Server resource limitations")
+    IO.puts("   • Encoder overload or crashes")
+    IO.puts("   • Keyframe interval too high")
+    IO.puts("   • Variable bitrate causing instability")
+    IO.puts("")
+    
+    IO.puts("🛠️ **Resolution Strategies:**")
+    IO.puts("   1. **Network Optimization:**")
+    IO.puts("      • Use wired connection instead of WiFi")
+    IO.puts("      • Reduce bitrate to match available bandwidth")
+    IO.puts("      • Set buffer size to 2x bitrate")
+    IO.puts("      • Use CBR (Constant Bitrate) instead of VBR")
+    IO.puts("")
+    IO.puts("   2. **Encoder Configuration:**")
+    IO.puts("      • Set keyframe interval to 2 seconds")
+    IO.puts("      • Use 'veryfast' or 'ultrafast' preset")
+    IO.puts("      • Enable hardware encoding if available")
+    IO.puts("      • Monitor CPU usage and reduce settings if needed")
+    IO.puts("")
+    IO.puts("   3. **OBS Studio Settings:**")
+    
+    obs_settings = """
+    Output Settings:
+    - Output Mode: Simple
+    - Video Bitrate: 2500 (adjust based on upload speed)
+    - Encoder: x264 or Hardware (NVENC/QuickSync)
+    - Rate Control: CBR
+    - Keyframe Interval: 2
+    - Preset: veryfast
+    
+    Advanced Settings:
+    - Process Priority: High
+    - Network Optimizations: Enabled
+    """
+    
+    IO.puts("      ```")
+    IO.puts("      #{obs_settings}")
+    IO.puts("      ```")
+    IO.puts("")
+    
+    if params.symptoms != "" do
+      analyze_symptoms(params.symptoms, :disconnection_issues)
+    end
+  end
+  
+  defp diagnose_quality_issues(_client, params) do
+    IO.puts("📺 **Video/Audio Quality Issues Diagnosis**")
+    IO.puts("")
+    
+    IO.puts("🔍 **Video Quality Problems:**")
+    IO.puts("   • Pixelation/blockiness → Bitrate too low")
+    IO.puts("   • Blurriness → Resolution/encoder issues")
+    IO.puts("   • Stuttering → Frame rate or network problems")
+    IO.puts("   • Color issues → Color space/format problems")
+    IO.puts("")
+    
+    IO.puts("🔍 **Audio Quality Problems:**")
+    IO.puts("   • Crackling/popping → Buffer size or sample rate")
+    IO.puts("   • Distortion → Audio levels too high")
+    IO.puts("   • Sync issues → Audio/video timing mismatch")
+    IO.puts("   • Missing audio → Codec or routing problems")
+    IO.puts("")
+    
+    IO.puts("🛠️ **Optimization Guidelines:**")
+    IO.puts("")
+    IO.puts("   **Video Optimization:**")
+    
+    video_settings = """
+    Resolution & Bitrate Guidelines:
+    - 1080p 30fps: 4000-6000 kbps
+    - 720p 30fps: 2000-4000 kbps
+    - 480p 30fps: 1000-2000 kbps
+    
+    Encoder Settings:
+    - Profile: High
+    - Level: 4.1
+    - Keyframe Interval: 2 seconds
+    - B-frames: 2
+    - Reference Frames: 1-3
+    """
+    
+    IO.puts("      ```")
+    IO.puts("      #{video_settings}")
+    IO.puts("      ```")
+    IO.puts("")
+    
+    IO.puts("   **Audio Optimization:**")
+    
+    audio_settings = """
+    Recommended Settings:
+    - Codec: AAC
+    - Sample Rate: 48kHz
+    - Bitrate: 128-320 kbps
+    - Channels: Stereo (2)
+    - Profile: LC (Low Complexity)
+    """
+    
+    IO.puts("      ```")
+    IO.puts("      #{audio_settings}")
+    IO.puts("      ```")
+    
+    if params.symptoms != "" do
+      analyze_symptoms(params.symptoms, :quality_issues)
+    end
+  end
+  
+  defp diagnose_buffering_issues(client, params) do
+    IO.puts("🟡 **Buffering Issues Diagnosis**")
+    IO.puts("")
+    
+    # Check for stuck endpoints
+    case Livekit.IngressServiceClient.list_ingress(client) do
+      {:ok, response} ->
+        buffering_endpoints = Enum.filter(response.items, fn ingress ->
+          ingress.state && ingress.state.status == :ENDPOINT_BUFFERING
+        end)
+        
+        if length(buffering_endpoints) > 0 do
+          IO.puts("📊 **Currently Buffering Endpoints:**")
+          for endpoint <- buffering_endpoints do
+            IO.puts("   • #{endpoint.name} (#{endpoint.ingress_id})")
+            if endpoint.state.started_at && endpoint.state.started_at > 0 do
+              started_time = DateTime.from_unix!(endpoint.state.started_at, :millisecond)
+              duration = System.system_time(:millisecond) - endpoint.state.started_at
+              IO.puts("     Buffering for: #{duration / 1000} seconds")
+              IO.puts("     Started at: #{DateTime.to_string(started_time)}")
+            end
+          end
+          IO.puts("")
+        end
+        
+      {:error, reason} ->
+        IO.puts("❌ Could not check endpoint status: #{inspect(reason)}")
+    end
+    
+    IO.puts("🔍 **Common Buffering Causes:**")
+    IO.puts("   • Stream source not ready or delayed")
+    IO.puts("   • Network latency or packet loss")
+    IO.puts("   • Encoder startup delays")
+    IO.puts("   • Insufficient buffer settings")
+    IO.puts("   • Server processing delays")
+    IO.puts("")
+    
+    IO.puts("🛠️ **Resolution Steps:**")
+    IO.puts("   1. **Wait and Monitor:**")
+    IO.puts("      • Normal buffering: 5-15 seconds")
+    IO.puts("      • Extended buffering (>30s): Investigate")
+    IO.puts("")
+    IO.puts("   2. **Check Stream Source:**")
+    IO.puts("      • Verify encoder is actually streaming")
+    IO.puts("      • Check for source connectivity issues")
+    IO.puts("      • Ensure proper stream configuration")
+    IO.puts("")
+    IO.puts("   3. **Network Diagnostics:**")
+    IO.puts("      • Test bandwidth and latency")
+    IO.puts("      • Check for packet loss")
+    IO.puts("      • Verify firewall settings")
+  end
+  
+  defp diagnose_error_state(client, params) do
+    IO.puts("❌ **Error State Endpoints Diagnosis**")
+    IO.puts("")
+    
+    # Find error state endpoints
+    case Livekit.IngressServiceClient.list_ingress(client) do
+      {:ok, response} ->
+        error_endpoints = Enum.filter(response.items, fn ingress ->
+          ingress.state && ingress.state.status == :ENDPOINT_ERROR
+        end)
+        
+        if length(error_endpoints) > 0 do
+          IO.puts("🚨 **Endpoints in Error State:**")
+          for endpoint <- error_endpoints do
+            IO.puts("   • #{endpoint.name} (#{endpoint.ingress_id})")
+            IO.puts("     Type: #{endpoint.input_type}")
+            IO.puts("     Room: #{endpoint.room_name}")
+            if endpoint.state.error do
+              IO.puts("     Error: #{endpoint.state.error}")
+            end
+            IO.puts("")
+          end
+          
+          if params.auto_fix do
+            IO.puts("🔧 **Attempting Automatic Recovery:**")
+            for endpoint <- error_endpoints do
+              IO.puts("   Attempting to reset endpoint: #{endpoint.name}")
+              # Note: This would require restart/reset functionality
+              IO.puts("   ⚠️  Manual intervention recommended")
+            end
+          end
+        else
+          IO.puts("✅ No endpoints currently in error state")
+        end
+        
+      {:error, reason} ->
+        IO.puts("❌ Could not check error states: #{inspect(reason)}")
+    end
+    
+    IO.puts("🔍 **Common Error Causes:**")
+    IO.puts("   • Invalid stream format or codec")
+    IO.puts("   • Authentication failures")
+    IO.puts("   • Resource exhaustion")
+    IO.puts("   • Network timeout")
+    IO.puts("   • Configuration conflicts")
+    IO.puts("")
+    
+    IO.puts("🛠️ **Recovery Procedures:**")
+    IO.puts("   1. **Review Error Messages:**")
+    IO.puts("      • Check specific error details above")
+    IO.puts("      • Look for patterns across multiple errors")
+    IO.puts("")
+    IO.puts("   2. **Delete and Recreate:**")
+    IO.puts("      • Remove problematic endpoints")
+    IO.puts("      • Create new endpoint with corrected configuration")
+    IO.puts("")
+    IO.puts("   3. **Systematic Testing:**")
+    IO.puts("      • Start with minimal configuration")
+    IO.puts("      • Add complexity incrementally")
+    IO.puts("      • Test each change thoroughly")
+  end
+  
+  defp diagnose_performance_issues(client, params) do
+    IO.puts("⚡ **Performance Issues Diagnosis**")
+    IO.puts("")
+    
+    case Livekit.IngressServiceClient.list_ingress(client) do
+      {:ok, response} ->
+        total_endpoints = length(response.items)
+        active_streams = Enum.count(response.items, fn ingress ->
+          ingress.state && ingress.state.status == :ENDPOINT_PUBLISHING
+        end)
+        
+        IO.puts("📊 **Current Load:**")
+        IO.puts("   Total Endpoints: #{total_endpoints}")
+        IO.puts("   Active Streams: #{active_streams}")
+        IO.puts("   Estimated Bandwidth: #{active_streams * 5} MB/s")
+        IO.puts("   Estimated CPU Cores: #{active_streams * 0.5}")
+        IO.puts("")
+        
+        if total_endpoints > 50 do
+          IO.puts("⚠️  **High Endpoint Count Detected**")
+          IO.puts("   Consider implementing endpoint cleanup")
+        end
+        
+        if active_streams > 20 do
+          IO.puts("⚠️  **High Concurrent Stream Count**")
+          IO.puts("   Monitor resource usage carefully")
+        end
+        
+      {:error, reason} ->
+        IO.puts("❌ Could not assess performance: #{inspect(reason)}")
+    end
+    
+    IO.puts("🔍 **Performance Optimization:**")
+    IO.puts("   • Use appropriate bitrates for quality needs")
+    IO.puts("   • Implement connection pooling")
+    IO.puts("   • Monitor server resource utilization")
+    IO.puts("   • Use batch operations for management")
+    IO.puts("   • Implement caching where appropriate")
+    
+    if params.symptoms != "" do
+      analyze_symptoms(params.symptoms, :performance_issues)
+    end
+  end
+  
+  defp diagnose_network_issues(_client, params) do
+    IO.puts("🌐 **Network Connectivity Issues Diagnosis**")
+    IO.puts("")
+    
+    config = Process.get(:config)
+    
+    IO.puts("🔍 **Network Diagnostics:**")
+    IO.puts("   Target Server: #{config.url}")
+    IO.puts("")
+    
+    IO.puts("🛠️ **Network Testing Commands:**")
+    
+    network_tests = """
+    # Test basic connectivity
+    ping your-livekit-server.com
+    
+    # Test RTMP port
+    telnet your-livekit-server.com 1935
+    
+    # Test HTTPS/WSS
+    curl -I https://your-livekit-server.com
+    
+    # Check DNS resolution
+    nslookup your-livekit-server.com
+    
+    # Trace network route
+    traceroute your-livekit-server.com
+    """
+    
+    IO.puts("   ```bash")
+    IO.puts("   #{network_tests}")
+    IO.puts("   ```")
+    IO.puts("")
+    
+    IO.puts("🔍 **Common Network Issues:**")
+    IO.puts("   • Firewall blocking required ports")
+    IO.puts("   • Corporate proxy interference")
+    IO.puts("   • DNS resolution problems")
+    IO.puts("   • ISP blocking streaming ports")
+    IO.puts("   • Network congestion or packet loss")
+    IO.puts("")
+    
+    IO.puts("🛠️ **Network Troubleshooting:**")
+    IO.puts("   1. **Verify Port Access:**")
+    IO.puts("      • RTMP: Port 1935 (TCP)")
+    IO.puts("      • HTTPS: Port 443 (TCP)")
+    IO.puts("      • WebRTC: Various UDP ports (check STUN/TURN)")
+    IO.puts("")
+    IO.puts("   2. **Bypass Network Restrictions:**")
+    IO.puts("      • Try different network (mobile hotspot)")
+    IO.puts("      • Use VPN if corporate firewall is blocking")
+    IO.puts("      • Configure proxy settings if required")
+    
+    if params.symptoms != "" do
+      analyze_symptoms(params.symptoms, :network_issues)
+    end
+  end
+  
+  defp get_ingress_details(client, ingress_id) do
+    case Livekit.IngressServiceClient.list_ingress(client) do
+      {:ok, response} ->
+        case Enum.find(response.items, fn ingress -> ingress.ingress_id == ingress_id end) do
+          nil -> {:error, "Ingress not found"}
+          ingress -> {:ok, ingress}
+        end
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+  
+  defp analyze_symptoms(symptoms, issue_type) do
+    IO.puts("📝 **Symptom Analysis:**")
+    symptoms_lower = String.downcase(symptoms)
+    
+    suggestions = []
+    
+    suggestions = suggestions
+    |> add_suggestion(String.contains?(symptoms_lower, "timeout"), 
+       "Timeout detected → Check network connectivity and server responsiveness")
+    |> add_suggestion(String.contains?(symptoms_lower, "refused"), 
+       "Connection refused → Verify server is running and ports are open")
+    |> add_suggestion(String.contains?(symptoms_lower, "auth"), 
+       "Authentication issue → Check API keys and permissions")
+    |> add_suggestion(String.contains?(symptoms_lower, "pixelat"), 
+       "Pixelation → Increase video bitrate or check encoder settings")
+    |> add_suggestion(String.contains?(symptoms_lower, "stutter"), 
+       "Stuttering → Check network stability and frame rate settings")
+    |> add_suggestion(String.contains?(symptoms_lower, "audio"), 
+       "Audio issues → Check sample rate, codec, and audio routing")
+    
+    if Enum.empty?(suggestions) do
+      IO.puts("   No specific suggestions based on symptoms")
+    else
+      for suggestion <- suggestions do
+        IO.puts("   • #{suggestion}")
+      end
+    end
+    IO.puts("")
+  end
+  
+  defp add_suggestion(list, condition, suggestion) do
+    if condition, do: [suggestion | list], else: list
+  end
+end
+
+# Execute issue analysis
+issue_params = Kino.Control.read(issue_analyzer_form)
+client = Process.get(:client)
+
+if client do
+  IssueResolver.analyze_and_resolve(client, issue_params.issue_type, issue_params)
+else
+  IO.puts("⚠️  Please initialize the diagnostic client first")
+end
+```
+
+## Advanced Debugging Tools
+
+```elixir
+# Advanced debugging and inspection tools
+debug_tools_form = Kino.Control.form(
+  [
+    tool: Kino.Input.select("Debug Tool", [
+      {"Deep ingress inspection", :deep_inspection},
+      {"Network connectivity test", :network_test},
+      {"Stream validation", :stream_validation},
+      {"Performance profiling", :performance_profile},
+      {"Configuration validator", :config_validator},
+      {"Log analyzer", :log_analyzer}
+    ]),
+    target_ingress_id: Kino.Input.text("Target Ingress ID (for specific tools)", default: ""),
+    test_duration: Kino.Input.number("Test Duration (seconds)", default: 30)
+  ],
+  submit: "Run Debug Tool"
+)
+```
+
+```elixir
+# Advanced debugging toolkit
+defmodule AdvancedDebugging do
+  def run_debug_tool(client, tool, params) do
+    IO.puts("🔬 Running Advanced Debug Tool: #{String.upcase(to_string(tool))}")
+    IO.puts("=" |> String.duplicate(70))
+    IO.puts("")
+    
+    case tool do
+      :deep_inspection ->
+        deep_inspection(client, params)
+      :network_test ->
+        network_connectivity_test(client, params)
+      :stream_validation ->
+        stream_validation(client, params)
+      :performance_profile ->
+        performance_profiling(client, params)
+      :config_validator ->
+        configuration_validation(client, params)
+      :log_analyzer ->
+        log_analysis(client, params)
+    end
+  end
+  
+  defp deep_inspection(client, params) do
+    IO.puts("🔍 **Deep Ingress Inspection**")
+    IO.puts("")
+    
+    if params.target_ingress_id != "" do
+      inspect_specific_ingress(client, params.target_ingress_id)
+    else
+      inspect_all_ingress(client)
+    end
+  end
+  
+  defp inspect_specific_ingress(client, ingress_id) do
+    case Livekit.IngressServiceClient.list_ingress(client) do
+      {:ok, response} ->
+        case Enum.find(response.items, fn ingress -> ingress.ingress_id == ingress_id end) do
+          nil ->
+            IO.puts("❌ Ingress not found: #{ingress_id}")
+            
+          ingress ->
+            IO.puts("📡 **Detailed Ingress Analysis:**")
+            IO.puts("")
+            
+            IO.puts("🆔 **Identity Information:**")
+            IO.puts("   Ingress ID: #{ingress.ingress_id}")
+            IO.puts("   Name: #{ingress.name}")
+            IO.puts("   Input Type: #{ingress.input_type}")
+            IO.puts("   Room: #{ingress.room_name}")
+            IO.puts("   Participant ID: #{ingress.participant_identity}")
+            IO.puts("   Display Name: #{ingress.participant_name}")
+            IO.puts("")
+            
+            IO.puts("🔗 **Connection Details:**")
+            IO.puts("   URL: #{ingress.url}")
+            if ingress.stream_key do
+              IO.puts("   Stream Key: #{String.slice(ingress.stream_key, 0, 8)}...")
+            end
+            IO.puts("   Transcoding: #{ingress.enable_transcoding}")
+            IO.puts("")
+            
+            if ingress.participant_metadata && ingress.participant_metadata != "" do
+              IO.puts("📋 **Metadata:**")
+              IO.puts("   #{ingress.participant_metadata}")
+              IO.puts("")
+            end
+            
+            if ingress.state do
+              IO.puts("📊 **State Analysis:**")
+              analyze_ingress_state(ingress.state)
+            else
+              IO.puts("⚠️  **No state information available**")
+            end
+        end
+        
+      {:error, reason} ->
+        IO.puts("❌ Failed to retrieve ingress details: #{inspect(reason)}")
+    end
+  end
+  
+  defp inspect_all_ingress(client) do
+    case Livekit.IngressServiceClient.list_ingress(client) do
+      {:ok, response} ->
+        IO.puts("📋 **All Ingress Endpoints Analysis:**")
+        IO.puts("   Total Count: #{length(response.items)}")
+        IO.puts("")
+        
+        # Group by status
+        status_groups = Enum.group_by(response.items, fn ingress ->
+          (ingress.state && ingress.state.status) || :no_state
+        end)
+        
+        for {status, items} <- status_groups do
+          status_icon = case status do
+            :ENDPOINT_PUBLISHING -> "🟢"
+            :ENDPOINT_INACTIVE -> "🔴"
+            :ENDPOINT_BUFFERING -> "🟡"
+            :ENDPOINT_ERROR -> "❌"
+            _ -> "⚪"
+          end
+          
+          IO.puts("#{status_icon} **#{status}** (#{length(items)} endpoints):")
+          for item <- Enum.take(items, 5) do
+            IO.puts("   • #{item.name} (#{item.ingress_id})")
+            if item.state && item.state.error do
+              IO.puts("     Error: #{item.state.error}")
+            end
+          end
+          
+          if length(items) > 5 do
+            IO.puts("   ... and #{length(items) - 5} more")
+          end
+          IO.puts("")
+        end
+        
+      {:error, reason} ->
+        IO.puts("❌ Failed to retrieve ingress list: #{inspect(reason)}")
+    end
+  end
+  
+  defp analyze_ingress_state(state) do
+    status_emoji = case state.status do
+      :ENDPOINT_PUBLISHING -> "🟢"
+      :ENDPOINT_INACTIVE -> "🔴"  
+      :ENDPOINT_BUFFERING -> "🟡"
+      :ENDPOINT_ERROR -> "❌"
+      _ -> "⚪"
+    end
+    
+    IO.puts("   #{status_emoji} Status: #{state.status}")
+    
+    if state.started_at && state.started_at > 0 do
+      started_time = DateTime.from_unix!(state.started_at, :millisecond)
+      IO.puts("   ⏰ Started: #{DateTime.to_string(started_time)}")
+      
+      if state.status == :ENDPOINT_PUBLISHING do
+        duration = System.system_time(:millisecond) - state.started_at
+        IO.puts("   ⏱️  Duration: #{duration / 1000} seconds")
+      end
+    end
+    
+    if state.ended_at && state.ended_at > 0 do
+      ended_time = DateTime.from_unix!(state.ended_at, :millisecond)
+      IO.puts("   🏁 Ended: #{DateTime.to_string(ended_time)}")
+    end
+    
+    if state.error && state.error != "" do
+      IO.puts("   ⚠️  Error: #{state.error}")
+    end
+    
+    # Health assessment
+    health_score = calculate_health_score(state)
+    IO.puts("   💊 Health Score: #{health_score}%")
+    
+    if health_score < 50 do
+      IO.puts("   🚨 **CRITICAL**: Immediate attention required")
+    elsif health_score < 75 do
+      IO.puts("   ⚠️  **WARNING**: Monitoring recommended")
+    else
+      IO.puts("   ✅ **HEALTHY**: Operating normally")
+    end
+  end
+  
+  defp calculate_health_score(state) do
+    base_score = 100
+    
+    score = base_score
+    |> deduct_if(state.status == :ENDPOINT_ERROR, 60)
+    |> deduct_if(state.status == :ENDPOINT_INACTIVE, 30)
+    |> deduct_if(state.status == :ENDPOINT_BUFFERING, 10)
+    |> deduct_if(state.error && state.error != "", 20)
+    
+    max(0, score)
+  end
+  
+  defp deduct_if(score, condition, deduction) do
+    if condition, do: score - deduction, else: score
+  end
+  
+  defp network_connectivity_test(_client, params) do
+    IO.puts("🌐 **Network Connectivity Test**")
+    IO.puts("")
+    
+    config = Process.get(:config)
+    
+    IO.puts("🎯 Testing connectivity to: #{config.url}")
+    IO.puts("Duration: #{params.test_duration} seconds")
+    IO.puts("")
+    
+    IO.puts("🔧 **Test Procedures:**")
+    IO.puts("   1. DNS Resolution Test")
+    IO.puts("   2. TCP Connectivity Test")
+    IO.puts("   3. HTTP/HTTPS Response Test")
+    IO.puts("   4. WebSocket Connectivity Test")
+    IO.puts("   5. Latency Measurement")
+    IO.puts("")
+    
+    # Extract hostname from URL for testing
+    uri = URI.parse(config.url)
+    hostname = uri.host
+    
+    IO.puts("🧪 **Manual Test Commands:**")
+    
+    test_commands = """
+    # DNS Resolution
+    nslookup #{hostname}
+    
+    # Basic Connectivity
+    ping -c 4 #{hostname}
+    
+    # Port Tests
+    nc -zv #{hostname} 443
+    nc -zv #{hostname} 1935
+    
+    # HTTP Response
+    curl -I https://#{hostname}
+    
+    # Latency Test
+    time curl -s https://#{hostname} > /dev/null
+    """
+    
+    IO.puts("   ```bash")
+    IO.puts("   #{test_commands}")
+    IO.puts("   ```")
+    IO.puts("")
+    
+    IO.puts("📊 **Expected Results:**")
+    IO.puts("   • DNS lookup: < 100ms")
+    IO.puts("   • Ping response: < 50ms")
+    IO.puts("   • Port 443 (HTTPS): Open")
+    IO.puts("   • Port 1935 (RTMP): Open")
+    IO.puts("   • HTTP status: 200 or valid response")
+    IO.puts("")
+    
+    IO.puts("⚠️  **Note**: Automated network testing from Livebook is limited.")
+    IO.puts("   Run the commands above in your terminal for comprehensive results.")
+  end
+  
+  defp stream_validation(client, params) do
+    IO.puts("✅ **Stream Validation**")
+    IO.puts("")
+    
+    case Livekit.IngressServiceClient.list_ingress(client) do
+      {:ok, response} ->
+        active_streams = Enum.filter(response.items, fn ingress ->
+          ingress.state && ingress.state.status == :ENDPOINT_PUBLISHING
+        end)
+        
+        IO.puts("📊 **Active Streams Analysis:**")
+        IO.puts("   Count: #{length(active_streams)}")
+        IO.puts("")
+        
+        if Enum.empty?(active_streams) do
+          IO.puts("ℹ️  No active streams to validate")
+        else
+          for stream <- active_streams do
+            IO.puts("🔍 **Validating Stream: #{stream.name}**")
+            validate_stream_configuration(stream)
+            IO.puts("")
+          end
+        end
+        
+        # Test stream creation capabilities
+        IO.puts("🧪 **Stream Creation Test:**")
+        test_stream_creation(client)
+        
+      {:error, reason} ->
+        IO.puts("❌ Failed to validate streams: #{inspect(reason)}")
+    end
+  end
+  
+  defp validate_stream_configuration(stream) do
+    issues = []
+    
+    issues = issues
+    |> add_issue(!stream.name || stream.name == "", "Missing or empty name")
+    |> add_issue(!stream.room_name || stream.room_name == "", "Missing or empty room name")
+    |> add_issue(!stream.participant_identity || stream.participant_identity == "", "Missing participant identity")
+    |> add_issue(!stream.url || stream.url == "", "Missing stream URL")
+    
+    if stream.input_type == :RTMP_INPUT do
+      issues = issues |> add_issue(!stream.stream_key || stream.stream_key == "", "Missing RTMP stream key")
+    end
+    
+    if Enum.empty?(issues) then
+      IO.puts("   ✅ Configuration valid")
+    else
+      IO.puts("   ⚠️  Configuration issues:")
+      for issue <- issues do
+        IO.puts("      • #{issue}")
+      end
+    end
+    
+    # Health check
+    if stream.state do
+      case stream.state.status do
+        :ENDPOINT_PUBLISHING ->
+          IO.puts("   ✅ Stream health: Publishing normally")
+        :ENDPOINT_BUFFERING ->
+          IO.puts("   ⚠️  Stream health: Buffering (may be normal)")
+        :ENDPOINT_INACTIVE ->
+          IO.puts("   ⚠️  Stream health: Inactive")
+        :ENDPOINT_ERROR ->
+          IO.puts("   ❌ Stream health: Error state")
+          if stream.state.error do
+            IO.puts("      Error: #{stream.state.error}")
+          end
+      end
+    end
+  end
+  
+  defp test_stream_creation(client) do
+    test_request = %Livekit.CreateIngressRequest{
+      input_type: :RTMP_INPUT,
+      name: "validation-test-#{System.system_time(:second)}",
+      room_name: "validation-room",
+      participant_identity: "validation-participant"
+    }
+    
+    case Livekit.IngressServiceClient.create_ingress(client, test_request) do
+      {:ok, ingress} ->
+        IO.puts("   ✅ Test ingress created successfully")
+        IO.puts("   📡 ID: #{ingress.ingress_id}")
+        
+        # Clean up test ingress
+        delete_request = %Livekit.DeleteIngressRequest{ingress_id: ingress.ingress_id}
+        case Livekit.IngressServiceClient.delete_ingress(client, delete_request) do
+          {:ok, _} ->
+            IO.puts("   🧹 Test ingress cleaned up")
+          {:error, reason} ->
+            IO.puts("   ⚠️  Failed to clean up test ingress: #{inspect(reason)}")
+        end
+        
+      {:error, reason} ->
+        IO.puts("   ❌ Test ingress creation failed: #{inspect(reason)}")
+    end
+  end
+  
+  defp add_issue(list, condition, issue) do
+    if condition, do: [issue | list], else: list
+  end
+  
+  defp performance_profiling(client, params) do
+    IO.puts("⚡ **Performance Profiling**")
+    IO.puts("Duration: #{params.test_duration} seconds")
+    IO.puts("")
+    
+    start_time = System.system_time(:millisecond)
+    
+    IO.puts("🔄 **Running Performance Tests:**")
+    
+    # Test 1: API Response Time
+    IO.puts("   Testing API response time...")
+    api_times = measure_api_response_times(client, 5)
+    
+    IO.puts("   Testing concurrent operations...")  
+    concurrent_times = measure_concurrent_performance(client, 3)
+    
+    IO.puts("")
+    IO.puts("📊 **Performance Results:**")
+    IO.puts("")
+    
+    if length(api_times) > 0 do
+      avg_time = Enum.sum(api_times) / length(api_times)
+      max_time = Enum.max(api_times)
+      min_time = Enum.min(api_times)
+      
+      IO.puts("🌐 **API Response Times:**")
+      IO.puts("   Average: #{round(avg_time)}ms")
+      IO.puts("   Maximum: #{round(max_time)}ms")
+      IO.puts("   Minimum: #{round(min_time)}ms")
+      
+      if avg_time < 500 do
+        IO.puts("   ✅ Performance: Excellent")
+      elsif avg_time < 1000 do
+        IO.puts("   ✅ Performance: Good")
+      elsif avg_time < 2000 do
+        IO.puts("   ⚠️  Performance: Fair")
+      else
+        IO.puts("   ❌ Performance: Poor - Investigation needed")
+      end
+      IO.puts("")
+    end
+    
+    if length(concurrent_times) > 0 do
+      concurrent_avg = Enum.sum(concurrent_times) / length(concurrent_times)
+      
+      IO.puts("⚡ **Concurrent Operations:**")
+      IO.puts("   Average Time: #{round(concurrent_avg)}ms")
+      IO.puts("   Operations Tested: #{length(concurrent_times)}")
+      
+      if concurrent_avg < avg_time * 1.5 do
+        IO.puts("   ✅ Concurrency: Good scaling")
+      else
+        IO.puts("   ⚠️  Concurrency: May have scaling issues")
+      end
+    end
+    
+    total_time = System.system_time(:millisecond) - start_time
+    IO.puts("")
+    IO.puts("⏱️  **Total Test Duration**: #{total_time}ms")
+  end
+  
+  defp measure_api_response_times(client, count) do
+    for _i <- 1..count do
+      start_time = System.system_time(:millisecond)
+      
+      case Livekit.IngressServiceClient.list_ingress(client) do
+        {:ok, _response} ->
+          System.system_time(:millisecond) - start_time
+        {:error, _reason} ->
+          nil
+      end
+    end
+    |> Enum.filter(& &1 != nil)
+  end
+  
+  defp measure_concurrent_performance(client, count) do
+    tasks = for _i <- 1..count do
+      Task.async(fn ->
+        start_time = System.system_time(:millisecond)
+        
+        case Livekit.IngressServiceClient.list_ingress(client) do
+          {:ok, _response} ->
+            System.system_time(:millisecond) - start_time
+          {:error, _reason} ->
+            nil
+        end
+      end)
+    end
+    
+    tasks
+    |> Task.await_many(5000)
+    |> Enum.filter(& &1 != nil)
+  end
+  
+  defp configuration_validation(_client, _params) do
+    IO.puts("⚙️  **Configuration Validation**")
+    IO.puts("")
+    
+    config = Process.get(:config)
+    
+    IO.puts("🔍 **Current Configuration Analysis:**")
+    IO.puts("")
+    
+    validation_results = []
+    
+    # URL validation
+    url_result = validate_url(config.url)
+    validation_results = [{"Server URL", url_result} | validation_results]
+    
+    # API key validation
+    key_result = validate_api_key(config.api_key)
+    validation_results = [{"API Key", key_result} | validation_results]
+    
+    # API secret validation  
+    secret_result = validate_api_secret(config.api_secret)
+    validation_results = [{"API Secret", secret_result} | validation_results]
+    
+    # Debug level validation
+    debug_result = validate_debug_level(Process.get(:debug_level))
+    validation_results = [{"Debug Level", debug_result} | validation_results]
+    
+    for {component, result} <- Enum.reverse(validation_results) do
+      {icon, message} = case result do
+        {:ok, msg} -> {"✅", msg}
+        {:warning, msg} -> {"⚠️", msg}
+        {:error, msg} -> {"❌", msg}
+      end
+      
+      IO.puts("#{icon} **#{component}**: #{message}")
+    end
+    
+    IO.puts("")
+    
+    # Overall assessment
+    errors = Enum.count(validation_results, fn {_, {status, _}} -> status == :error end)
+    warnings = Enum.count(validation_results, fn {_, {status, _}} -> status == :warning end)
+    
+    cond do
+      errors > 0 ->
+        IO.puts("🚨 **Overall Status**: CRITICAL - Fix errors before proceeding")
+      warnings > 0 ->
+        IO.puts("⚠️  **Overall Status**: WARNING - Review configuration")
+      true ->
+        IO.puts("✅ **Overall Status**: VALID - Configuration looks good")
+    end
+  end
+  
+  defp validate_url(url) do
+    cond do
+      !url || url == "" ->
+        {:error, "URL is missing or empty"}
+      !String.starts_with?(url, "wss://") && !String.starts_with?(url, "ws://") ->
+        {:error, "URL should start with wss:// or ws://"}
+      String.starts_with?(url, "ws://") ->
+        {:warning, "Using unencrypted WebSocket (ws://) - consider wss://"}
+      String.contains?(url, "localhost") || String.contains?(url, "127.0.0.1") ->
+        {:warning, "Using localhost - ensure server is accessible"}
+      true ->
+        {:ok, "URL format appears valid"}
+    end
+  end
+  
+  defp validate_api_key(api_key) do
+    cond do
+      !api_key || api_key == "" ->
+        {:error, "API key is missing"}
+      String.length(api_key) < 10 ->
+        {:error, "API key appears too short"}
+      String.length(api_key) < 20 ->
+        {:warning, "API key may be too short"}
+      true ->
+        {:ok, "API key length appears valid"}
+    end
+  end
+  
+  defp validate_api_secret(api_secret) do
+    cond do
+      !api_secret || api_secret == "" ->
+        {:error, "API secret is missing"}
+      String.length(api_secret) < 20 ->
+        {:error, "API secret appears too short"}
+      String.length(api_secret) < 40 ->
+        {:warning, "API secret may be too short"}
+      true ->
+        {:ok, "API secret length appears valid"}
+    end
+  end
+  
+  defp validate_debug_level(debug_level) do
+    if debug_level in [:basic, :advanced, :expert] do
+      {:ok, "Debug level valid: #{debug_level}"}
+    else
+      {:warning, "Unknown debug level: #{debug_level}"}
+    end
+  end
+  
+  defp log_analysis(_client, _params) do
+    IO.puts("📋 **Log Analysis**")
+    IO.puts("")
+    
+    IO.puts("ℹ️  **Note**: Direct log analysis from Livebook is limited.")
+    IO.puts("For comprehensive log analysis, check the following locations:")
+    IO.puts("")
+    
+    IO.puts("🗂️  **LiveKit Server Logs:**")
+    IO.puts("   • Check LiveKit server console output")
+    IO.puts("   • Look for ingress-related error messages")
+    IO.puts("   • Monitor connection and stream events")
+    IO.puts("")
+    
+    IO.puts("🔧 **Common Log Patterns to Look For:**")
+    IO.puts("   • Authentication failures")
+    IO.puts("   • Connection timeout errors")
+    IO.puts("   • Stream format incompatibility")
+    IO.puts("   • Resource exhaustion messages")
+    IO.puts("   • Network connectivity issues")
+    IO.puts("")
+    
+    IO.puts("📊 **Log Analysis Tools:**")
+    IO.puts("   • grep for error patterns")
+    IO.puts("   • tail -f for real-time monitoring")
+    IO.puts("   • awk/sed for structured analysis")
+    IO.puts("   • Log aggregation tools (ELK, Grafana)")
+  end
+end
+
+# Execute selected debug tool
+debug_params = Kino.Control.read(debug_tools_form)
+client = Process.get(:client)
+
+if client do
+  AdvancedDebugging.run_debug_tool(client, debug_params.tool, debug_params)
+else
+  IO.puts("⚠️  Please initialize the diagnostic client first")
+end
+```
+
+## Emergency Recovery Procedures
+
+```elixir
+# Emergency recovery system
+IO.puts("🚑 Emergency Recovery Procedures")
+IO.puts("=" |> String.duplicate(50))
+IO.puts("")
+
+IO.puts("⚠️  **IMPORTANT**: Only use these procedures in emergency situations!")
+IO.puts("")
+
+IO.puts("🆘 **Scenario 1: All Ingress Endpoints Failing**")
+IO.puts("")
+IO.puts("**Immediate Actions:**")
+IO.puts("   1. Check LiveKit server status and connectivity")
+IO.puts("   2. Verify API credentials haven't been revoked")
+IO.puts("   3. Test with minimal ingress configuration")
+IO.puts("   4. Check for network connectivity issues")
+IO.puts("")
+IO.puts("**Recovery Steps:**")
+IO.puts("   1. Create new test ingress to verify service")
+IO.puts("   2. If successful, investigate individual endpoint issues")
+IO.puts("   3. If fails, contact LiveKit server administrator")
+IO.puts("")
+
+IO.puts("🆘 **Scenario 2: Mass Endpoint Errors**")
+IO.puts("")
+IO.puts("**Assessment:**")
+client = Process.get(:client)
+
+if client do
+  case Livekit.IngressServiceClient.list_ingress(client) do
+    {:ok, response} ->
+      error_count = Enum.count(response.items, fn ingress ->
+        ingress.state && ingress.state.status == :ENDPOINT_ERROR
+      end)
+      
+      if error_count > 0 do
+        IO.puts("   🚨 #{error_count} endpoints currently in error state")
+        IO.puts("")
+        IO.puts("**Emergency Actions:**")
+        IO.puts("   1. Document all error states for analysis")
+        IO.puts("   2. Delete problematic endpoints if blocking service")
+        IO.puts("   3. Create fresh endpoints with minimal configuration")
+        IO.puts("   4. Implement gradual restoration")
+      else
+        IO.puts("   ✅ No endpoints currently in error state")
+      end
+      
+    {:error, reason} ->
+      IO.puts("   ❌ Cannot assess endpoint status: #{inspect(reason)}")
+      IO.puts("   This may indicate a critical service issue")
+  end
+else
+  IO.puts("   ⚠️  Cannot assess - diagnostic client not initialized")
+end
+
+IO.puts("")
+IO.puts("🆘 **Scenario 3: Service Unresponsive**")
+IO.puts("")
+IO.puts("**Immediate Checks:**")
+IO.puts("   1. Verify internet connectivity")
+IO.puts("   2. Check DNS resolution for LiveKit server")
+IO.puts("   3. Test basic network connectivity (ping/telnet)")
+IO.puts("   4. Try different network connection")
+IO.puts("")
+IO.puts("**Escalation Path:**")
+IO.puts("   1. Contact LiveKit server administrator")
+IO.puts("   2. Check LiveKit server status page/monitoring")
+IO.puts("   3. Verify no planned maintenance windows")
+IO.puts("   4. Consider fallback streaming solutions")
+IO.puts("")
+
+IO.puts("🔧 **Emergency Toolkit Commands:**")
+
+emergency_commands = """
+# Quick connectivity test
+ping -c 4 your-livekit-server.com
+
+# Port connectivity test  
+nc -zv your-livekit-server.com 443
+nc -zv your-livekit-server.com 1935
+
+# DNS resolution test
+nslookup your-livekit-server.com
+
+# Quick HTTP test
+curl -I https://your-livekit-server.com
+
+# Test with minimal FFmpeg stream
+ffmpeg -f lavfi -i testsrc2=size=640x480:rate=1 -f lavfi -i sine=frequency=1000 \\
+  -t 10 -c:v libx264 -preset veryfast -b:v 500k \\
+  -c:a aac -b:a 128k -f flv \\
+  rtmp://your-server/your-stream-key
+"""
+
+IO.puts("```bash")
+IO.puts(emergency_commands)
+IO.puts("```")
+IO.puts("")
+
+IO.puts("📞 **Contact Information:**")
+IO.puts("   • LiveKit Documentation: https://docs.livekit.io/")
+IO.puts("   • LiveKit Community: https://livekit.io/community")
+IO.puts("   • GitHub Issues: https://github.com/livekit/livekit/issues")
+IO.puts("   • LiveKit Cloud Support: https://cloud.livekit.io/support")
+```
+
+## Summary and Best Practices
+
+```elixir
+IO.puts("🎉 Ingress Troubleshooting Tutorial Complete!")
+IO.puts("=" |> String.duplicate(60))
+IO.puts("")
+
+IO.puts("✅ **What You've Learned:**")
+IO.puts("   • Systematic problem diagnosis techniques")
+IO.puts("   • Common ingress issues and their solutions")  
+IO.puts("   • Advanced debugging tools and methods")
+IO.puts("   • Error analysis and resolution strategies")
+IO.puts("   • Network and connectivity troubleshooting")
+IO.puts("   • Performance debugging and optimization")
+IO.puts("   • Emergency recovery procedures")
+IO.puts("")
+
+IO.puts("🛠️ **Debugging Toolkit Summary:**")
+IO.puts("   • Comprehensive health check system")
+IO.puts("   • Common issue analyzer with automated solutions")
+IO.puts("   • Advanced debugging tools for deep inspection")
+IO.puts("   • Network connectivity testing procedures")
+IO.puts("   • Performance profiling and analysis")
+IO.puts("   • Configuration validation tools")
+IO.puts("   • Emergency recovery procedures")
+IO.puts("")
+
+IO.puts("📋 **Best Practices for Troubleshooting:**")
+IO.puts("")
+IO.puts("   🔍 **Systematic Approach:**")
+IO.puts("   • Always start with basic connectivity tests")
+IO.puts("   • Use the health check system before diving deep")
+IO.puts("   • Document symptoms and error messages")
+IO.puts("   • Test with minimal configurations first")
+IO.puts("")
+IO.puts("   📊 **Monitoring & Prevention:**")
+IO.puts("   • Implement regular health checks")
+IO.puts("   • Monitor key performance metrics")
+IO.puts("   • Set up alerting for critical issues")
+IO.puts("   • Keep detailed logs for analysis")
+IO.puts("")
+IO.puts("   🛡️ **Proactive Maintenance:**")
+IO.puts("   • Regular configuration validation")
+IO.puts("   • Performance profiling under different loads")
+IO.puts("   • Network connectivity verification")
+IO.puts("   • Keep emergency procedures documented")
+IO.puts("")
+
+IO.puts("⚡ **Quick Reference - Most Common Issues:**")
+IO.puts("")
+IO.puts("   1. **Can't create ingress**: Check API credentials and permissions")
+IO.puts("   2. **Stream won't connect**: Verify RTMP URL and stream key")
+IO.puts("   3. **Keeps disconnecting**: Check network stability and bitrate")
+IO.puts("   4. **Poor quality**: Adjust encoder settings and bitrate")
+IO.puts("   5. **Stuck buffering**: Wait 30s, then check stream source")
+IO.puts("   6. **Error state**: Check error message, delete and recreate")
+IO.puts("   7. **Performance issues**: Monitor resource usage and optimize")
+IO.puts("   8. **Network problems**: Test connectivity and check firewalls")
+IO.puts("")
+
+IO.puts("🚀 **Advanced Troubleshooting:**")
+IO.puts("   • Use deep inspection for detailed analysis")
+IO.puts("   • Performance profiling for optimization")
+IO.puts("   • Stream validation for configuration checks")
+IO.puts("   • Network testing for connectivity issues")
+IO.puts("   • Log analysis for historical debugging")
+IO.puts("")
+
+IO.puts("📚 **Additional Resources:**")
+IO.puts("   • LiveKit Troubleshooting Guide: https://docs.livekit.io/guides/troubleshooting/")
+IO.puts("   • RTMP Debugging: https://docs.livekit.io/ingress/rtmp/#troubleshooting")
+IO.puts("   • WebRTC Debugging: https://webrtc.github.io/webrtc-org/debugging/")
+IO.puts("   • FFmpeg Documentation: https://ffmpeg.org/documentation.html")
+IO.puts("   • OBS Studio Troubleshooting: https://obsproject.com/help")
+IO.puts("")
+
+IO.puts("💡 **Pro Tips:**")
+IO.puts("   • Always test with multiple browsers/clients")
+IO.puts("   • Keep a working configuration as reference")
+IO.puts("   • Use packet capture tools for network debugging")
+IO.puts("   • Monitor both client and server-side metrics")
+IO.puts("   • Document solutions for recurring issues")
+IO.puts("   • Build a troubleshooting runbook for your specific setup")
+```
