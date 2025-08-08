@@ -2,8 +2,8 @@ defmodule Livekit.WebhookPerformanceTest do
   # Change async to false to avoid conflicts with other tests mocking the same modules
   use ExUnit.Case, async: false
 
-  alias Livekit.WebhookReceiver
   alias Livekit.AccessToken
+  alias Livekit.WebhookReceiver
 
   import Mock
 
@@ -172,7 +172,7 @@ defmodule Livekit.WebhookPerformanceTest do
       webhook_body = ~s({
         "event": "room_created",
         "room": {
-          "name": "test-room", 
+          "name": "test-room",
           "sid": "RM_test123",
           "emptyTimeout": 300,
           "maxParticipants": 20,

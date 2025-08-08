@@ -1,8 +1,8 @@
 defmodule Livekit.WebhookReceiverTest do
   use ExUnit.Case, async: true
 
-  alias Livekit.WebhookReceiver
   alias Livekit.AccessToken
+  alias Livekit.WebhookReceiver
 
   import Mock
 

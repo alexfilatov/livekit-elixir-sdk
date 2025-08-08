@@ -95,9 +95,9 @@ defmodule Livekit.IngressCliTest do
       with_mocks([
         {Livekit.IngressServiceClient, [], [
           new: fn _url, _api_key, _api_secret -> {:ok, {:channel, %{}}} end,
-          create_ingress: fn _client, request -> 
+          create_ingress: fn _client, request ->
             assert request.url == "https://example.com/stream.m3u8"
-            {:ok, expected_ingress} 
+            {:ok, expected_ingress}
           end
         ]}
       ]) do
@@ -136,8 +136,8 @@ defmodule Livekit.IngressCliTest do
 
     test "handles invalid input type" do
       # Mock the client to avoid connection timeout and test input validation
-      with_mock Livekit.IngressServiceClient, new: fn _url, _api_key, _api_secret -> 
-        {:ok, {:channel, %{}}} 
+      with_mock Livekit.IngressServiceClient, new: fn _url, _api_key, _api_secret ->
+        {:ok, {:channel, %{}}}
       end do
         output = capture_io(fn ->
           Mix.Tasks.Livekit.run([
@@ -168,14 +168,14 @@ defmodule Livekit.IngressCliTest do
       with_mocks([
         {Livekit.IngressServiceClient, [], [
           new: fn _url, _api_key, _api_secret -> {:ok, {:channel, %{}}} end,
-          create_ingress: fn _client, request -> 
+          create_ingress: fn _client, request ->
             assert request.name == "test-stream-with-encoding"
             # Note: Encoding options verification depends on CLI implementation
             # When implemented, these should be verified:
             # assert request.enable_transcoding == true
             # assert request.audio != nil  # Audio encoding options set
             # assert request.video != nil  # Video encoding options set
-            {:ok, expected_ingress} 
+            {:ok, expected_ingress}
           end
         ]}
       ]) do
@@ -212,9 +212,9 @@ defmodule Livekit.IngressCliTest do
       with_mocks([
         {Livekit.IngressServiceClient, [], [
           new: fn _url, _api_key, _api_secret -> {:ok, {:channel, %{}}} end,
-          create_ingress: fn _client, request -> 
+          create_ingress: fn _client, request ->
             assert request.participant_metadata == "custom-metadata"
-            {:ok, expected_ingress} 
+            {:ok, expected_ingress}
           end
         ]}
       ]) do
@@ -250,7 +250,7 @@ defmodule Livekit.IngressCliTest do
       with_mocks([
         {Livekit.IngressServiceClient, [], [
           new: fn _url, _api_key, _api_secret -> {:ok, {:channel, %{}}} end,
-          create_ingress: fn _client, request -> 
+          create_ingress: fn _client, request ->
             # Verify that URL defaults to empty string when --source-url not provided
             assert request.url == ""
             assert request.input_type == :URL_INPUT
@@ -290,11 +290,11 @@ defmodule Livekit.IngressCliTest do
       with_mocks([
         {Livekit.IngressServiceClient, [], [
           new: fn _url, _api_key, _api_secret -> {:ok, {:channel, %{}}} end,
-          create_ingress: fn _client, request -> 
+          create_ingress: fn _client, request ->
             assert request.name == "stream-with-special-chars"
             assert request.room_name == "room-with-dashes"
             assert request.participant_identity == "user_with_underscores"
-            {:ok, expected_ingress} 
+            {:ok, expected_ingress}
           end
         ]}
       ]) do
@@ -317,8 +317,8 @@ defmodule Livekit.IngressCliTest do
     end
 
     test "handles client connection errors" do
-      with_mock Livekit.IngressServiceClient, new: fn _url, _api_key, _api_secret -> 
-        {:error, "Connection failed"} 
+      with_mock Livekit.IngressServiceClient, new: fn _url, _api_key, _api_secret ->
+        {:error, "Connection failed"}
       end do
         output = capture_io(fn ->
           Mix.Tasks.Livekit.run([
@@ -494,9 +494,9 @@ defmodule Livekit.IngressCliTest do
       with_mocks([
         {Livekit.IngressServiceClient, [], [
           new: fn _url, _api_key, _api_secret -> {:ok, {:channel, %{}}} end,
-          list_ingress: fn _client, request -> 
+          list_ingress: fn _client, request ->
             assert request.room_name == "specific-room"
-            {:ok, list_response} 
+            {:ok, list_response}
           end
         ]}
       ]) do

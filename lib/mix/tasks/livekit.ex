@@ -821,39 +821,47 @@ defmodule Mix.Tasks.Livekit do
   end
 
   defp handle_list_ingress(opts) do
-    with {:ok, client} <- get_ingress_client(opts) do
-      request = %Livekit.ListIngressRequest{
-        room_name: opts[:room],
-        ingress_id: opts[:ingress_id]
-      }
+    case get_ingress_client(opts) do
+      {:ok, client} ->
+        request = %Livekit.ListIngressRequest{
+          room_name: opts[:room],
+          ingress_id: opts[:ingress_id]
+        }
 
-      case Livekit.IngressServiceClient.list_ingress(client, request) do
-        {:ok, response} ->
-          if Enum.empty?(response.items) do
-            IO.puts("No ingress endpoints found.")
-          else
-            IO.puts("📡 Ingress Endpoints:")
-            IO.puts("")
-            
-            Enum.each(response.items, fn ingress ->
-              IO.puts("  ID: #{ingress.ingress_id}")
-              IO.puts("  Name: #{ingress.name}")
-              IO.puts("  Type: #{ingress.input_type}")
-              IO.puts("  URL: #{ingress.url}")
-              IO.puts("  Room: #{ingress.room_name}")
-              IO.puts("  Participant: #{ingress.participant_identity}")
-              IO.puts("  Status: #{ingress.state && ingress.state.status}")
-              IO.puts("  Enabled: #{ingress.enabled}")
-              IO.puts("")
-            end)
-          end
+        case Livekit.IngressServiceClient.list_ingress(client, request) do
+          {:ok, response} ->
+            display_ingress_list(response.items)
 
-        {:error, error} ->
-          IO.puts("❌ Error listing ingress: #{inspect(error)}")
-      end
-    else
-      {:error, reason} -> IO.puts("❌ Error: #{reason}")
+          {:error, error} ->
+            IO.puts("❌ Error listing ingress: #{inspect(error)}")
+        end
+
+      {:error, reason} ->
+        IO.puts("❌ Error: #{reason}")
     end
+  end
+
+  defp display_ingress_list([]) do
+    IO.puts("No ingress endpoints found.")
+  end
+
+  defp display_ingress_list(items) do
+    IO.puts("📡 Ingress Endpoints:")
+    IO.puts("")
+
+    Enum.each(items, &display_ingress_item/1)
+  end
+
+  defp display_ingress_item(ingress) do
+    IO.puts("  ID: #{ingress.ingress_id}")
+    IO.puts("  Name: #{ingress.name}")
+    IO.puts("  Type: #{ingress.input_type}")
+    IO.puts("  URL: #{ingress.url}")
+    IO.puts("  Room: #{ingress.room_name}")
+    IO.puts("  Participant: #{ingress.participant_identity}")
+    IO.puts("  Status: #{ingress.state && ingress.state.status}")
+    IO.puts("  Enabled: #{ingress.enabled}")
+    IO.puts("")
   end
 
   defp handle_delete_ingress(opts) do
@@ -891,7 +899,7 @@ defmodule Mix.Tasks.Livekit do
 
   defp parse_input_type(nil), do: {:error, "input-type is required"}
   defp parse_input_type("RTMP"), do: {:ok, :RTMP_INPUT}
-  defp parse_input_type("WHIP"), do: {:ok, :WHIP_INPUT} 
+  defp parse_input_type("WHIP"), do: {:ok, :WHIP_INPUT}
   defp parse_input_type("URL"), do: {:ok, :URL_INPUT}
   defp parse_input_type(type), do: {:error, "Invalid input type '#{type}'. Valid types: RTMP, WHIP, URL"}
 
@@ -919,7 +927,7 @@ defmodule Mix.Tasks.Livekit do
   end
 
   defp build_video_options(_opts) do
-    # TODO: Implement video options when needed  
+    # TODO: Implement video options when needed
     nil
   end
 
