@@ -3,7 +3,8 @@ defmodule Livekit.IngressCliTest do
   import Mock
   import ExUnit.CaptureIO
 
-  # No aliases to avoid conflicts
+  # Limited aliases to avoid struct resolution conflicts
+  alias Mix.Tasks.Livekit, as: LivekitTask
 
   @api_key "test_key"
   @api_secret "test_secret"
@@ -28,7 +29,7 @@ defmodule Livekit.IngressCliTest do
         ]}
       ]) do
         output = capture_io(fn ->
-          Mix.Tasks.Livekit.run([
+          LivekitTask.run([
             "create-ingress",
             "--api-key", @api_key,
             "--api-secret", @api_secret,
@@ -64,7 +65,7 @@ defmodule Livekit.IngressCliTest do
         ]}
       ]) do
         output = capture_io(fn ->
-          Mix.Tasks.Livekit.run([
+          LivekitTask.run([
             "create-ingress",
             "--api-key", @api_key,
             "--api-secret", @api_secret,
@@ -95,14 +96,14 @@ defmodule Livekit.IngressCliTest do
       with_mocks([
         {Livekit.IngressServiceClient, [], [
           new: fn _url, _api_key, _api_secret -> {:ok, {:channel, %{}}} end,
-          create_ingress: fn _client, request -> 
+          create_ingress: fn _client, request ->
             assert request.url == "https://example.com/stream.m3u8"
-            {:ok, expected_ingress} 
+            {:ok, expected_ingress}
           end
         ]}
       ]) do
         output = capture_io(fn ->
-          Mix.Tasks.Livekit.run([
+          LivekitTask.run([
             "create-ingress",
             "--api-key", @api_key,
             "--api-secret", @api_secret,
@@ -122,7 +123,7 @@ defmodule Livekit.IngressCliTest do
 
     test "handles missing required parameters" do
       output = capture_io(fn ->
-        Mix.Tasks.Livekit.run([
+        LivekitTask.run([
           "create-ingress",
           "--api-key", @api_key,
           "--api-secret", @api_secret,
@@ -136,11 +137,11 @@ defmodule Livekit.IngressCliTest do
 
     test "handles invalid input type" do
       # Mock the client to avoid connection timeout and test input validation
-      with_mock Livekit.IngressServiceClient, new: fn _url, _api_key, _api_secret -> 
-        {:ok, {:channel, %{}}} 
+      with_mock Livekit.IngressServiceClient, new: fn _url, _api_key, _api_secret ->
+        {:ok, {:channel, %{}}}
       end do
         output = capture_io(fn ->
-          Mix.Tasks.Livekit.run([
+          LivekitTask.run([
             "create-ingress",
             "--api-key", @api_key,
             "--api-secret", @api_secret,
@@ -168,19 +169,19 @@ defmodule Livekit.IngressCliTest do
       with_mocks([
         {Livekit.IngressServiceClient, [], [
           new: fn _url, _api_key, _api_secret -> {:ok, {:channel, %{}}} end,
-          create_ingress: fn _client, request -> 
+          create_ingress: fn _client, request ->
             assert request.name == "test-stream-with-encoding"
             # Note: Encoding options verification depends on CLI implementation
             # When implemented, these should be verified:
             # assert request.enable_transcoding == true
             # assert request.audio != nil  # Audio encoding options set
             # assert request.video != nil  # Video encoding options set
-            {:ok, expected_ingress} 
+            {:ok, expected_ingress}
           end
         ]}
       ]) do
         output = capture_io(fn ->
-          Mix.Tasks.Livekit.run([
+          LivekitTask.run([
             "create-ingress",
             "--api-key", @api_key,
             "--api-secret", @api_secret,
@@ -212,14 +213,14 @@ defmodule Livekit.IngressCliTest do
       with_mocks([
         {Livekit.IngressServiceClient, [], [
           new: fn _url, _api_key, _api_secret -> {:ok, {:channel, %{}}} end,
-          create_ingress: fn _client, request -> 
+          create_ingress: fn _client, request ->
             assert request.participant_metadata == "custom-metadata"
-            {:ok, expected_ingress} 
+            {:ok, expected_ingress}
           end
         ]}
       ]) do
         output = capture_io(fn ->
-          Mix.Tasks.Livekit.run([
+          LivekitTask.run([
             "create-ingress",
             "--api-key", @api_key,
             "--api-secret", @api_secret,
@@ -250,7 +251,7 @@ defmodule Livekit.IngressCliTest do
       with_mocks([
         {Livekit.IngressServiceClient, [], [
           new: fn _url, _api_key, _api_secret -> {:ok, {:channel, %{}}} end,
-          create_ingress: fn _client, request -> 
+          create_ingress: fn _client, request ->
             # Verify that URL defaults to empty string when --source-url not provided
             assert request.url == ""
             assert request.input_type == :URL_INPUT
@@ -259,7 +260,7 @@ defmodule Livekit.IngressCliTest do
         ]}
       ]) do
         output = capture_io(fn ->
-          Mix.Tasks.Livekit.run([
+          LivekitTask.run([
             "create-ingress",
             "--api-key", @api_key,
             "--api-secret", @api_secret,
@@ -290,16 +291,16 @@ defmodule Livekit.IngressCliTest do
       with_mocks([
         {Livekit.IngressServiceClient, [], [
           new: fn _url, _api_key, _api_secret -> {:ok, {:channel, %{}}} end,
-          create_ingress: fn _client, request -> 
+          create_ingress: fn _client, request ->
             assert request.name == "stream-with-special-chars"
             assert request.room_name == "room-with-dashes"
             assert request.participant_identity == "user_with_underscores"
-            {:ok, expected_ingress} 
+            {:ok, expected_ingress}
           end
         ]}
       ]) do
         output = capture_io(fn ->
-          Mix.Tasks.Livekit.run([
+          LivekitTask.run([
             "create-ingress",
             "--api-key", @api_key,
             "--api-secret", @api_secret,
@@ -317,11 +318,11 @@ defmodule Livekit.IngressCliTest do
     end
 
     test "handles client connection errors" do
-      with_mock Livekit.IngressServiceClient, new: fn _url, _api_key, _api_secret -> 
-        {:error, "Connection failed"} 
+      with_mock Livekit.IngressServiceClient, new: fn _url, _api_key, _api_secret ->
+        {:error, "Connection failed"}
       end do
         output = capture_io(fn ->
-          Mix.Tasks.Livekit.run([
+          LivekitTask.run([
             "create-ingress",
             "--api-key", @api_key,
             "--api-secret", @api_secret,
@@ -345,7 +346,7 @@ defmodule Livekit.IngressCliTest do
         ]}
       ]) do
         output = capture_io(fn ->
-          Mix.Tasks.Livekit.run([
+          LivekitTask.run([
             "create-ingress",
             "--api-key", @api_key,
             "--api-secret", @api_secret,
@@ -378,7 +379,7 @@ defmodule Livekit.IngressCliTest do
         ]}
       ]) do
         output = capture_io(fn ->
-          Mix.Tasks.Livekit.run([
+          LivekitTask.run([
             "update-ingress",
             "--api-key", @api_key,
             "--api-secret", @api_secret,
@@ -398,7 +399,7 @@ defmodule Livekit.IngressCliTest do
 
     test "handles missing ingress ID" do
       output = capture_io(fn ->
-        Mix.Tasks.Livekit.run([
+        LivekitTask.run([
           "update-ingress",
           "--api-key", @api_key,
           "--api-secret", @api_secret,
@@ -444,7 +445,7 @@ defmodule Livekit.IngressCliTest do
         ]}
       ]) do
         output = capture_io(fn ->
-          Mix.Tasks.Livekit.run([
+          LivekitTask.run([
             "list-ingress",
             "--api-key", @api_key,
             "--api-secret", @api_secret,
@@ -476,7 +477,7 @@ defmodule Livekit.IngressCliTest do
         ]}
       ]) do
         output = capture_io(fn ->
-          Mix.Tasks.Livekit.run([
+          LivekitTask.run([
             "list-ingress",
             "--api-key", @api_key,
             "--api-secret", @api_secret,
@@ -494,14 +495,14 @@ defmodule Livekit.IngressCliTest do
       with_mocks([
         {Livekit.IngressServiceClient, [], [
           new: fn _url, _api_key, _api_secret -> {:ok, {:channel, %{}}} end,
-          list_ingress: fn _client, request -> 
+          list_ingress: fn _client, request ->
             assert request.room_name == "specific-room"
-            {:ok, list_response} 
+            {:ok, list_response}
           end
         ]}
       ]) do
         capture_io(fn ->
-          Mix.Tasks.Livekit.run([
+          LivekitTask.run([
             "list-ingress",
             "--api-key", @api_key,
             "--api-secret", @api_secret,
@@ -527,7 +528,7 @@ defmodule Livekit.IngressCliTest do
         ]}
       ]) do
         output = capture_io(fn ->
-          Mix.Tasks.Livekit.run([
+          LivekitTask.run([
             "delete-ingress",
             "--api-key", @api_key,
             "--api-secret", @api_secret,
@@ -544,7 +545,7 @@ defmodule Livekit.IngressCliTest do
 
     test "handles missing ingress ID" do
       output = capture_io(fn ->
-        Mix.Tasks.Livekit.run([
+        LivekitTask.run([
           "delete-ingress",
           "--api-key", @api_key,
           "--api-secret", @api_secret,
@@ -563,7 +564,7 @@ defmodule Livekit.IngressCliTest do
         ]}
       ]) do
         output = capture_io(fn ->
-          Mix.Tasks.Livekit.run([
+          LivekitTask.run([
             "delete-ingress",
             "--api-key", @api_key,
             "--api-secret", @api_secret,
@@ -580,7 +581,7 @@ defmodule Livekit.IngressCliTest do
   describe "error scenarios" do
     test "handles unknown command gracefully" do
       output = capture_io(fn ->
-        Mix.Tasks.Livekit.run(["unknown-command"])
+        LivekitTask.run(["unknown-command"])
       end)
 
       # Should show help
@@ -589,7 +590,7 @@ defmodule Livekit.IngressCliTest do
 
     test "handles missing credentials" do
       output = capture_io(fn ->
-        Mix.Tasks.Livekit.run([
+        LivekitTask.run([
           "create-ingress",
           "--input-type", "RTMP",
           "--name", "test",
@@ -603,7 +604,7 @@ defmodule Livekit.IngressCliTest do
 
     test "handles malformed CLI arguments" do
       output = capture_io(fn ->
-        Mix.Tasks.Livekit.run([
+        LivekitTask.run([
           "create-ingress",
           "--api-key", @api_key,
           "--api-secret", @api_secret,
@@ -620,7 +621,7 @@ defmodule Livekit.IngressCliTest do
 
     test "handles empty command list" do
       output = capture_io(fn ->
-        Mix.Tasks.Livekit.run([])
+        LivekitTask.run([])
       end)
 
       # Should show help when no command provided
@@ -629,7 +630,7 @@ defmodule Livekit.IngressCliTest do
 
     test "handles partial credentials" do
       output = capture_io(fn ->
-        Mix.Tasks.Livekit.run([
+        LivekitTask.run([
           "create-ingress",
           "--api-key", @api_key,
           # Missing --api-secret and --url
@@ -645,7 +646,7 @@ defmodule Livekit.IngressCliTest do
 
     test "handles invalid boolean flags" do
       output = capture_io(fn ->
-        Mix.Tasks.Livekit.run([
+        LivekitTask.run([
           "create-ingress",
           "--api-key", @api_key,
           "--api-secret", @api_secret,
@@ -666,7 +667,7 @@ defmodule Livekit.IngressCliTest do
   describe "help and documentation" do
     test "shows help for specific commands" do
       output = capture_io(fn ->
-        Mix.Tasks.Livekit.run(["help"])
+        LivekitTask.run(["help"])
       end)
 
       assert String.contains?(output, "Provides CLI commands for Livekit operations")
@@ -674,7 +675,7 @@ defmodule Livekit.IngressCliTest do
 
     test "shows available commands in help" do
       output = capture_io(fn ->
-        Mix.Tasks.Livekit.run([])
+        LivekitTask.run([])
       end)
 
       assert String.contains?(output, "create-ingress")
