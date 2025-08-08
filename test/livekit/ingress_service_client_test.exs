@@ -3,6 +3,7 @@ defmodule Livekit.IngressServiceClientTest do
   import Mock
 
   alias Livekit.IngressServiceClient
+
   alias Livekit.{
     CreateIngressRequest,
     DeleteIngressRequest,
@@ -28,20 +29,22 @@ defmodule Livekit.IngressServiceClientTest do
     end
 
     test "converts ws:// URL to http://" do
-      with_mock GRPC.Stub, connect: fn host, _opts ->
-        assert String.contains?(host, "example.com:80")
-        {:ok, :channel}
-      end do
+      with_mock GRPC.Stub,
+        connect: fn host, _opts ->
+          assert String.contains?(host, "example.com:80")
+          {:ok, :channel}
+        end do
         IngressServiceClient.new("ws://example.com", @api_key, @api_secret)
       end
     end
 
     test "converts wss:// URL to https://" do
-      with_mock GRPC.Stub, connect: fn host, opts ->
-        assert String.contains?(host, "example.com:443")
-        assert Keyword.get(opts, :cred) != nil
-        {:ok, :channel}
-      end do
+      with_mock GRPC.Stub,
+        connect: fn host, opts ->
+          assert String.contains?(host, "example.com:443")
+          assert Keyword.get(opts, :cred) != nil
+          {:ok, :channel}
+        end do
         IngressServiceClient.new("wss://example.com", @api_key, @api_secret)
       end
     end
@@ -95,7 +98,6 @@ defmodule Livekit.IngressServiceClientTest do
 
       with_mock Livekit.Ingress.Stub,
         create_ingress: fn _channel, _request, _opts -> {:ok, expected_ingress} end do
-
         assert {:ok, ingress} = IngressServiceClient.create_ingress(client, request)
         assert ingress.ingress_id == "ingress_123"
         assert ingress.name == "test-stream"
@@ -129,7 +131,6 @@ defmodule Livekit.IngressServiceClientTest do
           assert received_request.participant_metadata == "custom-metadata"
           {:ok, expected_ingress}
         end do
-
         assert {:ok, ingress} = IngressServiceClient.create_ingress(client, request)
         assert ingress.ingress_id == "whip_123"
         assert ingress.input_type == :WHIP_INPUT
@@ -160,7 +161,6 @@ defmodule Livekit.IngressServiceClientTest do
           assert received_request.url == "https://example.com/stream.m3u8"
           {:ok, expected_ingress}
         end do
-
         assert {:ok, ingress} = IngressServiceClient.create_ingress(client, request)
         assert ingress.ingress_id == "url_123"
         assert ingress.input_type == :URL_INPUT
@@ -180,7 +180,6 @@ defmodule Livekit.IngressServiceClientTest do
 
       with_mock Livekit.Ingress.Stub,
         create_ingress: fn _channel, _request, _opts -> {:error, grpc_error} end do
-
         assert {:error, "Invalid argument"} = IngressServiceClient.create_ingress(client, request)
       end
     end
@@ -195,7 +194,6 @@ defmodule Livekit.IngressServiceClientTest do
 
       with_mock Livekit.Ingress.Stub,
         create_ingress: fn _channel, _request, _opts -> {:error, :timeout} end do
-
         assert {:error, :timeout} = IngressServiceClient.create_ingress(client, request)
       end
     end
@@ -223,7 +221,6 @@ defmodule Livekit.IngressServiceClientTest do
 
       with_mock Livekit.Ingress.Stub,
         update_ingress: fn _channel, _request, _opts -> {:ok, expected_ingress} end do
-
         assert {:ok, ingress} = IngressServiceClient.update_ingress(client, request)
         assert ingress.ingress_id == "ingress_123"
         assert ingress.name == "updated-stream"
@@ -256,7 +253,6 @@ defmodule Livekit.IngressServiceClientTest do
           assert received_request.participant_metadata == "updated-metadata"
           {:ok, expected_ingress}
         end do
-
         assert {:ok, ingress} = IngressServiceClient.update_ingress(client, request)
         assert ingress.ingress_id == "ingress_123"
         assert ingress.name == "updated-stream"
@@ -275,7 +271,6 @@ defmodule Livekit.IngressServiceClientTest do
 
       with_mock Livekit.Ingress.Stub,
         update_ingress: fn _channel, _request, _opts -> {:error, grpc_error} end do
-
         assert {:error, "Not found"} = IngressServiceClient.update_ingress(client, request)
       end
     end
@@ -290,8 +285,8 @@ defmodule Livekit.IngressServiceClientTest do
 
       with_mock Livekit.Ingress.Stub,
         update_ingress: fn _channel, _request, _opts -> {:error, grpc_error} end do
-
-        assert {:error, "Ingress can only be updated when inactive"} = IngressServiceClient.update_ingress(client, request)
+        assert {:error, "Ingress can only be updated when inactive"} =
+                 IngressServiceClient.update_ingress(client, request)
       end
     end
   end
@@ -321,7 +316,6 @@ defmodule Livekit.IngressServiceClientTest do
 
       with_mock Livekit.Ingress.Stub,
         list_ingress: fn _channel, _request, _opts -> {:ok, expected_response} end do
-
         assert {:ok, response} = IngressServiceClient.list_ingress(client)
         assert length(response.items) == 2
         assert Enum.at(response.items, 0).ingress_id == "ingress_1"
@@ -338,7 +332,6 @@ defmodule Livekit.IngressServiceClientTest do
           assert req.room_name == "test-room"
           {:ok, expected_response}
         end do
-
         assert {:ok, _response} = IngressServiceClient.list_ingress(client, request)
       end
     end
@@ -348,7 +341,6 @@ defmodule Livekit.IngressServiceClientTest do
 
       with_mock Livekit.Ingress.Stub,
         list_ingress: fn _channel, _request, _opts -> {:ok, expected_response} end do
-
         assert {:ok, response} = IngressServiceClient.list_ingress(client)
         assert response.items == []
       end
@@ -372,7 +364,6 @@ defmodule Livekit.IngressServiceClientTest do
 
       with_mock Livekit.Ingress.Stub,
         delete_ingress: fn _channel, _request, _opts -> {:ok, expected_ingress} end do
-
         assert {:ok, ingress} = IngressServiceClient.delete_ingress(client, request)
         assert ingress.ingress_id == "ingress_123"
         assert ingress.name == "deleted-stream"
@@ -386,8 +377,8 @@ defmodule Livekit.IngressServiceClientTest do
 
       with_mock Livekit.Ingress.Stub,
         delete_ingress: fn _channel, _request, _opts -> {:error, grpc_error} end do
-
-        assert {:error, "Ingress not found"} = IngressServiceClient.delete_ingress(client, request)
+        assert {:error, "Ingress not found"} =
+                 IngressServiceClient.delete_ingress(client, request)
       end
     end
   end
@@ -420,6 +411,7 @@ defmodule Livekit.IngressServiceClientTest do
 
     test "logs successful operations" do
       client = {:channel, %{"authorization" => "Bearer test_token"}}
+
       request = %CreateIngressRequest{
         input_type: :RTMP_INPUT,
         name: "test-stream",
@@ -434,12 +426,12 @@ defmodule Livekit.IngressServiceClientTest do
 
       with_mock Livekit.Ingress.Stub,
         create_ingress: fn _channel, _request, _opts -> {:ok, expected_ingress} end do
-
         import ExUnit.CaptureLog
 
-        log = capture_log(fn ->
-          assert {:ok, _ingress} = IngressServiceClient.create_ingress(client, request)
-        end)
+        log =
+          capture_log(fn ->
+            assert {:ok, _ingress} = IngressServiceClient.create_ingress(client, request)
+          end)
 
         assert log =~ "Created ingress: ingress_123"
       end
@@ -447,6 +439,7 @@ defmodule Livekit.IngressServiceClientTest do
 
     test "logs error operations" do
       client = {:channel, %{"authorization" => "Bearer test_token"}}
+
       request = %CreateIngressRequest{
         input_type: :RTMP_INPUT,
         name: "test-stream",
@@ -458,12 +451,12 @@ defmodule Livekit.IngressServiceClientTest do
 
       with_mock Livekit.Ingress.Stub,
         create_ingress: fn _channel, _request, _opts -> {:error, grpc_error} end do
-
         import ExUnit.CaptureLog
 
-        log = capture_log(fn ->
-          assert {:error, _reason} = IngressServiceClient.create_ingress(client, request)
-        end)
+        log =
+          capture_log(fn ->
+            assert {:error, _reason} = IngressServiceClient.create_ingress(client, request)
+          end)
 
         assert log =~ "Failed to create ingress: Invalid argument"
       end
@@ -510,12 +503,13 @@ defmodule Livekit.IngressServiceClientTest do
       delete_request = %DeleteIngressRequest{ingress_id: "lifecycle_123"}
 
       with_mocks([
-        {Livekit.Ingress.Stub, [], [
-          create_ingress: fn _channel, _request, _opts -> {:ok, created_ingress} end,
-          update_ingress: fn _channel, _request, _opts -> {:ok, updated_ingress} end,
-          list_ingress: fn _channel, _request, _opts -> {:ok, list_response} end,
-          delete_ingress: fn _channel, _request, _opts -> {:ok, updated_ingress} end
-        ]}
+        {Livekit.Ingress.Stub, [],
+         [
+           create_ingress: fn _channel, _request, _opts -> {:ok, created_ingress} end,
+           update_ingress: fn _channel, _request, _opts -> {:ok, updated_ingress} end,
+           list_ingress: fn _channel, _request, _opts -> {:ok, list_response} end,
+           delete_ingress: fn _channel, _request, _opts -> {:ok, updated_ingress} end
+         ]}
       ]) do
         # Test full lifecycle
         assert {:ok, ingress} = IngressServiceClient.create_ingress(client, create_request)

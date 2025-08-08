@@ -1,0 +1,1020 @@
+# LiveKit Ingress Service - WebRTC Input (WHIP)
+
+```elixir
+Mix.install([
+  {:livekit, path: "../.."},
+  {:kino, "~> 0.12"},
+  {:jason, "~> 1.4"}
+])
+```
+
+## Introduction to WebRTC Ingress (WHIP)
+
+This Livebook explores WebRTC-HTTP Ingress Protocol (WHIP) for low-latency streaming with LiveKit. WHIP is a modern alternative to RTMP that offers:
+
+- 🚀 **Ultra-low latency** (sub-second)
+- 🌐 **Better firewall traversal** via WebRTC
+- 🔒 **Built-in security** with DTLS/SRTP
+- 📱 **Browser-native support** without plugins
+- 🎛️ **Advanced codec support** (AV1, VP9, H.264)
+
+### What You'll Learn:
+
+- 🔧 Setting up WHIP ingress endpoints
+- 🌐 Browser-based streaming with JavaScript
+- 📱 Mobile WebRTC streaming considerations
+- ⚡ Optimizing for ultra-low latency
+- 🔍 Debugging WebRTC connections
+- 📊 Monitoring WebRTC performance
+
+## Configuration & Client Setup
+
+```elixir
+# LiveKit configuration form
+config_form = Kino.Control.form(
+  [
+    api_key: Kino.Input.password("LiveKit API Key"),
+    api_secret: Kino.Input.password("LiveKit API Secret"),
+    url: Kino.Input.text("LiveKit Server URL", default: "wss://your-server.livekit.cloud"),
+    room_name: Kino.Input.text("Target Room Name", default: "whip-demo-room")
+  ],
+  submit: "Connect to LiveKit"
+)
+```
+
+```elixir
+# Establish connection and store configuration
+config = Kino.Control.read(config_form)
+Process.put(:config, config)
+
+case Livekit.IngressServiceClient.new(config.url, config.api_key, config.api_secret) do
+  {:ok, client} ->
+    Process.put(:client, client)
+    IO.puts("✅ Connected to LiveKit Ingress Service!")
+    IO.puts("🎯 Target room: #{config.room_name}")
+    IO.puts("🌐 Server: #{config.url}")
+    
+  {:error, reason} ->
+    IO.puts("❌ Connection failed: #{reason}")
+    IO.puts("Please verify your credentials and server URL.")
+end
+```
+
+## Creating a WHIP Ingress Endpoint
+
+Let's create a WebRTC ingress endpoint optimized for low-latency streaming:
+
+```elixir
+# WHIP Ingress Configuration Form
+whip_form = Kino.Control.form(
+  [
+    name: Kino.Input.text("Stream Name", default: "whip-stream-#{System.system_time(:second)}"),
+    participant_identity: Kino.Input.text("Streamer Identity", default: "webrtc-streamer"),
+    participant_name: Kino.Input.text("Display Name", default: "WebRTC Broadcaster"),
+    participant_metadata: Kino.Input.textarea("Metadata (JSON)", default: """
+{
+  "streaming_protocol": "WHIP",
+  "codec_preference": "VP9",
+  "latency_mode": "ultra_low",
+  "browser": "Chrome/Safari"
+}"""),
+    enable_transcoding: Kino.Input.checkbox("Enable Transcoding", default: false)
+  ],
+  submit: "Create WHIP Ingress"
+)
+```
+
+```elixir
+# Create the WHIP ingress endpoint
+whip_params = Kino.Control.read(whip_form)
+client = Process.get(:client)
+config = Process.get(:config)
+
+# Validate and prepare metadata
+metadata = try do
+  Jason.decode!(whip_params.participant_metadata)
+  whip_params.participant_metadata
+rescue
+  _ -> "{\"note\": \"Invalid JSON, using fallback\"}"
+end
+
+request = %Livekit.CreateIngressRequest{
+  input_type: :WHIP_INPUT,
+  name: whip_params.name,
+  room_name: config.room_name,
+  participant_identity: whip_params.participant_identity,
+  participant_name: whip_params.participant_name,
+  participant_metadata: metadata,
+  enable_transcoding: whip_params.enable_transcoding
+}
+
+case Livekit.IngressServiceClient.create_ingress(client, request) do
+  {:ok, ingress} ->
+    Process.put(:whip_ingress, ingress)
+    
+    IO.puts("🎉 WHIP Ingress Created Successfully!")
+    IO.puts("=" |> String.duplicate(50))
+    IO.puts("📡 Ingress ID: #{ingress.ingress_id}")
+    IO.puts("🏷️  Name: #{ingress.name}")
+    IO.puts("🔗 WHIP URL: #{ingress.url}")
+    IO.puts("🏠 Room: #{ingress.room_name}")
+    IO.puts("👤 Participant: #{ingress.participant_identity}")
+    IO.puts("🎭 Display Name: #{ingress.participant_name}")
+    IO.puts("⚙️  Transcoding: #{ingress.enable_transcoding}")
+    IO.puts("📋 Metadata: #{ingress.participant_metadata}")
+    IO.puts("=" |> String.duplicate(50))
+    IO.puts("")
+    IO.puts("⚡ Low-latency WebRTC endpoint ready!")
+    
+  {:error, reason} ->
+    IO.puts("❌ Failed to create WHIP ingress: #{inspect(reason)}")
+end
+```
+
+## Browser WebRTC Streaming Code Generator
+
+Let's generate JavaScript code for browser-based WebRTC streaming:
+
+```elixir
+ingress = Process.get(:whip_ingress)
+
+if ingress do
+  IO.puts("🌐 Browser WebRTC Streaming Code")
+  IO.puts("=" |> String.duplicate(50))
+  IO.puts("")
+  IO.puts("Copy and paste this HTML file to test WebRTC streaming:")
+  IO.puts("")
+  
+  html_code = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC WHIP Streaming to LiveKit</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            max-width: 800px; 
+            margin: 0 auto; 
+            padding: 20px; 
+        }
+        video { 
+            width: 100%; 
+            max-width: 640px; 
+            border: 1px solid #ccc; 
+            border-radius: 8px;
+        }
+        button { 
+            background: #007bff; 
+            color: white; 
+            border: none; 
+            padding: 10px 20px; 
+            border-radius: 5px; 
+            cursor: pointer; 
+            margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+        button:disabled { 
+            background: #6c757d; 
+            cursor: not-allowed; 
+        }
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .status.success { background: #d4edda; color: #155724; }
+        .status.error { background: #f8d7da; color: #721c24; }
+        .status.warning { background: #fff3cd; color: #856404; }
+    </style>
+</head>
+<body>
+    <h1>🌐 WebRTC WHIP Streaming to LiveKit</h1>
+    
+    <div id="status" class="status warning">
+        📱 Click "Start Camera" to begin streaming
+    </div>
+    
+    <video id="localVideo" autoplay muted></video>
+    
+    <div>
+        <button id="startBtn" onclick="startStreaming()">Start Camera</button>
+        <button id="stopBtn" onclick="stopStreaming()" disabled>Stop Streaming</button>
+        <button id="toggleAudio" disabled>Toggle Audio</button>
+        <button id="toggleVideo" disabled>Toggle Video</button>
+    </div>
+    
+    <div>
+        <h3>📊 Stream Information:</h3>
+        <ul>
+            <li><strong>WHIP URL:</strong> <code>#{ingress.url}</code></li>
+            <li><strong>Room:</strong> #{ingress.room_name}</li>
+            <li><strong>Participant:</strong> #{ingress.participant_identity}</li>
+            <li><strong>Stream ID:</strong> #{ingress.ingress_id}</li>
+        </ul>
+    </div>
+
+    <script>
+        let localStream = null;
+        let peerConnection = null;
+        let isStreaming = false;
+        
+        const whipUrl = '#{ingress.url}';
+        const statusDiv = document.getElementById('status');
+        const localVideo = document.getElementById('localVideo');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const toggleAudioBtn = document.getElementById('toggleAudio');
+        const toggleVideoBtn = document.getElementById('toggleVideo');
+        
+        function updateStatus(message, type = 'warning') {
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+            console.log(message);
+        }
+        
+        async function startStreaming() {
+            try {
+                updateStatus('📹 Requesting camera and microphone access...');
+                
+                // Get user media
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
+                        frameRate: { ideal: 30 }
+                    },
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
+                });
+                
+                localVideo.srcObject = localStream;
+                updateStatus('📱 Camera started, setting up WebRTC connection...');
+                
+                // Create peer connection
+                peerConnection = new RTCPeerConnection({
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' }
+                    ]
+                });
+                
+                // Add tracks to peer connection
+                localStream.getTracks().forEach(track => {
+                    peerConnection.addTrack(track, localStream);
+                });
+                
+                // Create and set local description
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                
+                updateStatus('🌐 Connecting to LiveKit via WHIP...');
+                
+                // Send offer to WHIP endpoint
+                const response = await fetch(whipUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/sdp'
+                    },
+                    body: offer.sdp
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`WHIP request failed: ${response.status}`);
+                }
+                
+                const answerSdp = await response.text();
+                await peerConnection.setRemoteDescription({
+                    type: 'answer',
+                    sdp: answerSdp
+                });
+                
+                // Monitor connection state
+                peerConnection.onconnectionstatechange = () => {
+                    const state = peerConnection.connectionState;
+                    console.log('Connection state:', state);
+                    
+                    switch(state) {
+                        case 'connected':
+                            updateStatus('✅ Streaming live to LiveKit!', 'success');
+                            break;
+                        case 'disconnected':
+                        case 'failed':
+                            updateStatus('❌ Connection lost', 'error');
+                            break;
+                        case 'connecting':
+                            updateStatus('🔄 Connecting...', 'warning');
+                            break;
+                    }
+                };
+                
+                // Update UI
+                isStreaming = true;
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                toggleAudioBtn.disabled = false;
+                toggleVideoBtn.disabled = false;
+                
+            } catch (error) {
+                console.error('Streaming error:', error);
+                updateStatus(`❌ Error: ${error.message}`, 'error');
+                stopStreaming();
+            }
+        }
+        
+        function stopStreaming() {
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+            
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+            
+            localVideo.srcObject = null;
+            isStreaming = false;
+            
+            // Update UI
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            toggleAudioBtn.disabled = true;
+            toggleVideoBtn.disabled = true;
+            
+            updateStatus('⏹️ Streaming stopped');
+        }
+        
+        function toggleAudio() {
+            if (localStream) {
+                const audioTrack = localStream.getAudioTracks()[0];
+                if (audioTrack) {
+                    audioTrack.enabled = !audioTrack.enabled;
+                    toggleAudioBtn.textContent = audioTrack.enabled ? 
+                        'Mute Audio' : 'Unmute Audio';
+                    updateStatus(audioTrack.enabled ? 
+                        '🔊 Audio enabled' : '🔇 Audio muted', 'success');
+                }
+            }
+        }
+        
+        function toggleVideo() {
+            if (localStream) {
+                const videoTrack = localStream.getVideoTracks()[0];
+                if (videoTrack) {
+                    videoTrack.enabled = !videoTrack.enabled;
+                    toggleVideoBtn.textContent = videoTrack.enabled ? 
+                        'Disable Video' : 'Enable Video';
+                    updateStatus(videoTrack.enabled ? 
+                        '📹 Video enabled' : '📹 Video disabled', 'success');
+                }
+            }
+        }
+        
+        // Update button text on load
+        toggleAudioBtn.textContent = 'Mute Audio';
+        toggleVideoBtn.textContent = 'Disable Video';
+        
+        // Handle page unload
+        window.addEventListener('beforeunload', stopStreaming);
+    </script>
+</body>
+</html>
+  """
+  
+  IO.puts(html_code)
+  IO.puts("")
+  IO.puts("💾 Save this as 'whip_streaming.html' and open in a web browser!")
+  IO.puts("🔒 Make sure to allow camera/microphone permissions when prompted.")
+  
+else
+  IO.puts("⚠️  Please create a WHIP ingress first")
+end
+```
+
+## Advanced WebRTC Configuration
+
+Let's explore advanced WebRTC configurations for different use cases:
+
+```elixir
+# Advanced WebRTC configuration generator
+advanced_config_form = Kino.Control.form(
+  [
+    use_case: Kino.Input.select("Use Case", [
+      {"Ultra Low Latency Gaming", :gaming},
+      {"High Quality Broadcasting", :broadcasting},
+      {"Mobile-Optimized Streaming", :mobile},
+      {"Screen Sharing", :screen_share}
+    ]),
+    video_codec: Kino.Input.select("Video Codec Preference", [
+      {"VP9 (Best Quality)", "VP9"},
+      {"VP8 (Good Compatibility)", "VP8"}, 
+      {"H.264 (Universal)", "H264"}
+    ]),
+    audio_codec: Kino.Input.select("Audio Codec", [
+      {"Opus (Recommended)", "opus"},
+      {"G.722", "G722"},
+      {"PCMU", "PCMU"}
+    ])
+  ],
+  submit: "Generate Advanced Configuration"
+)
+```
+
+```elixir
+# Generate advanced WebRTC configuration
+advanced_params = Kino.Control.read(advanced_config_form)
+
+config_js = case advanced_params.use_case do
+  :gaming ->
+    """
+    // Gaming-optimized WebRTC configuration
+    const rtcConfig = {
+        iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' }
+        ]
+    };
+    
+    const mediaConstraints = {
+        video: {
+            width: { exact: 1920 },
+            height: { exact: 1080 },
+            frameRate: { exact: 60 }, // High framerate for gaming
+            latency: { ideal: 0.01 }   // Ultra-low latency
+        },
+        audio: {
+            echoCancellation: false,   // Disable for gaming audio
+            noiseSuppression: false,
+            autoGainControl: false,
+            latency: { ideal: 0.01 }
+        }
+    };
+    """
+    
+  :broadcasting ->
+    """
+    // Broadcasting-optimized WebRTC configuration  
+    const rtcConfig = {
+        iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' }
+        ]
+    };
+    
+    const mediaConstraints = {
+        video: {
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            frameRate: { ideal: 30 },
+            facingMode: 'user'
+        },
+        audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            sampleRate: 48000,
+            channelCount: 2
+        }
+    };
+    """
+    
+  :mobile ->
+    """
+    // Mobile-optimized WebRTC configuration
+    const rtcConfig = {
+        iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' }
+        ]
+    };
+    
+    const mediaConstraints = {
+        video: {
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            frameRate: { ideal: 30 },
+            facingMode: { ideal: 'user' } // Front camera by default
+        },
+        audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+        }
+    };
+    
+    // Mobile-specific optimizations
+    const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    if (isMobile) {
+        mediaConstraints.video.width = { ideal: 854 };
+        mediaConstraints.video.height = { ideal: 480 };
+        mediaConstraints.video.frameRate = { ideal: 24 };
+    }
+    """
+    
+  :screen_share ->
+    """
+    // Screen sharing WebRTC configuration
+    const rtcConfig = {
+        iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' }
+        ]
+    };
+    
+    const mediaConstraints = {
+        video: {
+            cursor: 'always',
+            displaySurface: 'monitor',
+            frameRate: { ideal: 30 },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
+        },
+        audio: false // Usually no system audio for screen share
+    };
+    
+    // Use getDisplayMedia for screen capture
+    async function getScreenShare() {
+        return navigator.mediaDevices.getDisplayMedia(mediaConstraints);
+    }
+    """
+end
+
+IO.puts("🔧 Advanced WebRTC Configuration (#{advanced_params.use_case}):")
+IO.puts("=" |> String.duplicate(60))
+IO.puts("")
+IO.puts(config_js)
+IO.puts("")
+IO.puts("📊 Codec Preferences:")
+IO.puts("   Video: #{advanced_params.video_codec}")
+IO.puts("   Audio: #{advanced_params.audio_codec}")
+```
+
+## Real-time WebRTC Performance Monitor
+
+Let's create a monitoring system for WebRTC performance metrics:
+
+```elixir
+defmodule WebRTCMonitor do
+  def check_ingress_status(client, ingress_id) do
+    case Livekit.IngressServiceClient.list_ingress(client) do
+      {:ok, response} ->
+        ingress = Enum.find(response.items, fn i -> i.ingress_id == ingress_id end)
+        
+        if ingress do
+          %{
+            found: true,
+            ingress: ingress,
+            status: ingress.state && ingress.state.status,
+            room_id: ingress.state && ingress.state.room_id,
+            tracks: ingress.state && ingress.state.tracks || []
+          }
+        else
+          %{found: false, error: "Ingress not found"}
+        end
+        
+      {:error, reason} ->
+        %{found: false, error: reason}
+    end
+  end
+  
+  def format_status(status) do
+    case status do
+      :ENDPOINT_INACTIVE -> {"🔴", "Inactive"}
+      :ENDPOINT_BUFFERING -> {"🟡", "Buffering"}
+      :ENDPOINT_PUBLISHING -> {"🟢", "Publishing"}
+      :ENDPOINT_ERROR -> {"❌", "Error"}
+      :ENDPOINT_COMPLETE -> {"✅", "Complete"}
+      _ -> {"⚪", "Unknown"}
+    end
+  end
+end
+
+# Create monitoring frame
+monitor_frame = Kino.Frame.new()
+
+# Start monitoring task
+monitor_task = Task.async(fn ->
+  ingress = Process.get(:whip_ingress)
+  client = Process.get(:client)
+  
+  if ingress && client do
+    Enum.each(1..20, fn iteration -> # Monitor for 100 seconds (20 * 5 seconds)
+      timestamp = DateTime.utc_now() |> DateTime.to_string()
+      
+      status_info = WebRTCMonitor.check_ingress_status(client, ingress.ingress_id)
+      
+      content = if status_info.found do
+        {emoji, status_text} = WebRTCMonitor.format_status(status_info.status)
+        track_count = length(status_info.tracks)
+        
+        track_details = if track_count > 0 do
+          track_list = Enum.map_join(status_info.tracks, ", ", fn track ->
+            "#{track.type} (#{track.name})"
+          end)
+          "\n- **Active Tracks:** #{track_list}"
+        else
+          "\n- **Active Tracks:** None"
+        end
+        
+        """
+        ## 📊 WebRTC Ingress Monitor (Update ##{iteration})
+        **Last Update:** #{timestamp}
+        
+        #{emoji} **Status:** #{status_text}
+        - **Ingress ID:** #{ingress.ingress_id}
+        - **WHIP URL:** `#{ingress.url}`
+        - **Room:** #{ingress.room_name}
+        - **Participant:** #{ingress.participant_identity}#{track_details}
+        
+        ### 🌐 WebRTC Connection Tips:
+        - Ensure your browser supports WebRTC
+        - Check that camera/microphone permissions are granted
+        - Verify network connectivity (WebRTC works through NAT/firewalls)
+        - Monitor browser console for WebRTC logs
+        
+        ### 🔧 Troubleshooting:
+        - If stuck on "Buffering": Check media source is active
+        - If "Error": Check browser console for detailed logs
+        - If "Inactive": Verify WHIP client is connecting to the URL
+        """
+      else
+        """
+        ## ❌ WebRTC Monitoring Error (Update ##{iteration})
+        **Last Update:** #{timestamp}
+        
+        Failed to monitor ingress: #{inspect(status_info.error)}
+        """
+      end
+      
+      Kino.Frame.render(monitor_frame, Kino.Markdown.new(content))
+      Process.sleep(5000) # Wait 5 seconds
+    end)
+    
+    # Final update
+    Kino.Frame.render(monitor_frame, Kino.Markdown.new("""
+    ## 📊 WebRTC Monitoring Complete
+    **Session finished.** Re-run this cell to start a new monitoring session.
+    """))
+  else
+    Kino.Frame.render(monitor_frame, Kino.Markdown.new("""
+    ## ⚠️  WebRTC Monitoring Not Available
+    Please create a WHIP ingress first.
+    """))
+  end
+end)
+
+monitor_frame
+```
+
+## WebRTC Debugging and Diagnostics
+
+```elixir
+IO.puts("🔍 WebRTC Debugging and Diagnostics")
+IO.puts("=" |> String.duplicate(50))
+IO.puts("")
+
+IO.puts("🌐 **Browser Console Commands for WebRTC Debugging:**")
+IO.puts("")
+
+IO.puts("```javascript")
+IO.puts("// Enable WebRTC logging in Chrome")
+IO.puts("localStorage.setItem('debug', 'livekit*');")
+IO.puts("")
+IO.puts("// Check WebRTC connection stats")
+IO.puts("pc.getStats().then(stats => {")
+IO.puts("    stats.forEach(report => {")
+IO.puts("        if (report.type === 'outbound-rtp') {")
+IO.puts("            console.log('Outbound stats:', report);")
+IO.puts("        }")
+IO.puts("    });")
+IO.puts("});")
+IO.puts("")
+IO.puts("// Monitor connection state changes")
+IO.puts("pc.addEventListener('connectionstatechange', () => {")
+IO.puts("    console.log('Connection state:', pc.connectionState);")
+IO.puts("});")
+IO.puts("")
+IO.puts("// Monitor ICE connection state")
+IO.puts("pc.addEventListener('iceconnectionstatechange', () => {")
+IO.puts("    console.log('ICE connection state:', pc.iceConnectionState);")
+IO.puts("});")
+IO.puts("```")
+IO.puts("")
+
+IO.puts("🔧 **Common WebRTC Issues and Solutions:**")
+IO.puts("")
+
+IO.puts("1️⃣ **WHIP Connection Fails**")
+IO.puts("   • Check WHIP URL is accessible")
+IO.puts("   • Verify CORS headers are set correctly")
+IO.puts("   • Ensure HTTPS is used for secure contexts")
+IO.puts("   • Check browser console for detailed errors")
+IO.puts("")
+
+IO.puts("2️⃣ **Media Access Denied**") 
+IO.puts("   • Ensure HTTPS for camera/microphone access")
+IO.puts("   • Check browser permissions settings")
+IO.puts("   • Try different browsers (Chrome/Firefox/Safari)")
+IO.puts("   • Verify devices are not in use by other applications")
+IO.puts("")
+
+IO.puts("3️⃣ **Poor Video Quality**")
+IO.puts("   • Adjust video constraints (resolution/framerate)")
+IO.puts("   • Check available bandwidth")
+IO.puts("   • Monitor WebRTC stats for packet loss")
+IO.puts("   • Consider codec preferences (VP9 > VP8 > H.264)")
+IO.puts("")
+
+IO.puts("4️⃣ **Connection Timeouts**")
+IO.puts("   • Check STUN/TURN server configuration")
+IO.puts("   • Verify firewall/NAT settings")
+IO.puts("   • Test with different networks")
+IO.puts("   • Monitor ICE candidate gathering")
+IO.puts("")
+
+IO.puts("5️⃣ **Audio Issues**")
+IO.puts("   • Check microphone permissions")
+IO.puts("   • Verify audio constraints")
+IO.puts("   • Test with different audio codecs")
+IO.puts("   • Monitor audio levels in browser")
+```
+
+## WebRTC vs RTMP Comparison
+
+```elixir
+IO.puts("⚡ WebRTC (WHIP) vs RTMP Comparison")
+IO.puts("=" |> String.duplicate(45))
+IO.puts("")
+
+comparison_data = [
+  {"Aspect", "WebRTC (WHIP)", "RTMP"},
+  {"---", "---", "---"},
+  {"Latency", "Sub-second (50-200ms)", "2-10 seconds"},
+  {"Protocol", "UDP-based WebRTC", "TCP-based RTMP"},
+  {"Firewall", "NAT/Firewall friendly", "May need port forwarding"},
+  {"Browser Support", "Native support", "Requires Flash/plugin"},
+  {"Encoding", "Hardware accelerated", "Software encoding"},
+  {"Adaptive", "Built-in adaptation", "Fixed bitrate"},
+  {"Complexity", "More complex setup", "Simpler configuration"},
+  {"Streaming Software", "Limited support", "Universal support (OBS)"},
+  {"Mobile", "Excellent", "Good with apps"},
+  {"Quality", "Dynamic quality", "Consistent quality"}
+]
+
+for [aspect, webrtc, rtmp] <- comparison_data do
+  IO.puts("| #{String.pad_trailing(aspect, 15)} | #{String.pad_trailing(webrtc, 20)} | #{rtmp}")
+end
+
+IO.puts("")
+IO.puts("📊 **When to Choose WebRTC (WHIP):**")
+IO.puts("   ✅ Ultra-low latency requirements")
+IO.puts("   ✅ Browser-based streaming")
+IO.puts("   ✅ Interactive applications")
+IO.puts("   ✅ Mobile streaming apps")
+IO.puts("   ✅ Firewall/NAT traversal needed")
+IO.puts("")
+
+IO.puts("📊 **When to Choose RTMP:**")
+IO.puts("   ✅ Streaming software compatibility")
+IO.puts("   ✅ Consistent video quality needed")
+IO.puts("   ✅ Simpler setup requirements")
+IO.puts("   ✅ Long-form content streaming")
+IO.puts("   ✅ Established workflows")
+```
+
+## Performance Optimization for WebRTC
+
+```elixir
+# WebRTC optimization recommendations generator
+optimization_form = Kino.Control.form(
+  [
+    connection_type: Kino.Input.select("Network Connection", [
+      {"High-speed WiFi/Ethernet", :high_speed},
+      {"Mobile 4G/5G", :mobile},
+      {"Limited bandwidth", :limited}
+    ]),
+    device_type: Kino.Input.select("Streaming Device", [
+      {"Desktop/Laptop", :desktop},
+      {"Mobile phone", :mobile_device},
+      {"Tablet", :tablet}
+    ]),
+    content_type: Kino.Input.select("Content Type", [
+      {"Live person (talking head)", :talking_head},
+      {"Screen sharing", :screen_share},
+      {"Gaming/high motion", :gaming}
+    ])
+  ],
+  submit: "Get Optimization Recommendations"
+)
+```
+
+```elixir
+# Generate optimization recommendations
+opt_params = Kino.Control.read(optimization_form)
+
+IO.puts("🚀 WebRTC Optimization Recommendations")
+IO.puts("=" |> String.duplicate(50))
+IO.puts("")
+
+# Connection type optimizations
+IO.puts("🌐 **Network Optimization:**")
+case opt_params.connection_type do
+  :high_speed ->
+    IO.puts("   • Use high resolution: 1920x1080")
+    IO.puts("   • High framerate: 30-60 fps")
+    IO.puts("   • Use VP9 codec for best quality")
+    IO.puts("   • Enable hardware acceleration")
+    
+  :mobile ->
+    IO.puts("   • Moderate resolution: 1280x720")
+    IO.puts("   • Standard framerate: 30 fps")
+    IO.puts("   • Use adaptive bitrate")
+    IO.puts("   • Monitor data usage")
+    
+  :limited ->
+    IO.puts("   • Lower resolution: 854x480")
+    IO.puts("   • Reduced framerate: 15-24 fps")
+    IO.puts("   • Use H.264 for efficiency")
+    IO.puts("   • Enable aggressive compression")
+end
+
+IO.puts("")
+
+# Device type optimizations
+IO.puts("📱 **Device Optimization:**")
+case opt_params.device_type do
+  :desktop ->
+    IO.puts("   • Use hardware encoding (NVENC/QuickSync)")
+    IO.puts("   • Multiple core utilization")
+    IO.puts("   • High-quality audio processing")
+    IO.puts("   • Multiple camera support")
+    
+  :mobile_device ->
+    IO.puts("   • Enable low-power mode")
+    IO.puts("   • Use mobile-optimized codecs")
+    IO.puts("   • Monitor battery usage")
+    IO.puts("   • Thermal management")
+    
+  :tablet ->
+    IO.puts("   • Balance quality and battery")
+    IO.puts("   • Optimize for tablet orientation")
+    IO.puts("   • Touch-friendly controls")
+    IO.puts("   • WiFi optimization")
+end
+
+IO.puts("")
+
+# Content type optimizations  
+IO.puts("🎥 **Content Optimization:**")
+case opt_params.content_type do
+  :talking_head ->
+    IO.puts("   • Focus on face detection")
+    IO.puts("   • Optimize for speech audio")
+    IO.puts("   • Moderate motion settings")
+    IO.puts("   • Good lighting important")
+    
+  :screen_share ->
+    IO.puts("   • Optimize for text clarity")
+    IO.puts("   • Use screen-specific codecs")
+    IO.puts("   • Lower framerates acceptable")
+    IO.puts("   • Focus on specific regions")
+    
+  :gaming ->
+    IO.puts("   • High framerate essential")
+    IO.puts("   • Low latency priority")
+    IO.puts("   • Disable post-processing")
+    IO.puts("   • Hardware encoding critical")
+end
+
+IO.puts("")
+IO.puts("💡 **Universal WebRTC Tips:**")
+IO.puts("   • Test with multiple browsers")
+IO.puts("   • Monitor WebRTC statistics")
+IO.puts("   • Use TURN servers for NAT traversal")
+IO.puts("   • Implement automatic quality adaptation")
+IO.puts("   • Provide user feedback on connection quality")
+```
+
+## Cleanup and Resource Management
+
+```elixir
+# WebRTC ingress cleanup
+cleanup_form = Kino.Control.form(
+  [
+    action: Kino.Input.select("Cleanup Action", [
+      {"List all WHIP ingress endpoints", :list_whip},
+      {"Delete current WHIP ingress", :delete_current},
+      {"Delete all test WHIP endpoints", :delete_test}
+    ])
+  ],
+  submit: "Execute Cleanup"
+)
+```
+
+```elixir
+# Execute cleanup
+cleanup_action = Kino.Control.read(cleanup_form)
+client = Process.get(:client)
+
+case cleanup_action.action do
+  :list_whip ->
+    case Livekit.IngressServiceClient.list_ingress(client) do
+      {:ok, response} ->
+        whip_ingress = Enum.filter(response.items, fn ingress ->
+          ingress.input_type == :WHIP_INPUT
+        end)
+        
+        IO.puts("🌐 WHIP Ingress Endpoints (#{length(whip_ingress)} total):")
+        for ingress <- whip_ingress do
+          {emoji, status_text} = WebRTCMonitor.format_status(ingress.state && ingress.state.status)
+          IO.puts("  #{emoji} #{ingress.name}")
+          IO.puts("     ID: #{ingress.ingress_id}")
+          IO.puts("     URL: #{ingress.url}")
+          IO.puts("     Room: #{ingress.room_name}")
+          IO.puts("     Status: #{status_text}")
+          IO.puts("")
+        end
+        
+      {:error, reason} ->
+        IO.puts("❌ Failed to list WHIP ingress: #{inspect(reason)}")
+    end
+    
+  :delete_current ->
+    ingress = Process.get(:whip_ingress)
+    if ingress do
+      request = %Livekit.DeleteIngressRequest{ingress_id: ingress.ingress_id}
+      case Livekit.IngressServiceClient.delete_ingress(client, request) do
+        {:ok, deleted} ->
+          IO.puts("✅ Deleted current WHIP ingress: #{deleted.name}")
+          Process.delete(:whip_ingress)
+        {:error, reason} ->
+          IO.puts("❌ Failed to delete: #{inspect(reason)}")
+      end
+    else
+      IO.puts("⚠️  No current WHIP ingress to delete")
+    end
+    
+  :delete_test ->
+    case Livekit.IngressServiceClient.list_ingress(client) do
+      {:ok, response} ->
+        test_whip = Enum.filter(response.items, fn ingress ->
+          ingress.input_type == :WHIP_INPUT && 
+          (String.contains?(ingress.name, "whip") || 
+           String.contains?(ingress.name, "test") ||
+           String.contains?(ingress.name, "demo"))
+        end)
+        
+        if Enum.empty?(test_whip) do
+          IO.puts("✨ No test WHIP ingress to clean up")
+        else
+          IO.puts("🧹 Cleaning up #{length(test_whip)} test WHIP endpoints...")
+          
+          for ingress <- test_whip do
+            request = %Livekit.DeleteIngressRequest{ingress_id: ingress.ingress_id}
+            case Livekit.IngressServiceClient.delete_ingress(client, request) do
+              {:ok, _} ->
+                IO.puts("  ✅ Deleted: #{ingress.name}")
+              {:error, reason} ->
+                IO.puts("  ❌ Failed to delete #{ingress.name}: #{inspect(reason)}")
+            end
+          end
+        end
+        
+      {:error, reason} ->
+        IO.puts("❌ Failed to cleanup: #{inspect(reason)}")
+    end
+end
+```
+
+## Summary and Next Steps
+
+```elixir
+IO.puts("🎉 WebRTC Ingress Tutorial Complete!")
+IO.puts("=" |> String.duplicate(50))
+IO.puts("")
+
+IO.puts("✅ **What You've Accomplished:**")
+IO.puts("   • Created WebRTC (WHIP) ingress endpoints")
+IO.puts("   • Generated browser-based streaming code")
+IO.puts("   • Learned advanced WebRTC configurations")
+IO.puts("   • Set up real-time performance monitoring")
+IO.puts("   • Mastered WebRTC debugging techniques")
+IO.puts("   • Optimized for different use cases")
+IO.puts("")
+
+IO.puts("🚀 **Recommended Next Steps:**")
+IO.puts("   1. Test the generated HTML file in your browser")
+IO.puts("   2. Explore mobile WebRTC streaming applications")
+IO.puts("   3. Try the File Processing Livebook for batch ingestion")
+IO.puts("   4. Set up automated ingress management workflows")
+IO.puts("   5. Implement custom WebRTC applications")
+IO.puts("")
+
+IO.puts("📚 **Additional Resources:**")
+IO.puts("   • WebRTC Spec: https://webrtc.org/")
+IO.puts("   • WHIP Draft: https://datatracker.ietf.org/doc/draft-ietf-wish-whip/")
+IO.puts("   • LiveKit WebRTC Guide: https://docs.livekit.io/")
+IO.puts("   • Browser WebRTC APIs: https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API")
+```

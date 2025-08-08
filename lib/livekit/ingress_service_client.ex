@@ -29,7 +29,8 @@ defmodule Livekit.IngressServiceClient do
       iex> {:ok, client} = Livekit.IngressServiceClient.new("wss://my-livekit.com", "api_key", "secret")
       {:ok, {#PID<0.123.0>, %{}}}
   """
-  def new(url, api_key, api_secret) when is_binary(url) and is_binary(api_key) and is_binary(api_secret) do
+  def new(url, api_key, api_secret)
+      when is_binary(url) and is_binary(api_key) and is_binary(api_secret) do
     # Convert ws:// to http:// and wss:// to https:// for gRPC
     grpc_url =
       url
@@ -64,6 +65,7 @@ defmodule Livekit.IngressServiceClient do
       {:ok, channel} ->
         Logger.info("Connected to LiveKit Ingress service at #{host}:#{port}")
         {:ok, {channel, metadata}}
+
       {:error, reason} ->
         Logger.error("Failed to connect to LiveKit Ingress service: #{inspect(reason)}")
         {:error, "Failed to connect to LiveKit server: #{inspect(reason)}"}
@@ -98,9 +100,11 @@ defmodule Livekit.IngressServiceClient do
       {:ok, %Livekit.IngressInfo{} = ingress_info} ->
         Logger.info("Created ingress: #{ingress_info.ingress_id}")
         {:ok, ingress_info}
+
       {:error, %GRPC.RPCError{} = error} ->
         Logger.error("Failed to create ingress: #{error.message}")
         {:error, error.message}
+
       {:error, reason} ->
         Logger.error("Failed to create ingress: #{inspect(reason)}")
         {:error, reason}
@@ -127,9 +131,11 @@ defmodule Livekit.IngressServiceClient do
       {:ok, %Livekit.IngressInfo{} = ingress_info} ->
         Logger.info("Updated ingress: #{ingress_info.ingress_id}")
         {:ok, ingress_info}
+
       {:error, %GRPC.RPCError{} = error} ->
         Logger.error("Failed to update ingress: #{error.message}")
         {:error, error.message}
+
       {:error, reason} ->
         Logger.error("Failed to update ingress: #{inspect(reason)}")
         {:error, reason}
@@ -163,9 +169,11 @@ defmodule Livekit.IngressServiceClient do
       {:ok, %Livekit.ListIngressResponse{} = response} ->
         Logger.info("Listed #{length(response.items)} ingress endpoints")
         {:ok, response}
+
       {:error, %GRPC.RPCError{} = error} ->
         Logger.error("Failed to list ingress: #{error.message}")
         {:error, error.message}
+
       {:error, reason} ->
         Logger.error("Failed to list ingress: #{inspect(reason)}")
         {:error, reason}
@@ -195,9 +203,11 @@ defmodule Livekit.IngressServiceClient do
       {:ok, %Livekit.IngressInfo{} = ingress_info} ->
         Logger.info("Deleted ingress: #{ingress_info.ingress_id}")
         {:ok, ingress_info}
+
       {:error, %GRPC.RPCError{} = error} ->
         Logger.error("Failed to delete ingress: #{error.message}")
         {:error, error.message}
+
       {:error, reason} ->
         Logger.error("Failed to delete ingress: #{inspect(reason)}")
         {:error, reason}
