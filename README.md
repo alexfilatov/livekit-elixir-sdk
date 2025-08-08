@@ -31,8 +31,10 @@ The following table shows which LiveKit features are currently supported in this
 
 ### AI Features
 
-- [x] Room Agents (add, remove, list)
-- [x] Agent Configuration and Initialization
+- [x] Basic Room Agent Configuration (via room creation)
+- [x] Simple Agent Initialization (prompt-based)
+- [ ] Advanced Agent Dispatch Service
+- [ ] Agent Lifecycle Management
 
 ### Integration Features
 
@@ -44,12 +46,15 @@ The following table shows which LiveKit features are currently supported in this
 
 ### Advanced Features
 
+- [ ] Ingress Service (external stream input)
 - [ ] Advanced Room Configuration
 - [ ] Room Presets
 - [ ] Detailed Codec Configuration
 - [ ] Advanced Participant Permissions
 - [ ] Data Message Handling with Reliability Options
 - [ ] Additional Grant Types (SIPGrant, etc.)
+- [ ] Real-Time Client SDK (WebRTC connections)
+- [ ] Unified API Client
 
 ## Installation
 
@@ -113,18 +118,20 @@ mix livekit list-egress --api-key devkey --api-secret secret --url http://localh
 mix livekit stop-egress --api-key devkey --api-secret secret --url http://localhost:7880 --egress-id EG_1234
 ```
 
-#### Room Agents
+#### Room Agents (Basic Implementation)
 
 ```bash
-# Add an agent to a room
+# Add an agent to a room (via room configuration)
 mix livekit add-agent --api-key devkey --api-secret secret --url http://localhost:7880 --room my-room --name assistant --prompt "You are a helpful assistant"
 
-# Remove an agent from a room
+# Remove an agent from a room (removes participant)
 mix livekit remove-agent --api-key devkey --api-secret secret --url http://localhost:7880 --room my-room --name assistant
 
-# List agents in a room
+# List agents in a room (lists participants with agent prefix)
 mix livekit list-agents --api-key devkey --api-secret secret --url http://localhost:7880 --room my-room
 ```
+
+**Note**: Agent functionality is currently implemented as basic room-level configuration. Advanced agent dispatch service with lifecycle management is planned for future releases.
 
 #### Webhook Options
 
@@ -261,10 +268,10 @@ end
 )
 ```
 
-### Room Agents
+### Room Agents (Basic Implementation)
 
 ```elixir
-# Configure room agents
+# Configure basic room agents via room creation
 {:ok, room} = Livekit.RoomServiceClient.create_room(client, "room-with-agents",
   agents: [
     %Livekit.RoomAgentDispatch{
@@ -277,6 +284,8 @@ end
   ]
 )
 ```
+
+**Note**: This is a basic implementation that configures agents during room creation. Advanced agent dispatch service with explicit agent management, lifecycle control, and metadata support is planned for future releases.
 
 ### Webhooks
 
@@ -575,9 +584,28 @@ mix compile.proto
 
 This will compile all `.proto` files in the `proto/` directory and generate Elixir modules in `lib/livekit/proto/`.
 
+## Current Limitations
+
+This SDK currently provides approximately **60-70%** of LiveKit's full server API functionality. Key limitations include:
+
+- **Agent Features**: Basic room-level agent configuration only (no advanced dispatch service)
+- **Missing Services**: Ingress (external stream input), SIP (telephony), and Real-Time Client SDK
+- **Advanced Features**: Limited to core room management, egress, and webhook functionality
+
 ## Future Development Roadmap
 
-The features marked as not implemented in the feature checklist are planned for future releases of the Elixir SDK. If you need these features immediately, consider using one of the other official SDKs.
+Priority development areas for future releases:
+
+1. **Ingress Service** - External stream input (RTMP, WebRTC, files)
+2. **Enhanced Agent Dispatch** - Advanced agent lifecycle management
+3. **SIP Service** - Telephony integration and PSTN connectivity  
+4. **Real-Time Client SDK** - Direct participant connections and WebRTC support
+5. **Advanced Permissions** - Granular access control and specialized grants
+6. **Unified API Client** - Single entry point for all services
+
+For detailed implementation plans, see `docs/implementation/` directory.
+
+The features marked as not implemented in the feature checklist are planned for future releases. If you need these features immediately, consider using one of the other official SDKs.
 
 Contributions to implement these features are welcome! Please see the repository for contribution guidelines.
 
