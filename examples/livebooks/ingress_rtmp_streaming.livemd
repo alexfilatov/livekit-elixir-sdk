@@ -1,0 +1,673 @@
+# LiveKit Ingress Service - RTMP Streaming Tutorial
+
+```elixir
+Mix.install([
+  {:livekit, path: "../.."},
+  {:kino, "~> 0.12"}
+])
+```
+
+## Introduction to RTMP Ingress
+
+This Livebook provides a comprehensive tutorial on setting up RTMP (Real-Time Messaging Protocol) streaming with LiveKit's Ingress Service. RTMP is the traditional streaming protocol used by platforms like Twitch, YouTube Live, and Facebook Live.
+
+### What You'll Learn:
+
+- 🎥 Setting up RTMP ingress endpoints
+- 🔧 Configuring OBS Studio for RTMP streaming
+- ⚙️ Using FFmpeg for programmatic streaming
+- 🎛️ Advanced RTMP configuration options
+- 📊 Monitoring stream health and performance
+- 🛠️ Troubleshooting common RTMP issues
+
+## Configuration & Client Setup
+
+```elixir
+# Configuration form for LiveKit connection
+config_form = Kino.Control.form(
+  [
+    api_key: Kino.Input.password("LiveKit API Key"),
+    api_secret: Kino.Input.password("LiveKit API Secret"), 
+    url: Kino.Input.text("LiveKit Server URL", default: "wss://your-server.livekit.cloud"),
+    room_name: Kino.Input.text("Target Room Name", default: "rtmp-demo-room")
+  ],
+  submit: "Connect to LiveKit"
+)
+```
+
+```elixir
+# Establish connection
+config = Kino.Control.read(config_form)
+Process.put(:config, config)
+
+case Livekit.IngressServiceClient.new(config.url, config.api_key, config.api_secret) do
+  {:ok, client} ->
+    Process.put(:client, client)
+    IO.puts("✅ Connected to LiveKit Ingress Service!")
+    IO.puts("🎯 Target room: #{config.room_name}")
+    
+  {:error, reason} ->
+    IO.puts("❌ Connection failed: #{reason}")
+    IO.puts("Please verify your credentials and server URL.")
+end
+```
+
+## Creating an RTMP Ingress Endpoint
+
+Let's create a comprehensive RTMP ingress with all the configuration options:
+
+```elixir
+# RTMP Ingress Configuration Form
+rtmp_form = Kino.Control.form(
+  [
+    name: Kino.Input.text("Stream Name", default: "obs-stream-#{System.system_time(:second)}"),
+    participant_identity: Kino.Input.text("Streamer Identity", default: "streamer-1"),
+    participant_name: Kino.Input.text("Streamer Display Name", default: "Demo Streamer"),
+    participant_metadata: Kino.Input.text("Metadata (JSON)", default: "{\"source\": \"OBS Studio\", \"quality\": \"HD\"}"),
+    enable_transcoding: Kino.Input.checkbox("Enable Transcoding", default: true)
+  ],
+  submit: "Create RTMP Ingress"
+)
+```
+
+```elixir
+# Create the RTMP ingress endpoint
+rtmp_params = Kino.Control.read(rtmp_form)
+client = Process.get(:client)
+config = Process.get(:config)
+
+request = %Livekit.CreateIngressRequest{
+  input_type: :RTMP_INPUT,
+  name: rtmp_params.name,
+  room_name: config.room_name,
+  participant_identity: rtmp_params.participant_identity,
+  participant_name: rtmp_params.participant_name,
+  participant_metadata: rtmp_params.participant_metadata,
+  enable_transcoding: rtmp_params.enable_transcoding
+}
+
+case Livekit.IngressServiceClient.create_ingress(client, request) do
+  {:ok, ingress} ->
+    Process.put(:rtmp_ingress, ingress)
+    
+    IO.puts("🎉 RTMP Ingress Created Successfully!")
+    IO.puts("=" |> String.duplicate(50))
+    IO.puts("📡 Ingress ID: #{ingress.ingress_id}")
+    IO.puts("🏷️  Name: #{ingress.name}")
+    IO.puts("🔗 RTMP URL: #{ingress.url}")
+    IO.puts("🔑 Stream Key: #{ingress.stream_key}")
+    IO.puts("🏠 Room: #{ingress.room_name}")
+    IO.puts("👤 Participant: #{ingress.participant_identity}")
+    IO.puts("🎭 Display Name: #{ingress.participant_name}")
+    IO.puts("📋 Metadata: #{ingress.participant_metadata}")
+    IO.puts("⚙️  Transcoding: #{ingress.enable_transcoding}")
+    IO.puts("=" |> String.duplicate(50))
+    
+  {:error, reason} ->
+    IO.puts("❌ Failed to create RTMP ingress: #{inspect(reason)}")
+end
+```
+
+## OBS Studio Configuration Guide
+
+Now that we have our RTMP endpoint, let's set up OBS Studio to stream to it:
+
+```elixir
+ingress = Process.get(:rtmp_ingress)
+
+if ingress do
+  IO.puts("🎥 OBS Studio Configuration Guide")
+  IO.puts("=" |> String.duplicate(40))
+  IO.puts("")
+  IO.puts("1️⃣ Open OBS Studio")
+  IO.puts("")
+  IO.puts("2️⃣ Go to Settings → Stream")
+  IO.puts("")
+  IO.puts("3️⃣ Configure the following settings:")
+  IO.puts("   Service: Custom")
+  IO.puts("   Server: #{ingress.url}")
+  IO.puts("   Stream Key: #{ingress.stream_key}")
+  IO.puts("")
+  IO.puts("4️⃣ Recommended encoding settings:")
+  IO.puts("   Encoder: x264")
+  IO.puts("   Rate Control: CBR") 
+  IO.puts("   Bitrate: 2500 Kbps (adjust based on your upload speed)")
+  IO.puts("   Keyframe Interval: 2 seconds")
+  IO.puts("")
+  IO.puts("5️⃣ Audio settings:")
+  IO.puts("   Sample Rate: 48 kHz")
+  IO.puts("   Channels: Stereo")
+  IO.puts("   Bitrate: 160 Kbps")
+  IO.puts("")
+  IO.puts("6️⃣ Click 'Start Streaming' in OBS to begin!")
+  IO.puts("")
+  IO.puts("⚠️  Make sure your room '#{ingress.room_name}' is created in LiveKit")
+else
+  IO.puts("⚠️  Please create an RTMP ingress first")
+end
+```
+
+## FFmpeg Command Generation
+
+For programmatic streaming, let's generate FFmpeg commands:
+
+```elixir
+# FFmpeg command generator
+ffmpeg_form = Kino.Control.form(
+  [
+    input_source: Kino.Input.select("Input Source", [
+      {"Test Pattern (color bars)", :test_pattern},
+      {"Video File", :file},
+      {"Webcam", :webcam},
+      {"Screen Capture", :screen}
+    ]),
+    video_file_path: Kino.Input.text("Video File Path (if file selected)", default: "/path/to/video.mp4"),
+    video_bitrate: Kino.Input.number("Video Bitrate (kbps)", default: 2500),
+    audio_bitrate: Kino.Input.number("Audio Bitrate (kbps)", default: 160),
+    framerate: Kino.Input.number("Frame Rate (fps)", default: 30),
+    resolution: Kino.Input.select("Resolution", [
+      {"1920x1080 (1080p)", "1920x1080"},
+      {"1280x720 (720p)", "1280x720"},  
+      {"854x480 (480p)", "854x480"}
+    ])
+  ],
+  submit: "Generate FFmpeg Command"
+)
+```
+
+```elixir
+# Generate and display FFmpeg commands
+ffmpeg_params = Kino.Control.read(ffmpeg_form)
+ingress = Process.get(:rtmp_ingress)
+
+if ingress do
+  # Base FFmpeg parameters
+  base_cmd = "ffmpeg"
+  
+  # Input source configuration
+  input_cmd = case ffmpeg_params.input_source do
+    :test_pattern ->
+      "-f lavfi -i testsrc2=size=#{ffmpeg_params.resolution}:rate=#{ffmpeg_params.framerate} -f lavfi -i sine=frequency=1000:sample_rate=48000"
+      
+    :file ->
+      "-i \"#{ffmpeg_params.video_file_path}\""
+      
+    :webcam ->
+      # macOS/Linux webcam (adjust device as needed)
+      "-f avfoundation -i \"0:0\"" # macOS
+      # For Linux: "-f v4l2 -i /dev/video0 -f alsa -i default"
+      
+    :screen ->
+      # macOS screen capture
+      "-f avfoundation -i \"1:0\"" # macOS (screen 1, audio device 0)
+      # For Linux: "-f x11grab -i :0.0"
+  end
+  
+  # Video encoding settings
+  video_cmd = "-c:v libx264 -preset veryfast -tune zerolatency -b:v #{ffmpeg_params.video_bitrate}k -maxrate #{ffmpeg_params.video_bitrate * 1.2}k -bufsize #{ffmpeg_params.video_bitrate * 2}k -pix_fmt yuv420p -g #{ffmpeg_params.framerate * 2} -r #{ffmpeg_params.framerate}"
+  
+  # Audio encoding settings
+  audio_cmd = "-c:a aac -b:a #{ffmpeg_params.audio_bitrate}k -ar 48000 -ac 2"
+  
+  # RTMP output settings
+  output_cmd = "-f flv \"#{ingress.url}/#{ingress.stream_key}\""
+  
+  # Complete command
+  complete_command = "#{base_cmd} #{input_cmd} #{video_cmd} #{audio_cmd} #{output_cmd}"
+  
+  IO.puts("🔧 Generated FFmpeg Command:")
+  IO.puts("=" |> String.duplicate(60))
+  IO.puts("")
+  IO.puts(complete_command)
+  IO.puts("")
+  IO.puts("📋 Copy and paste this command into your terminal to start streaming!")
+  IO.puts("")
+  IO.puts("💡 Additional FFmpeg Tips:")
+  IO.puts("   • Add -loglevel info for detailed logging")
+  IO.puts("   • Use -t 60 to limit stream to 60 seconds for testing")
+  IO.puts("   • Add -re flag before input to read at native frame rate")
+  IO.puts("   • Use -threads 0 to auto-detect optimal thread count")
+  
+else
+  IO.puts("⚠️  Please create an RTMP ingress first")
+end
+```
+
+## Stream Monitoring and Health Check
+
+Let's monitor our RTMP stream and check its health:
+
+```elixir
+# Stream monitoring function
+defmodule StreamMonitor do
+  def check_stream_status(client, ingress_id) do
+    case Livekit.IngressServiceClient.list_ingress(client) do
+      {:ok, response} ->
+        ingress = Enum.find(response.items, fn i -> i.ingress_id == ingress_id end)
+        
+        if ingress do
+          status = ingress.state && ingress.state.status
+          
+          status_info = case status do
+            :ENDPOINT_INACTIVE -> {"🔴", "Inactive - No stream detected"}
+            :ENDPOINT_BUFFERING -> {"🟡", "Buffering - Stream starting up"}
+            :ENDPOINT_PUBLISHING -> {"🟢", "Publishing - Stream is live!"}
+            :ENDPOINT_ERROR -> {"❌", "Error - Stream encountered issues"}
+            :ENDPOINT_COMPLETE -> {"✅", "Complete - Stream finished"}
+            _ -> {"⚪", "Unknown status"}
+          end
+          
+          {emoji, description} = status_info
+          
+          %{
+            status: status,
+            emoji: emoji,
+            description: description,
+            ingress: ingress
+          }
+        else
+          {:error, "Ingress not found"}
+        end
+        
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+end
+
+# Monitor current stream
+ingress = Process.get(:rtmp_ingress)
+client = Process.get(:client)
+
+if ingress do
+  case StreamMonitor.check_stream_status(client, ingress.ingress_id) do
+    %{emoji: emoji, description: desc, ingress: current_ingress} ->
+      IO.puts("📊 Stream Status Monitor")
+      IO.puts("=" |> String.duplicate(30))
+      IO.puts("#{emoji} Status: #{desc}")
+      IO.puts("🏷️  Name: #{current_ingress.name}")
+      IO.puts("🆔 ID: #{current_ingress.ingress_id}")
+      IO.puts("🏠 Room: #{current_ingress.room_name}")
+      IO.puts("👤 Participant: #{current_ingress.participant_identity}")
+      
+      if current_ingress.state do
+        state = current_ingress.state
+        IO.puts("")
+        IO.puts("📈 Stream Details:")
+        if state.started_at && state.started_at > 0 do
+          started_time = DateTime.from_unix!(state.started_at, :millisecond)
+          IO.puts("   ⏰ Started: #{DateTime.to_string(started_time)}")
+        end
+        
+        if state.ended_at && state.ended_at > 0 do
+          ended_time = DateTime.from_unix!(state.ended_at, :millisecond)
+          IO.puts("   🏁 Ended: #{DateTime.to_string(ended_time)}")
+        end
+        
+        if state.error && state.error != "" do
+          IO.puts("   ⚠️  Error: #{state.error}")
+        end
+      end
+      
+    {:error, reason} ->
+      IO.puts("❌ Failed to check stream status: #{inspect(reason)}")
+  end
+else
+  IO.puts("⚠️  No RTMP ingress to monitor. Please create one first.")
+end
+```
+
+## Real-time Stream Monitoring
+
+Let's create a real-time monitoring widget that refreshes automatically:
+
+```elixir
+# Create a monitoring frame that updates every 5 seconds
+monitoring_frame = Kino.Frame.new()
+
+# Monitoring task
+monitoring_task = Task.async(fn ->
+  ingress = Process.get(:rtmp_ingress)
+  client = Process.get(:client)
+  
+  if ingress && client do
+    Enum.each(1..12, fn iteration -> # Monitor for 1 minute (12 * 5 seconds)
+      timestamp = DateTime.utc_now() |> DateTime.to_string()
+      
+      content = case StreamMonitor.check_stream_status(client, ingress.ingress_id) do
+        %{emoji: emoji, description: desc, ingress: current_ingress} ->
+          """
+          ## 📊 Live Stream Monitor (Update ##{iteration})
+          **Last Update:** #{timestamp}
+          
+          #{emoji} **Status:** #{desc}
+          - **Stream ID:** #{current_ingress.ingress_id}
+          - **Room:** #{current_ingress.room_name}
+          - **Participant:** #{current_ingress.participant_identity}
+          
+          ### Connection Details:
+          - **RTMP URL:** `#{current_ingress.url}`
+          - **Stream Key:** `#{current_ingress.stream_key}`
+          
+          ### Quick Actions:
+          - Start your OBS/FFmpeg stream now!
+          - Check that your room exists in LiveKit
+          - Verify your network connection
+          """
+          
+        {:error, reason} ->
+          """
+          ## ❌ Monitoring Error (Update ##{iteration})
+          **Last Update:** #{timestamp}
+          
+          Failed to check stream status: #{inspect(reason)}
+          """
+      end
+      
+      Kino.Frame.render(monitoring_frame, Kino.Markdown.new(content))
+      Process.sleep(5000) # Wait 5 seconds
+    end)
+    
+    # Final update
+    Kino.Frame.render(monitoring_frame, Kino.Markdown.new("""
+    ## 📊 Monitoring Complete
+    **Monitoring session finished.** 
+    
+    Re-run this cell to start a new monitoring session.
+    """))
+  else
+    Kino.Frame.render(monitoring_frame, Kino.Markdown.new("""
+    ## ⚠️  Monitoring Not Available
+    Please create an RTMP ingress first.
+    """))
+  end
+end)
+
+monitoring_frame
+```
+
+## Advanced RTMP Configuration
+
+Let's explore advanced RTMP ingress configurations:
+
+```elixir
+# Advanced configuration form
+advanced_form = Kino.Control.form(
+  [
+    stream_name: Kino.Input.text("Advanced Stream Name", default: "advanced-rtmp-#{System.system_time(:second)}"),
+    enable_transcoding: Kino.Input.checkbox("Enable Video Transcoding", default: true),
+    participant_name: Kino.Input.text("Display Name", default: "Advanced Streamer"),
+    metadata: Kino.Input.textarea("Custom Metadata (JSON)", default: """
+{
+  "streamer_type": "professional",
+  "camera_model": "Sony A7S III",
+  "streaming_software": "OBS Studio",
+  "bitrate_target": "4000kbps",
+  "encoding": "x264"
+}""")
+  ],
+  submit: "Create Advanced RTMP Ingress"
+)
+```
+
+```elixir
+# Create advanced RTMP ingress
+advanced_params = Kino.Control.read(advanced_form)
+client = Process.get(:client)
+config = Process.get(:config)
+
+# Parse and validate metadata JSON
+metadata = try do
+  Jason.decode!(advanced_params.metadata)
+  advanced_params.metadata
+rescue
+  _ -> "{\"note\": \"Invalid JSON provided, using fallback\"}"
+end
+
+request = %Livekit.CreateIngressRequest{
+  input_type: :RTMP_INPUT,
+  name: advanced_params.stream_name,
+  room_name: config.room_name,
+  participant_identity: "advanced-streamer-#{System.system_time(:second)}",
+  participant_name: advanced_params.participant_name,
+  participant_metadata: metadata,
+  enable_transcoding: advanced_params.enable_transcoding
+}
+
+case Livekit.IngressServiceClient.create_ingress(client, request) do
+  {:ok, ingress} ->
+    IO.puts("🚀 Advanced RTMP Ingress Created!")
+    IO.puts("=" |> String.duplicate(50))
+    IO.puts("🆔 ID: #{ingress.ingress_id}")
+    IO.puts("🏷️  Name: #{ingress.name}")
+    IO.puts("🔗 RTMP URL: #{ingress.url}")
+    IO.puts("🔑 Stream Key: #{ingress.stream_key}")
+    IO.puts("👤 Identity: #{ingress.participant_identity}")
+    IO.puts("🎭 Display Name: #{ingress.participant_name}")
+    IO.puts("⚙️  Transcoding: #{ingress.enable_transcoding}")
+    IO.puts("")
+    IO.puts("📋 Metadata:")
+    IO.puts(metadata)
+    
+  {:error, reason} ->
+    IO.puts("❌ Failed to create advanced RTMP ingress: #{inspect(reason)}")
+end
+```
+
+## Troubleshooting Common RTMP Issues
+
+```elixir
+IO.puts("🛠️  RTMP Troubleshooting Guide")
+IO.puts("=" |> String.duplicate(40))
+IO.puts("")
+
+IO.puts("🔍 **Common Issues and Solutions:**")
+IO.puts("")
+
+IO.puts("1️⃣ **Connection Refused / Can't Connect**")
+IO.puts("   • Verify RTMP URL and stream key are correct")
+IO.puts("   • Check firewall settings (port 1935 for RTMP)")
+IO.puts("   • Ensure LiveKit server is accessible")
+IO.puts("   • Try using RTMPS (secure RTMP) if available")
+IO.puts("")
+
+IO.puts("2️⃣ **Stream Keeps Disconnecting**")
+IO.puts("   • Check network stability and bandwidth")
+IO.puts("   • Reduce bitrate in OBS/FFmpeg")
+IO.puts("   • Increase keyframe interval (2-4 seconds)")
+IO.puts("   • Use CBR (Constant Bitrate) instead of VBR")
+IO.puts("")
+
+IO.puts("3️⃣ **Poor Video Quality**")
+IO.puts("   • Increase video bitrate (balance with upload speed)")
+IO.puts("   • Check CPU usage (use hardware encoder if available)")
+IO.puts("   • Verify resolution and framerate settings")
+IO.puts("   • Use appropriate encoder preset (fast/medium/slow)")
+IO.puts("")
+
+IO.puts("4️⃣ **Audio Issues**")
+IO.puts("   • Set audio sample rate to 48kHz")
+IO.puts("   • Use stereo audio (2 channels)")
+IO.puts("   • Check audio bitrate (128-320 kbps)")
+IO.puts("   • Verify audio source is not muted/disabled")
+IO.puts("")
+
+IO.puts("5️⃣ **Ingress Shows as Inactive**")
+IO.puts("   • Confirm stream is actually running in OBS/FFmpeg")
+IO.puts("   • Check if target room exists in LiveKit")
+IO.puts("   • Verify participant identity is unique")
+IO.puts("   • Wait 10-15 seconds for status to update")
+IO.puts("")
+
+IO.puts("🔧 **Debug Commands:**")
+IO.puts("")
+IO.puts("**Test with FFmpeg:**")
+IO.puts("```bash")
+IO.puts("ffmpeg -re -f lavfi -i testsrc2 -f lavfi -i sine \\")
+IO.puts("  -c:v libx264 -preset veryfast -b:v 1000k \\")
+IO.puts("  -c:a aac -b:a 128k \\")
+IO.puts("  -f flv rtmp://your-rtmp-url/your-stream-key")
+IO.puts("```")
+IO.puts("")
+
+IO.puts("**Check network connectivity:**")
+IO.puts("```bash")
+IO.puts("telnet your-livekit-server.com 1935")
+IO.puts("```")
+```
+
+## Performance Optimization Tips
+
+```elixir
+IO.puts("⚡ RTMP Performance Optimization")
+IO.puts("=" |> String.duplicate(40))
+IO.puts("")
+
+IO.puts("🎯 **Bitrate Guidelines:**")
+IO.puts("   • 1080p 30fps: 4000-6000 kbps")
+IO.puts("   • 720p 30fps: 2000-4000 kbps") 
+IO.puts("   • 480p 30fps: 1000-2000 kbps")
+IO.puts("   • Audio: 128-320 kbps")
+IO.puts("")
+
+IO.puts("🔧 **OBS Studio Optimization:**")
+IO.puts("   • Use x264 encoder with 'veryfast' preset")
+IO.puts("   • Enable hardware encoding if available (NVENC/QuickSync)")
+IO.puts("   • Set keyframe interval to 2 seconds")
+IO.puts("   • Use CBR rate control")
+IO.puts("   • Enable 'Enforce streaming service settings'")
+IO.puts("")
+
+IO.puts("🌐 **Network Optimization:**")
+IO.puts("   • Use wired connection when possible")
+IO.puts("   • Ensure upload speed is 1.5x your bitrate")
+IO.puts("   • Close bandwidth-heavy applications")
+IO.puts("   • Consider using QoS on your router")
+IO.puts("")
+
+IO.puts("💻 **System Optimization:**")
+IO.puts("   • Close unnecessary applications")
+IO.puts("   • Monitor CPU and GPU usage")
+IO.puts("   • Use dedicated streaming PC if possible")
+IO.puts("   • Ensure adequate cooling/thermal management")
+```
+
+## Cleanup and Resource Management
+
+```elixir
+# Cleanup form for managing ingress endpoints
+cleanup_form = Kino.Control.form(
+  [
+    action: Kino.Input.select("Cleanup Action", [
+      {"List all my ingress endpoints", :list},
+      {"Delete specific ingress", :delete_specific},
+      {"Delete all test ingress endpoints", :delete_test_ingress}
+    ]),
+    ingress_id_to_delete: Kino.Input.text("Ingress ID to delete (if specific)", default: "")
+  ],
+  submit: "Execute Cleanup"
+)
+```
+
+```elixir
+# Execute cleanup operations
+cleanup_params = Kino.Control.read(cleanup_form)
+client = Process.get(:client)
+
+case cleanup_params.action do
+  :list ->
+    case Livekit.IngressServiceClient.list_ingress(client) do
+      {:ok, response} ->
+        IO.puts("📋 All Ingress Endpoints (#{length(response.items)} total):")
+        for ingress <- response.items do
+          status_emoji = case ingress.state && ingress.state.status do
+            :ENDPOINT_PUBLISHING -> "🟢"
+            :ENDPOINT_INACTIVE -> "🔴"
+            :ENDPOINT_BUFFERING -> "🟡"
+            _ -> "⚪"
+          end
+          
+          IO.puts("  #{status_emoji} #{ingress.name}")
+          IO.puts("     ID: #{ingress.ingress_id}")
+          IO.puts("     Type: #{ingress.input_type}")
+          IO.puts("     Room: #{ingress.room_name}")
+          IO.puts("")
+        end
+      {:error, reason} ->
+        IO.puts("❌ Failed to list ingress: #{inspect(reason)}")
+    end
+    
+  :delete_specific ->
+    if cleanup_params.ingress_id_to_delete != "" do
+      request = %Livekit.DeleteIngressRequest{ingress_id: cleanup_params.ingress_id_to_delete}
+      case Livekit.IngressServiceClient.delete_ingress(client, request) do
+        {:ok, deleted} ->
+          IO.puts("✅ Deleted ingress: #{deleted.name} (#{deleted.ingress_id})")
+        {:error, reason} ->
+          IO.puts("❌ Failed to delete: #{inspect(reason)}")
+      end
+    else
+      IO.puts("⚠️  Please provide an ingress ID to delete")
+    end
+    
+  :delete_test_ingress ->
+    case Livekit.IngressServiceClient.list_ingress(client) do
+      {:ok, response} ->
+        test_ingress = Enum.filter(response.items, fn ingress ->
+          String.contains?(ingress.name, "demo") || 
+          String.contains?(ingress.name, "test") ||
+          String.contains?(ingress.name, "rtmp") ||
+          String.contains?(ingress.name, "obs")
+        end)
+        
+        if Enum.empty?(test_ingress) do
+          IO.puts("✨ No test ingress endpoints found to clean up")
+        else
+          IO.puts("🧹 Found #{length(test_ingress)} test ingress endpoints to clean up:")
+          
+          for ingress <- test_ingress do
+            request = %Livekit.DeleteIngressRequest{ingress_id: ingress.ingress_id}
+            case Livekit.IngressServiceClient.delete_ingress(client, request) do
+              {:ok, _} ->
+                IO.puts("  ✅ Deleted: #{ingress.name}")
+              {:error, reason} ->
+                IO.puts("  ❌ Failed to delete #{ingress.name}: #{inspect(reason)}")
+            end
+          end
+        end
+        
+      {:error, reason} ->
+        IO.puts("❌ Failed to list ingress for cleanup: #{inspect(reason)}")
+    end
+end
+```
+
+## Summary and Next Steps
+
+```elixir
+IO.puts("🎉 RTMP Streaming Tutorial Complete!")
+IO.puts("=" |> String.duplicate(40))
+IO.puts("")
+
+IO.puts("✅ **What You've Accomplished:**")
+IO.puts("   • Created RTMP ingress endpoints")
+IO.puts("   • Generated OBS Studio configurations")
+IO.puts("   • Built FFmpeg streaming commands")
+IO.puts("   • Monitored stream health in real-time")
+IO.puts("   • Learned troubleshooting techniques")
+IO.puts("   • Optimized streaming performance")
+IO.puts("")
+
+IO.puts("🚀 **Recommended Next Steps:**")
+IO.puts("   1. Try the WebRTC Ingress Livebook for low-latency streaming")
+IO.puts("   2. Explore File Processing Livebook for batch video ingestion")
+IO.puts("   3. Set up automated ingress management workflows")
+IO.puts("   4. Implement custom monitoring and alerting")
+IO.puts("")
+
+IO.puts("📚 **Additional Resources:**")
+IO.puts("   • OBS Studio: https://obsproject.com/")
+IO.puts("   • FFmpeg Documentation: https://ffmpeg.org/documentation.html")
+IO.puts("   • LiveKit RTMP Guide: https://docs.livekit.io/ingress/rtmp/")
+IO.puts("   • RTMP Specification: https://rtmp.veriskope.com/docs/spec/")
+```

@@ -24,14 +24,14 @@ defmodule Livekit.WebhookReceiver do
     with {:ok, body, conn} <- Plug.Conn.read_body(conn),
          auth_header = Plug.Conn.get_req_header(conn, "authorization"),
          {:ok, event} <- Livekit.WebhookReceiver.receive(body, auth_header) do
-      
+
       # Handle the webhook event
       case event.event do
         "room_started" -> handle_room_started(event)
         "participant_joined" -> handle_participant_joined(event)
         # ... handle other events
       end
-      
+
       send_resp(conn, 200, "")
     else
       {:error, reason} ->
@@ -43,8 +43,8 @@ defmodule Livekit.WebhookReceiver do
   ```
   """
 
-  alias Livekit.WebhookEvent
   alias Livekit.AccessToken
+  alias Livekit.WebhookEvent
 
   @doc """
   Validates and decodes a webhook event.
