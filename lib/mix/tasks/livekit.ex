@@ -29,6 +29,12 @@ defmodule Mix.Tasks.Livekit do
   * `remove-agent` - Remove an agent from a room
   * `list-agents` - List agents in a room
 
+  Ingress Management:
+  * `create-ingress` - Create a new ingress endpoint
+  * `update-ingress` - Update an existing ingress endpoint
+  * `list-ingress` - List ingress endpoints
+  * `delete-ingress` - Delete an ingress endpoint
+
   Webhooks:
   * `verify-webhook` - Verify a webhook payload with a given token
   * `generate-webhook-config` - Generate webhook configuration for config.exs
@@ -54,6 +60,15 @@ defmodule Mix.Tasks.Livekit do
   * `--video-bitrate` - Video bitrate in bps (default: 3000000)
   * `--track-id` - Track ID for track-specific operations
   * `--egress-id` - Egress ID for stopping operations
+
+  Ingress Options:
+  * `--ingress-id` - Ingress ID for update/delete operations
+  * `--input-type` - Input type (RTMP, WHIP, URL)
+  * `--source-url` - Source URL for URL input type
+  * `--participant-metadata` - Metadata for the publishing participant
+  * `--enable-transcoding` - Enable transcoding (true/false)
+  * `--audio-preset` - Audio encoding preset
+  * `--video-preset` - Video encoding preset
 
   Agent Options:
   * `--prompt` - Initial prompt for the agent (required for add-agent)
@@ -98,6 +113,24 @@ defmodule Mix.Tasks.Livekit do
 
       # Generate webhook configuration
       mix livekit generate-webhook-config --api-key devkey --api-secret secret --webhook-url https://example.com/webhook
+
+      # Create RTMP ingress
+      mix livekit create-ingress --api-key devkey --api-secret secret --url http://localhost:7880 --input-type RTMP --name my-stream --room my-room --identity streamer
+
+      # Create WebRTC ingress
+      mix livekit create-ingress --api-key devkey --api-secret secret --url http://localhost:7880 --input-type WHIP --name whip-stream --room my-room --identity whip-user
+
+      # Create URL ingress
+      mix livekit create-ingress --api-key devkey --api-secret secret --url http://localhost:7880 --input-type URL --source-url https://example.com/stream.m3u8 --name url-stream --room my-room --identity url-user
+
+      # List ingress endpoints
+      mix livekit list-ingress --api-key devkey --api-secret secret --url http://localhost:7880
+
+      # Update ingress
+      mix livekit update-ingress --api-key devkey --api-secret secret --url http://localhost:7880 --ingress-id ingress_123 --name updated-stream
+
+      # Delete ingress
+      mix livekit delete-ingress --api-key devkey --api-secret secret --url http://localhost:7880 --ingress-id ingress_123
   """
 
   @impl Mix.Task
@@ -141,7 +174,14 @@ defmodule Mix.Tasks.Livekit do
           prompt: :string,
           payload: :string,
           token: :string,
-          webhook_url: :string
+          webhook_url: :string,
+          ingress_id: :string,
+          input_type: :string,
+          source_url: :string,
+          participant_metadata: :string,
+          enable_transcoding: :boolean,
+          audio_preset: :string,
+          video_preset: :string
         ],
         aliases: [
           k: :api_key,
@@ -187,6 +227,10 @@ defmodule Mix.Tasks.Livekit do
   defp handle_command("add-agent", opts), do: handle_agent_commands("add-agent", opts)
   defp handle_command("remove-agent", opts), do: handle_agent_commands("remove-agent", opts)
   defp handle_command("list-agents", opts), do: handle_agent_commands("list-agents", opts)
+  defp handle_command("create-ingress", opts), do: handle_ingress_commands("create-ingress", opts)
+  defp handle_command("update-ingress", opts), do: handle_ingress_commands("update-ingress", opts)
+  defp handle_command("list-ingress", opts), do: handle_ingress_commands("list-ingress", opts)
+  defp handle_command("delete-ingress", opts), do: handle_ingress_commands("delete-ingress", opts)
   defp handle_command("verify-webhook", opts), do: handle_verify_webhook(opts)
   defp handle_command("generate-webhook-config", opts), do: handle_generate_webhook_config(opts)
   defp handle_command(_, _), do: print_help()
@@ -693,6 +737,194 @@ defmodule Mix.Tasks.Livekit do
     DateTime.from_unix!(timestamp)
     |> DateTime.to_string()
   end
+
+  defp handle_ingress_commands(command, opts) do
+    case command do
+      "create-ingress" -> handle_create_ingress(opts)
+      "update-ingress" -> handle_update_ingress(opts)
+      "list-ingress" -> handle_list_ingress(opts)
+      "delete-ingress" -> handle_delete_ingress(opts)
+      _ -> :unknown_command
+    end
+  end
+
+  defp handle_create_ingress(opts) do
+    with {:ok, client} <- get_ingress_client(opts),
+         {:ok, input_type_atom} <- parse_input_type(opts[:input_type]),
+         {:ok, name} <- get_opt(opts, :name),
+         {:ok, room_name} <- get_opt(opts, :room),
+         {:ok, identity} <- get_opt(opts, :identity) do
+      request = %Livekit.CreateIngressRequest{
+        input_type: input_type_atom,
+        name: name,
+        room_name: room_name,
+        participant_identity: identity,
+        participant_name: opts[:name],
+        url: opts[:source_url] || "",
+        participant_metadata: opts[:participant_metadata] || "",
+        enable_transcoding: opts[:enable_transcoding]
+      }
+
+      request = add_encoding_options(request, opts)
+
+      case Livekit.IngressServiceClient.create_ingress(client, request) do
+        {:ok, ingress} ->
+          IO.puts("✅ Ingress created successfully!")
+          IO.puts("Ingress ID: #{ingress.ingress_id}")
+          IO.puts("Stream URL: #{ingress.url}")
+          if ingress.stream_key && ingress.stream_key != "" do
+            IO.puts("Stream Key: #{ingress.stream_key}")
+          end
+          IO.puts("Input Type: #{ingress.input_type}")
+          IO.puts("Room: #{ingress.room_name}")
+          IO.puts("Participant: #{ingress.participant_identity}")
+
+        {:error, error} ->
+          IO.puts("❌ Error creating ingress: #{inspect(error)}")
+      end
+    else
+      {:error, reason} -> IO.puts("❌ Error: #{reason}")
+      _ -> IO.puts("❌ Invalid arguments for create-ingress")
+    end
+  end
+
+  defp handle_update_ingress(opts) do
+    with {:ok, client} <- get_ingress_client(opts),
+         {:ok, ingress_id} <- get_opt(opts, :ingress_id) do
+      request = %Livekit.UpdateIngressRequest{
+        ingress_id: ingress_id,
+        name: opts[:name],
+        room_name: opts[:room],
+        participant_identity: opts[:identity],
+        participant_name: opts[:name],
+        participant_metadata: opts[:participant_metadata],
+        enable_transcoding: opts[:enable_transcoding]
+      }
+
+      request = add_update_encoding_options(request, opts)
+
+      case Livekit.IngressServiceClient.update_ingress(client, request) do
+        {:ok, ingress} ->
+          IO.puts("✅ Ingress updated successfully!")
+          IO.puts("Ingress ID: #{ingress.ingress_id}")
+          IO.puts("Name: #{ingress.name}")
+          IO.puts("Room: #{ingress.room_name}")
+          IO.puts("Participant: #{ingress.participant_identity}")
+
+        {:error, error} ->
+          IO.puts("❌ Error updating ingress: #{inspect(error)}")
+      end
+    else
+      {:error, reason} -> IO.puts("❌ Error: #{reason}")
+      _ -> IO.puts("❌ Invalid arguments for update-ingress")
+    end
+  end
+
+  defp handle_list_ingress(opts) do
+    with {:ok, client} <- get_ingress_client(opts) do
+      request = %Livekit.ListIngressRequest{
+        room_name: opts[:room],
+        ingress_id: opts[:ingress_id]
+      }
+
+      case Livekit.IngressServiceClient.list_ingress(client, request) do
+        {:ok, response} ->
+          if Enum.empty?(response.items) do
+            IO.puts("No ingress endpoints found.")
+          else
+            IO.puts("📡 Ingress Endpoints:")
+            IO.puts("")
+            
+            Enum.each(response.items, fn ingress ->
+              IO.puts("  ID: #{ingress.ingress_id}")
+              IO.puts("  Name: #{ingress.name}")
+              IO.puts("  Type: #{ingress.input_type}")
+              IO.puts("  URL: #{ingress.url}")
+              IO.puts("  Room: #{ingress.room_name}")
+              IO.puts("  Participant: #{ingress.participant_identity}")
+              IO.puts("  Status: #{ingress.state && ingress.state.status}")
+              IO.puts("  Enabled: #{ingress.enabled}")
+              IO.puts("")
+            end)
+          end
+
+        {:error, error} ->
+          IO.puts("❌ Error listing ingress: #{inspect(error)}")
+      end
+    else
+      {:error, reason} -> IO.puts("❌ Error: #{reason}")
+    end
+  end
+
+  defp handle_delete_ingress(opts) do
+    with {:ok, client} <- get_ingress_client(opts),
+         {:ok, ingress_id} <- get_opt(opts, :ingress_id) do
+      request = %Livekit.DeleteIngressRequest{
+        ingress_id: ingress_id
+      }
+
+      case Livekit.IngressServiceClient.delete_ingress(client, request) do
+        {:ok, ingress} ->
+          IO.puts("✅ Ingress deleted successfully!")
+          IO.puts("Deleted Ingress ID: #{ingress.ingress_id}")
+          IO.puts("Name: #{ingress.name}")
+
+        {:error, error} ->
+          IO.puts("❌ Error deleting ingress: #{inspect(error)}")
+      end
+    else
+      {:error, reason} -> IO.puts("❌ Error: #{reason}")
+      _ -> IO.puts("❌ Invalid arguments for delete-ingress")
+    end
+  end
+
+  defp get_ingress_client(opts) do
+    with {:ok, url} <- get_opt(opts, :url),
+         {:ok, api_key} <- get_opt(opts, :api_key),
+         {:ok, api_secret} <- get_opt(opts, :api_secret) do
+      Livekit.IngressServiceClient.new(url, api_key, api_secret)
+    else
+      {:error, reason} -> {:error, reason}
+      _ -> {:error, "Missing required options for ingress client"}
+    end
+  end
+
+  defp parse_input_type(nil), do: {:error, "input-type is required"}
+  defp parse_input_type("RTMP"), do: {:ok, :RTMP_INPUT}
+  defp parse_input_type("WHIP"), do: {:ok, :WHIP_INPUT} 
+  defp parse_input_type("URL"), do: {:ok, :URL_INPUT}
+  defp parse_input_type(type), do: {:error, "Invalid input type '#{type}'. Valid types: RTMP, WHIP, URL"}
+
+  defp add_encoding_options(request, opts) do
+    audio_options = build_audio_options(opts)
+    video_options = build_video_options(opts)
+
+    request
+    |> maybe_add_field(:audio, audio_options)
+    |> maybe_add_field(:video, video_options)
+  end
+
+  defp add_update_encoding_options(request, opts) do
+    audio_options = build_audio_options(opts)
+    video_options = build_video_options(opts)
+
+    request
+    |> maybe_add_field(:audio, audio_options)
+    |> maybe_add_field(:video, video_options)
+  end
+
+  defp build_audio_options(_opts) do
+    # TODO: Implement audio options when needed
+    nil
+  end
+
+  defp build_video_options(_opts) do
+    # TODO: Implement video options when needed  
+    nil
+  end
+
+  defp maybe_add_field(struct, _field, nil), do: struct
+  defp maybe_add_field(struct, field, value), do: Map.put(struct, field, value)
 
   defp print_help do
     IO.puts(@moduledoc)
