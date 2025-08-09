@@ -149,6 +149,8 @@ See example Livebooks in `examples/livebooks/`:
 - `ingress_file_processing.livemd`
 - `ingress_troubleshooting.livemd`
 
+**Docker Setup**: For a complete local testing environment with LiveKit + Ingress + Redis, see `examples/docker/` for a ready-to-use Docker Compose setup.
+
 #### Room Agents (CLI)
 
 ```bash

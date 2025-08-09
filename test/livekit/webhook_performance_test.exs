@@ -7,8 +7,8 @@ defmodule Livekit.WebhookPerformanceTest do
 
   import Mock
 
-  @tag :performance
   describe "webhook performance" do
+    @describetag :performance
     test "handles large webhook payloads efficiently" do
       # Generate a large room with many participants
       participants =
