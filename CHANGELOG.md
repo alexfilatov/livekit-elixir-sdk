@@ -1,5 +1,45 @@
 # Changelog
 
+## [0.1.2] - 2025-01-08
+
+### Added
+
+- **Comprehensive Ingress Service Documentation**: Complete interactive Livebook tutorials covering all ingress types
+  - `ingress_basic_setup.livemd` - Basic ingress service usage and concepts
+  - `ingress_rtmp_streaming.livemd` - Complete RTMP streaming tutorial with OBS/FFmpeg integration
+  - `ingress_webrtc_input.livemd` - WebRTC/WHIP streaming setup with browser integration
+  - `ingress_file_processing.livemd` - File and URL processing workflows with batch operations
+  - `ingress_management.livemd` - Complete lifecycle management with advanced monitoring
+  - `ingress_troubleshooting.livemd` - Comprehensive debugging and troubleshooting guide
+- Interactive forms and real-time monitoring capabilities in Livebook examples
+- Advanced ingress management workflows including batch operations and automated cleanup
+- Performance optimization guides and best practices
+- Emergency recovery procedures and systematic troubleshooting methodologies
+
+### Changed
+
+- **BREAKING**: Updated `grpc` dependency from `~> 0.7.0` to `~> 0.10.2`
+- **BREAKING**: Updated `protobuf` dependency from `~> 0.12.0` to `~> 0.14.0`
+- Regenerated all protobuf files with newer protoc-gen-elixir for compatibility
+- Updated GRPC service client APIs to use new library syntax
+- Modified GRPC credential setup for SSL connections
+
+### Fixed
+
+- Eliminated all Elixir deprecation warnings related to map.field notation
+- Fixed FunctionClauseError in GRPC stub method calls
+- Resolved Keyword.merge/2 compatibility issues in GRPC client adapters
+- Fixed test expectations for exception types with newer GRPC library
+- Corrected @describetag usage in performance tests
+- Updated service client connection handling for newer GRPC API
+
+### Updated
+
+- README.md with comprehensive ingress service documentation section
+- Feature matrix to reflect completed ingress documentation and tutorials
+- SDK completion percentage from 60-70% to 70-75%
+- Development roadmap to prioritize ingress service implementation
+
 ## [0.1.1] - 2025-02-17
 
 ### Added
