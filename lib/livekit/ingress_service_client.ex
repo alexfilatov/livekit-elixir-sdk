@@ -56,7 +56,7 @@ defmodule Livekit.IngressServiceClient do
     # Connect with SSL if https
     opts =
       if uri.scheme == "https" do
-        [cred: GRPC.Credential.new(ssl: true)]
+        [cred: GRPC.Credential.new(ssl: [])]
       else
         []
       end
@@ -96,7 +96,7 @@ defmodule Livekit.IngressServiceClient do
       {:ok, ingress} = Livekit.IngressServiceClient.create_ingress(client, request)
   """
   def create_ingress({channel, metadata}, %Livekit.CreateIngressRequest{} = request) do
-    case Ingress.Stub.create_ingress(channel, request, metadata: metadata) do
+    case Ingress.Stub.create_ingress(channel, request, metadata) do
       {:ok, %Livekit.IngressInfo{} = ingress_info} ->
         Logger.info("Created ingress: #{ingress_info.ingress_id}")
         {:ok, ingress_info}
@@ -127,7 +127,7 @@ defmodule Livekit.IngressServiceClient do
   - `{:error, reason}` - On failure
   """
   def update_ingress({channel, metadata}, %Livekit.UpdateIngressRequest{} = request) do
-    case Ingress.Stub.update_ingress(channel, request, metadata: metadata) do
+    case Ingress.Stub.update_ingress(channel, request, metadata) do
       {:ok, %Livekit.IngressInfo{} = ingress_info} ->
         Logger.info("Updated ingress: #{ingress_info.ingress_id}")
         {:ok, ingress_info}
@@ -165,7 +165,7 @@ defmodule Livekit.IngressServiceClient do
       {:ok, response} = Livekit.IngressServiceClient.list_ingress(client, request)
   """
   def list_ingress({channel, metadata}, request \\ %Livekit.ListIngressRequest{}) do
-    case Ingress.Stub.list_ingress(channel, request, metadata: metadata) do
+    case Ingress.Stub.list_ingress(channel, request, metadata) do
       {:ok, %Livekit.ListIngressResponse{} = response} ->
         Logger.info("Listed #{length(response.items)} ingress endpoints")
         {:ok, response}
@@ -199,7 +199,7 @@ defmodule Livekit.IngressServiceClient do
       {:ok, ingress} = Livekit.IngressServiceClient.delete_ingress(client, request)
   """
   def delete_ingress({channel, metadata}, %Livekit.DeleteIngressRequest{} = request) do
-    case Ingress.Stub.delete_ingress(channel, request, metadata: metadata) do
+    case Ingress.Stub.delete_ingress(channel, request, metadata) do
       {:ok, %Livekit.IngressInfo{} = ingress_info} ->
         Logger.info("Deleted ingress: #{ingress_info.ingress_id}")
         {:ok, ingress_info}

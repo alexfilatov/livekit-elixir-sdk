@@ -21,7 +21,7 @@ defmodule Livekit.EgressServiceClient do
     # Connect with SSL if https
     opts =
       if uri.scheme == "https" do
-        [cred: GRPC.Credential.new(ssl: true)]
+        [cred: GRPC.Credential.new(ssl: [])]
       else
         []
       end
@@ -36,27 +36,27 @@ defmodule Livekit.EgressServiceClient do
   Lists all egress operations.
   """
   def list_egress({channel, metadata}, request \\ %Livekit.ListEgressRequest{}) do
-    Egress.Stub.list_egress(channel, request, metadata: metadata)
+    Egress.Stub.list_egress(channel, request, metadata)
   end
 
   @doc """
   Starts a room composite egress.
   """
   def start_room_composite_egress({channel, metadata}, request) do
-    Egress.Stub.start_room_composite_egress(channel, request, metadata: metadata)
+    Egress.Stub.start_room_composite_egress(channel, request, metadata)
   end
 
   @doc """
   Starts a track egress.
   """
   def start_track_egress({channel, metadata}, request) do
-    Egress.Stub.start_track_egress(channel, request, metadata: metadata)
+    Egress.Stub.start_track_egress(channel, request, metadata)
   end
 
   @doc """
   Stops an egress operation.
   """
   def stop_egress({channel, metadata}, request) do
-    Egress.Stub.stop_egress(channel, request, metadata: metadata)
+    Egress.Stub.stop_egress(channel, request, metadata)
   end
 end
