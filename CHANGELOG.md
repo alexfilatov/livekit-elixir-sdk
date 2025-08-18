@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3] - 2025-08-18
+
+### Fixed
+
+- Removed unused `google_protos` and `twirp` dependencies causing module conflicts during mix release
+- Resolved issue #3 - duplicate protobuf modules that were conflicting with protobuf ~> 0.14.0
+
 ## [0.1.2] - 2025-01-08
 
 ### Added

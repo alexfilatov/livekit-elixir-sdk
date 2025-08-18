@@ -1,6 +1,6 @@
 # Livekit Server SDK for Elixir
 
-**⚠️ IMPORTANT DISCLAIMER: This is an early development version (v0.1.1) and is NOT intended for production use. The codebase is in active development, APIs may change without notice, and thorough testing in a production environment has not been conducted. Use at your own risk for development and testing purposes only. We strongly recommend waiting for a stable release before using this in any production environment.**
+**⚠️ IMPORTANT DISCLAIMER: This is an early development version (v0.1.3) and is NOT intended for production use. The codebase is in active development, APIs may change without notice, and thorough testing in a production environment has not been conducted. Use at your own risk for development and testing purposes only. We strongly recommend waiting for a stable release before using this in any production environment.**
 
 This is *not* official Elixir server SDK for [Livekit](https://livekit.io). This SDK allows you to manage rooms and create access tokens from your Elixir backend.
 
