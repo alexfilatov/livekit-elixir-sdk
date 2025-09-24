@@ -82,6 +82,7 @@ defmodule Livekit.RoomServiceClient do
         metadata: Keyword.get(opts, :metadata),
         min_playout_delay: Keyword.get(opts, :min_playout_delay),
         max_playout_delay: Keyword.get(opts, :max_playout_delay),
+        node_id: Keyword.get(opts, :node_id),
         sync_streams: Keyword.get(opts, :sync_streams)
       })
       |> CreateRoomRequest.encode()
