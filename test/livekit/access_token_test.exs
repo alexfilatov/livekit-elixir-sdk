@@ -38,6 +38,15 @@ defmodule Livekit.AccessTokenTest do
     end
   end
 
+  describe "with_name/2" do
+    test "sets the name" do
+      token = AccessToken.new(@api_key, @api_secret)
+      token = AccessToken.with_identity(token, "user123")
+      token = AccessToken.with_name(token, "name123")
+      assert token.name == "name123"
+    end
+  end
+
   describe "add_grant/2" do
     test "adds a grant" do
       token = AccessToken.new(@api_key, @api_secret)
@@ -53,6 +62,7 @@ defmodule Livekit.AccessTokenTest do
       token =
         AccessToken.new(@api_key, @api_secret)
         |> AccessToken.with_identity("user123")
+        |> AccessToken.with_name("name123")
         |> AccessToken.with_ttl(3600)
         |> AccessToken.add_grant(Grants.join_room("room123"))
 
@@ -65,6 +75,17 @@ defmodule Livekit.AccessTokenTest do
       assert claims["iss"] == @api_key
       assert claims["video"]["room"] == "room123"
       assert claims["video"]["roomJoin"] == true
+      assert claims["name"] == "name123"
+    end
+
+    test "uses the identity if name is not set" do
+      token =
+        AccessToken.new(@api_key, @api_secret)
+        |> AccessToken.with_identity("user123")
+
+      jwt = AccessToken.to_jwt(token)
+      {:ok, claims} = Livekit.TokenVerifier.verify(jwt, @api_secret)
+      assert claims["name"] == "user123"
     end
   end
 end
