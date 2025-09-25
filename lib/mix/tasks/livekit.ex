@@ -716,7 +716,7 @@ defmodule Mix.Tasks.Livekit do
   defp get_egress_client(opts) do
     with {:ok, config} <- Livekit.Config.get_validated(opts) do
       try do
-        {:ok, Livekit.EgressServiceClient.new(config.url, config.api_key, config.api_secret)}
+        Livekit.EgressServiceClient.new(config.url, config.api_key, config.api_secret)
       rescue
         error in [UndefinedFunctionError] ->
           {:error, "Failed to connect to egress service: #{inspect(error)}"}

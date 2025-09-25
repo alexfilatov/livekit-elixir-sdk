@@ -8,6 +8,8 @@ defmodule Livekit.EgressServiceClient do
   @doc """
   Creates a new EgressServiceClient.
   """
+  @spec new(url :: binary(), api_key :: binary(), api_secret :: binary()) ::
+          {:ok, {GRPC.Channel.t(), metadata :: map()}} | {:error, String.t()}
   def new(url, api_key, api_secret) when is_binary(url) do
     uri = URI.parse(url)
     host = uri.host || url
