@@ -61,7 +61,7 @@ defmodule Livekit.WebhookReceiver do
   """
   @spec receive(binary(), list(binary()) | binary()) ::
           {:ok, WebhookEvent.t()} | {:error, String.t()}
-  def receive(body, [auth_header | _]) when is_list(auth_header), do: receive(body, auth_header)
+  def receive(body, [auth_header | _]) when is_binary(auth_header), do: receive(body, auth_header)
 
   def receive(body, auth_header) when is_binary(body) and is_binary(auth_header) do
     with {:ok, config} <- get_config(),
