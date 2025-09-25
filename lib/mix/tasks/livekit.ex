@@ -786,7 +786,6 @@ defmodule Mix.Tasks.Livekit do
       end
     else
       {:error, reason} -> IO.puts("❌ Error: #{reason}")
-      _ -> IO.puts("❌ Invalid arguments for create-ingress")
     end
   end
 
@@ -818,7 +817,6 @@ defmodule Mix.Tasks.Livekit do
       end
     else
       {:error, reason} -> IO.puts("❌ Error: #{reason}")
-      _ -> IO.puts("❌ Invalid arguments for update-ingress")
     end
   end
 
@@ -867,23 +865,16 @@ defmodule Mix.Tasks.Livekit do
 
   defp handle_delete_ingress(opts) do
     with {:ok, client} <- get_ingress_client(opts),
-         {:ok, ingress_id} <- get_opt(opts, :ingress_id) do
-      request = %Livekit.DeleteIngressRequest{
-        ingress_id: ingress_id
-      }
-
-      case Livekit.IngressServiceClient.delete_ingress(client, request) do
-        {:ok, ingress} ->
-          IO.puts("✅ Ingress deleted successfully!")
-          IO.puts("Deleted Ingress ID: #{ingress.ingress_id}")
-          IO.puts("Name: #{ingress.name}")
-
-        {:error, error} ->
-          IO.puts("❌ Error deleting ingress: #{inspect(error)}")
-      end
+         {:ok, ingress_id} <- get_opt(opts, :ingress_id),
+         request = %Livekit.DeleteIngressRequest{ingress_id: ingress_id},
+         {:ingress, {:ok, ingress}} <-
+           {:ingress, Livekit.IngressServiceClient.delete_ingress(client, request)} do
+      IO.puts("✅ Ingress deleted successfully!")
+      IO.puts("Deleted Ingress ID: #{ingress.ingress_id}")
+      IO.puts("Name: #{ingress.name}")
     else
       {:error, reason} -> IO.puts("❌ Error: #{reason}")
-      _ -> IO.puts("❌ Invalid arguments for delete-ingress")
+      {:ingress, {:error, error}} -> IO.puts("❌ Error deleting ingress: #{inspect(error)}")
     end
   end
 
@@ -892,9 +883,6 @@ defmodule Mix.Tasks.Livekit do
          {:ok, api_key} <- get_opt(opts, :api_key),
          {:ok, api_secret} <- get_opt(opts, :api_secret) do
       Livekit.IngressServiceClient.new(url, api_key, api_secret)
-    else
-      {:error, reason} -> {:error, reason}
-      _ -> {:error, "Missing required options for ingress client"}
     end
   end
 
