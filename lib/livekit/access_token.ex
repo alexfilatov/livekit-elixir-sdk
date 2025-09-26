@@ -9,6 +9,7 @@ defmodule Livekit.AccessToken do
             api_secret: nil,
             grants: %Grants{},
             identity: nil,
+            name: nil,
             ttl: nil,
             metadata: nil
 
@@ -17,6 +18,7 @@ defmodule Livekit.AccessToken do
           api_secret: String.t() | nil,
           grants: Grants.t(),
           identity: String.t() | nil,
+          name: String.t() | nil,
           ttl: integer() | nil,
           metadata: String.t() | nil
         }
@@ -53,6 +55,13 @@ defmodule Livekit.AccessToken do
   end
 
   @doc """
+  Sets the name for the token.
+  """
+  def with_name(%__MODULE__{} = token, name) do
+    %{token | name: name}
+  end
+
+  @doc """
   Sets the grants for the token.
   """
   def with_grants(%__MODULE__{} = token, %Livekit.Grants{} = grants) do
@@ -86,7 +95,7 @@ defmodule Livekit.AccessToken do
       "exp" => exp_time,
       "video" => video_grant,
       "metadata" => token.metadata,
-      "name" => token.identity
+      "name" => token.name || token.identity
     }
 
     signer = Joken.Signer.create("HS256", token.api_secret)
