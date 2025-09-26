@@ -5,9 +5,24 @@ defmodule Livekit.EgressServiceClient do
 
   alias Livekit.Egress
 
+  
+  
   @doc """
-  Creates a new EgressServiceClient.
+  Create a new EgressServiceClient by connecting to a Livekit Egress server and preparing authorization metadata.
+  
+  ## Parameters
+  
+    - url: The server URL or host (e.g., "https://egress.livekit.example:443" or "egress.livekit.example").
+    - api_key: API key used to build the authorization header.
+    - api_secret: API secret used to build the authorization header.
+  
+  ## Returns
+  
+    - `{:ok, {channel, metadata}}` where `channel` is a `GRPC.Channel.t()` connected to the server and `metadata` is a map containing the `"authorization"` header.
+    - `{:error, reason}` where `reason` is an error message string describing the failure.
   """
+  @spec new(url :: binary(), api_key :: binary(), api_secret :: binary()) ::
+            {:ok, {GRPC.Channel.t(), metadata :: map()}} | {:error, String.t()}
   def new(url, api_key, api_secret) when is_binary(url) do
     uri = URI.parse(url)
     host = uri.host || url

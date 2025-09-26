@@ -46,23 +46,38 @@ defmodule Livekit.WebhookReceiver do
   alias Livekit.AccessToken
   alias Livekit.WebhookEvent
 
+  
+  
   @doc """
-  Validates and decodes a webhook event.
+Validates the Authorization header and request body, then decodes the payload into a WebhookEvent.
 
-  ## Parameters
+Parameters
 
-  - `body`: The raw request body as a binary
-  - `auth_header`: The Authorization header from the request
+  - body: Raw request body as a binary.
+  - auth_header: Authorization header value from the request.
 
-  ## Returns
+Returns
 
-  - `{:ok, event}`: If the webhook is valid, returns the decoded WebhookEvent
-  - `{:error, reason}`: If the webhook is invalid or cannot be decoded
-  """
-  @spec receive(binary(), list(binary()) | binary()) ::
+  - `{:ok, event}`: Decoded `WebhookEvent` struct when validation and decoding succeed.
+  - `{:error, reason}`: Error message when validation fails or the payload cannot be decoded.
+"""
+@spec receive(binary(), list(binary()) | binary()) ::
           {:ok, WebhookEvent.t()} | {:error, String.t()}
-  def receive(body, [auth_header | _]) when is_list(auth_header), do: receive(body, auth_header)
+def receive(body, [auth_header | _]) when is_binary(auth_header), do: receive(body, auth_header)
+  @doc """
+Handle the case where the webhook request has no Authorization header.
 
+Returns an error tuple indicating the missing Authorization header.
+"""
+@spec receive(binary(), list(binary()) | binary()) :: {:ok, Livekit.WebhookEvent.t()} | {:error, String.t()}
+def receive(_body, []), do: {:error, "Missing Authorization header"}
+
+  @doc """
+  Validates and decodes a LiveKit webhook request body using the provided Authorization header.
+  
+  Performs configuration lookup, token verification, SHA256 body validation, and JSON decoding into a `WebhookEvent`.
+  """
+  @spec receive(binary(), list(binary()) | binary()) :: {:ok, WebhookEvent.t()} | {:error, String.t()}
   def receive(body, auth_header) when is_binary(body) and is_binary(auth_header) do
     with {:ok, config} <- get_config(),
          {:ok, claims} <- validate_token(auth_header, config),
