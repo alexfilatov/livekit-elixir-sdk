@@ -3,7 +3,6 @@ defmodule Livekit.RoomServiceClient do
   Client for the Livekit Room Service API.
   """
 
-  use Tesla
   alias Livekit.AccessToken
 
   alias Livekit.{
@@ -49,7 +48,6 @@ defmodule Livekit.RoomServiceClient do
        [
          debug: false,
          filter_headers: ["authorization"],
-         log_level: :info,
          formatter: fn env, _opts ->
            "#{env.method} #{env.url} -> #{env.status}"
          end
