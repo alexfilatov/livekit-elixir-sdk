@@ -46,23 +46,50 @@ defmodule Livekit.WebhookReceiver do
   alias Livekit.AccessToken
   alias Livekit.WebhookEvent
 
+  
+  
   @doc """
-  Validates and decodes a webhook event.
+Validate the Authorization header and decode the request body into a Livekit WebhookEvent.
 
-  ## Parameters
+Processes the provided Authorization header and, if valid, decodes the JSON webhook payload into a `WebhookEvent` struct.
 
-  - `body`: The raw request body as a binary
-  - `auth_header`: The Authorization header from the request
+## Parameters
 
-  ## Returns
+  - body: Raw request body as a binary.
+  - auth_header: Authorization header value extracted from the request.
 
-  - `{:ok, event}`: If the webhook is valid, returns the decoded WebhookEvent
-  - `{:error, reason}`: If the webhook is invalid or cannot be decoded
-  """
-  @spec receive(binary(), list(binary()) | binary()) ::
+## Returns
+
+  - `{:ok, event}`: Decoded `WebhookEvent` on successful validation and parsing.
+  - `{:error, reason}`: Error tuple with a human-readable reason when validation or decoding fails.
+"""
+@spec receive(binary(), list(binary()) | binary()) ::
           {:ok, WebhookEvent.t()} | {:error, String.t()}
-  def receive(body, [auth_header | _]) when is_list(auth_header), do: receive(body, auth_header)
+def receive(body, [auth_header | _]) when is_binary(auth_header), do: receive(body, auth_header)
+  @doc """
+Handle requests that do not include an Authorization header.
 
+Returns an error tuple indicating the request is missing the Authorization header.
+"""
+@spec receive(binary(), list()) :: {:ok, map()} | {:error, String.t()}
+def receive(_body, []), do: {:error, "Missing Authorization header"}
+
+  @doc """
+  Validate and decode a LiveKit webhook payload.
+  
+  Validates the provided Authorization header and the SHA256 of the request body, then parses the JSON payload into a Livekit.WebhookEvent struct.
+  
+  ## Parameters
+  
+    - body: Raw request body (JSON) of the webhook.
+    - auth_header: The value of the `Authorization` header from the request.
+  
+  ## Returns
+  
+    - `{:ok, event}` where `event` is a `Livekit.WebhookEvent` on success.
+    - `{:error, reason}` with a string reason on failure.
+  """
+  @spec receive(binary(), binary()) :: {:ok, Livekit.WebhookEvent.t()} | {:error, String.t()}
   def receive(body, auth_header) when is_binary(body) and is_binary(auth_header) do
     with {:ok, config} <- get_config(),
          {:ok, claims} <- validate_token(auth_header, config),

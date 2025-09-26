@@ -5,9 +5,15 @@ defmodule Livekit.EgressServiceClient do
 
   alias Livekit.Egress
 
+  
+  
   @doc """
-  Creates a new EgressServiceClient.
+  Establishes a connection to the Livekit Egress service and returns a gRPC channel paired with request metadata.
+  
+  The returned metadata includes an "authorization" header in the form "Bearer <api_key>:<api_secret>" for authenticating requests. If the provided URL uses the https scheme, the client will configure SSL credentials. If the URL omits a port, port 443 is used.
   """
+  @spec new(url :: binary(), api_key :: binary(), api_secret :: binary()) ::
+            {:ok, {GRPC.Channel.t(), metadata :: map()}} | {:error, String.t()}
   def new(url, api_key, api_secret) when is_binary(url) do
     uri = URI.parse(url)
     host = uri.host || url
