@@ -274,7 +274,7 @@ client = Livekit.RoomServiceClient.new("http://localhost:7880", "devkey", "secre
 
 ```elixir
 # Verify a token
-case Livekit.TokenVerifier.verify(jwt, "secret") do
+case Livekit.AccessToken.TokenVerifier.verify(jwt, "secret") do
   {:ok, claims} ->
     # Token is valid, claims contains the decoded data
     IO.inspect(claims)

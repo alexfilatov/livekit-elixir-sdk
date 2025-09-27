@@ -1,7 +1,13 @@
 defmodule Livekit.AccessTokenTest do
   use ExUnit.Case
   alias Livekit.AccessToken
-  alias Livekit.AccessToken.{InferenceGrants, SIPGrants, VideoGrants}
+
+  alias Livekit.AccessToken.{
+    InferenceGrants,
+    SIPGrants,
+    TokenVerifier,
+    VideoGrants
+  }
 
   @api_key "api_key_123"
   @api_secret "secret_456"
@@ -133,11 +139,11 @@ defmodule Livekit.AccessTokenTest do
       assert is_binary(jwt)
 
       # Verify the token can be decoded
-      {:ok, claims} = Livekit.TokenVerifier.verify(jwt, @api_secret)
+      {:ok, claims} = TokenVerifier.verify(jwt, @api_secret)
       assert claims["sub"] == "user123"
       assert claims["iss"] == @api_key
       assert claims["video"]["room"] == "room123"
-      assert claims["video"]["roomJoin"] == true
+      assert claims["video"]["room_join"] == true
       assert claims["name"] == "name123"
       assert claims["kind"] == "agent"
     end
@@ -148,7 +154,7 @@ defmodule Livekit.AccessTokenTest do
         |> AccessToken.with_identity("user123")
 
       jwt = AccessToken.to_jwt(token)
-      {:ok, claims} = Livekit.TokenVerifier.verify(jwt, @api_secret)
+      {:ok, claims} = TokenVerifier.verify(jwt, @api_secret)
       assert claims["name"] == "user123"
     end
 
@@ -160,10 +166,10 @@ defmodule Livekit.AccessTokenTest do
         |> AccessToken.add_grant(VideoGrants.join_room("room123"))
 
       jwt = AccessToken.to_jwt(token)
-      {:ok, claims} = Livekit.TokenVerifier.verify(jwt, @api_secret)
+      {:ok, claims} = TokenVerifier.verify(jwt, @api_secret)
       assert claims["name"] == "name123"
       assert claims["video"]["room"] == "room123"
-      assert claims["video"]["roomJoin"] == true
+      assert claims["video"]["room_join"] == true
 
       refute Map.has_key?(claims, "metadata")
       refute Map.has_key?(claims, "kind")
@@ -171,7 +177,7 @@ defmodule Livekit.AccessTokenTest do
       refute Map.has_key?(claims, "inference")
       refute Map.has_key?(claims, "attributes")
       refute Map.has_key?(claims, "sha256")
-      refute Map.has_key?(claims, "roomPreset")
+      refute Map.has_key?(claims, "room_preset")
       refute Map.has_key?(claims["video"], "roomRecord")
       refute Map.has_key?(claims["video"], "roomCreate")
       refute Map.has_key?(claims["video"], "roomAdmin")

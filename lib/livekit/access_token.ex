@@ -20,7 +20,7 @@ defmodule Livekit.AccessToken do
   defstruct api_key: nil,
             api_secret: nil,
             attributes: nil,
-            grants: %VideoGrants{},
+            grants: nil,
             identity: nil,
             inference: nil,
             kind: nil,
@@ -35,10 +35,10 @@ defmodule Livekit.AccessToken do
           api_key: String.t() | nil,
           api_secret: String.t() | nil,
           attributes: attributes() | nil,
-          grants: VideoGrants.t(),
+          grants: VideoGrants.t() | nil,
           identity: String.t() | nil,
           inference: InferenceGrants.t() | nil,
-          kind: nil | kind(),
+          kind: kind() | nil,
           metadata: String.t() | nil,
           name: String.t() | nil,
           room_preset: String.t() | nil,
@@ -102,6 +102,10 @@ defmodule Livekit.AccessToken do
   Adds a grant to the token.
   """
   @spec add_grant(t(), VideoGrants.t() | map()) :: t()
+  def add_grant(%__MODULE__{grants: nil} = token, grant) do
+    add_grant(with_grants(token, %VideoGrants{}), grant)
+  end
+
   def add_grant(%__MODULE__{} = token, grant) do
     %{token | grants: Map.merge(token.grants, grant)}
   end
@@ -160,27 +164,30 @@ defmodule Livekit.AccessToken do
   @spec to_jwt(t()) :: jwt_token()
   def to_jwt(%__MODULE__{} = token) do
     current_time = System.system_time(:second)
-    grants = token.grants
+    grants = Map.get(token, :grants)
     signer = Joken.Signer.create("HS256", token.api_secret)
 
     if not is_nil(grants) and
-         not is_nil(grants.room_join) and
-         (is_nil(token.identity) or is_nil(grants.room)) do
+         not is_nil(Map.get(grants, :room_join)) and
+         (is_nil(token.identity) or is_nil(Map.get(grants, :room))) do
       raise "identity and room must be set when joining a room"
     end
 
-    video_grants =
-      grants
-      |> Map.from_struct()
-      |> Stream.map(fn {k, v} -> {Inflex.camelize(to_string(k), :lower), v} end)
-      |> Map.new()
+    grants =
+      if is_nil(grants) do
+        grants
+      else
+        grants
+        |> Map.from_struct()
+        |> Map.new(fn {k, v} -> {snake_to_lower_camel(k), v} end)
+      end
 
     claims = %{
       "iss" => token.api_key,
       "sub" => token.identity,
       "nbf" => current_time,
       "exp" => current_time + token.ttl,
-      "video" => video_grants,
+      "video" => grants,
       "metadata" => token.metadata,
       "kind" => token.kind,
       "name" => token.name || token.identity,
@@ -188,11 +195,12 @@ defmodule Livekit.AccessToken do
       "inference" => token.inference,
       "attributes" => token.attributes,
       "sha256" => token.sha256,
-      "roomPreset" => token.room_preset
+      "room_preset" => token.room_preset
     }
 
     {:ok, jwt, _claims} =
       claims
+      |> Map.new(fn {k, v} -> {snake_to_lower_camel(k), v} end)
       |> minimize_claims()
       |> Joken.encode_and_sign(signer)
 
@@ -208,37 +216,5 @@ defmodule Livekit.AccessToken do
     |> Map.new()
   end
 
-  @doc """
-  Verifies a JWT token and returns its claims.
-
-  ## Parameters
-
-  - `token`: The JWT token to verify
-  - `api_key`: The API key to verify against
-  - `api_secret`: The API secret to verify with
-
-  ## Returns
-
-  - `{:ok, claims}`: If the token is valid, returns the decoded claims
-  - `{:error, reason}`: If the token is invalid
-  """
-  @spec verify(jwt_token(), api_key :: String.t(), api_secret :: String.t()) ::
-          {:ok, map()} | {:error, Joken.error_reason()}
-  def verify(token, api_key, api_secret)
-      when is_binary(token) and is_binary(api_key) and is_binary(api_secret) do
-    signer = Joken.Signer.create("HS256", api_secret)
-
-    case Joken.verify(token, signer) do
-      {:ok, claims} ->
-        # Verify that the issuer matches the API key
-        if claims["iss"] == api_key do
-          {:ok, claims}
-        else
-          {:error, :invalid_issuer}
-        end
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
+  defp snake_to_lower_camel(value), do: Inflex.camelize(to_string(value), :lower)
 end

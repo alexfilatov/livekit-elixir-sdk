@@ -43,7 +43,7 @@ defmodule Livekit.WebhookReceiver do
   ```
   """
 
-  alias Livekit.AccessToken
+  alias Livekit.AccessToken.TokenVerifier
   alias Livekit.WebhookEvent
 
   @doc """
@@ -208,7 +208,7 @@ defmodule Livekit.WebhookReceiver do
 
   # Validates the JWT token from the Authorization header
   defp validate_token(auth_header, config) do
-    case AccessToken.verify(auth_header, config.api_key, config.api_secret) do
+    case TokenVerifier.verify_with_issuer(auth_header, config.api_key, config.api_secret) do
       {:ok, claims} -> {:ok, claims}
       {:error, reason} -> {:error, "Invalid webhook token: #{inspect(reason)}"}
     end

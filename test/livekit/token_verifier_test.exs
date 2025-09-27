@@ -1,8 +1,8 @@
-defmodule Livekit.TokenVerifierTest do
+defmodule Livekit.AccessToken.TokenVerifierTest do
   use ExUnit.Case
   alias Livekit.AccessToken
+  alias Livekit.AccessToken.TokenVerifier
   alias Livekit.AccessToken.VideoGrants
-  alias Livekit.TokenVerifier
 
   @api_key "api_key_123"
   @api_secret "secret_456"
@@ -17,9 +17,19 @@ defmodule Livekit.TokenVerifierTest do
         |> AccessToken.to_jwt()
 
       assert {:ok, claims} = TokenVerifier.verify(token, @api_secret)
-      assert claims["sub"] == "user123"
       assert claims["iss"] == @api_key
       assert claims["video"]["room"] == "room123"
+    end
+
+    test "verifies with no video claims" do
+      token =
+        AccessToken.new(@api_key, @api_secret)
+        |> AccessToken.with_identity("user123")
+        |> AccessToken.to_jwt()
+
+      assert {:ok, claims} = TokenVerifier.verify(token, @api_secret)
+      assert claims["sub"] == "user123"
+      assert claims["iss"] == @api_key
     end
 
     test "returns error for invalid token" do
@@ -33,6 +43,29 @@ defmodule Livekit.TokenVerifierTest do
         |> AccessToken.to_jwt()
 
       assert {:error, _reason} = TokenVerifier.verify(token, "wrong_secret")
+    end
+  end
+
+  describe "verify_with_issuer/3" do
+    test "successfully verifies a valid token" do
+      token =
+        AccessToken.new(@api_key, @api_secret)
+        |> AccessToken.with_identity("user123")
+        |> AccessToken.to_jwt()
+
+      assert {:ok, claims} = TokenVerifier.verify_with_issuer(token, @api_key, @api_secret)
+      assert claims["sub"] == "user123"
+      assert claims["iss"] == @api_key
+    end
+
+    test "returns error for token with wrong issuer" do
+      token =
+        AccessToken.new(@api_key, @api_secret)
+        |> AccessToken.with_identity("user123")
+        |> AccessToken.to_jwt()
+
+      assert {:error, :invalid_issuer} =
+               TokenVerifier.verify_with_issuer(token, "wrong_issuer", @api_secret)
     end
   end
 
