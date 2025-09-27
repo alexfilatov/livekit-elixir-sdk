@@ -4,10 +4,11 @@ defmodule Livekit.AccessToken.InferenceGrants do
   """
 
   @derive {Jason.Encoder, keys: :camel}
-  # perform inference
+
   defstruct perform: false
 
   @type t :: %__MODULE__{
+          # perform inference
           perform: boolean()
         }
 end

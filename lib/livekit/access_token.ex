@@ -3,37 +3,54 @@ defmodule Livekit.AccessToken do
   Handles generation and management of Livekit access tokens.
   """
 
-  alias Livekit.AccessToken.VideoGrants
+  alias Livekit.AccessToken.{InferenceGrants, SIPGrants, VideoGrants}
 
   @default_ttl 3600
   @participant_kinds [:standard, :egress, :ingress, :sip, :agent]
 
+  @type api_key :: String.t()
+  @type api_secret :: String.t()
+  @type attributes :: %{String.t() => String.t()}
+  @type claims :: map()
+  @type jwt_token :: String.t()
   @type kind :: :standard | :egress | :ingress | :sip | :agent
+  @type identity :: String.t()
+  @type ttl :: integer()
 
   defstruct api_key: nil,
             api_secret: nil,
+            attributes: nil,
             grants: %VideoGrants{},
             identity: nil,
-            name: nil,
-            ttl: @default_ttl,
+            inference: nil,
+            kind: nil,
             metadata: nil,
-            kind: nil
+            name: nil,
+            room_preset: nil,
+            sha256: nil,
+            sip: nil,
+            ttl: @default_ttl
 
   @type t :: %__MODULE__{
           api_key: String.t() | nil,
           api_secret: String.t() | nil,
+          attributes: attributes() | nil,
           grants: VideoGrants.t(),
           identity: String.t() | nil,
-          name: String.t() | nil,
-          ttl: integer() | nil,
+          inference: InferenceGrants.t() | nil,
+          kind: nil | kind(),
           metadata: String.t() | nil,
-          kind: nil | kind()
+          name: String.t() | nil,
+          room_preset: String.t() | nil,
+          sha256: String.t() | nil,
+          sip: SIPGrants.t() | nil,
+          ttl: integer() | nil
         }
 
   @doc """
   Creates a new AccessToken with the given API key and secret.
   """
-  @spec new(api_key :: String.t(), api_secret :: String.t()) :: t()
+  @spec new(api_key(), api_secret()) :: t()
   def new(api_key, api_secret) do
     %__MODULE__{
       api_key: api_key,
@@ -44,15 +61,15 @@ defmodule Livekit.AccessToken do
   @doc """
   Sets the identity for the token.
   """
-  @spec with_identity(t(), identity :: String.t()) :: t()
-  def with_identity(%__MODULE__{} = token, identity) do
+  @spec with_identity(t(), identity()) :: t()
+  def with_identity(%__MODULE__{} = token, identity) when is_binary(identity) do
     %{token | identity: identity}
   end
 
   @doc """
   Sets the TTL (time to live) for the token in seconds.
   """
-  @spec with_ttl(t(), ttl :: integer()) :: t()
+  @spec with_ttl(t(), ttl()) :: t()
   def with_ttl(%__MODULE__{} = token, ttl) when is_integer(ttl) do
     %{token | ttl: ttl}
   end
@@ -61,7 +78,7 @@ defmodule Livekit.AccessToken do
   Sets metadata for the token.
   """
   @spec with_metadata(t(), String.t()) :: t()
-  def with_metadata(%__MODULE__{} = token, metadata) do
+  def with_metadata(%__MODULE__{} = token, metadata) when is_binary(metadata) do
     %{token | metadata: metadata}
   end
 
@@ -69,7 +86,7 @@ defmodule Livekit.AccessToken do
   Sets the name for the token.
   """
   @spec with_name(t(), String.t()) :: t()
-  def with_name(%__MODULE__{} = token, name) do
+  def with_name(%__MODULE__{} = token, name) when is_binary(name) do
     %{token | name: name}
   end
 
@@ -98,9 +115,49 @@ defmodule Livekit.AccessToken do
   end
 
   @doc """
+  Sets the SIP grants for the token.
+  """
+  @spec with_sip_grants(t(), SIPGrants.t()) :: t()
+  def with_sip_grants(%__MODULE__{} = token, %SIPGrants{} = grants) do
+    %{token | sip: grants}
+  end
+
+  @doc """
+  Sets the inference grants for the token.
+  """
+  @spec with_inference_grants(t(), InferenceGrants.t()) :: t()
+  def with_inference_grants(%__MODULE__{} = token, %InferenceGrants{} = grants) do
+    %{token | inference: grants}
+  end
+
+  @doc """
+  Sets the attributes for the token.
+  """
+  @spec with_attributes(t(), attributes()) :: t()
+  def with_attributes(%__MODULE__{} = token, attributes) when is_map(attributes) do
+    %{token | attributes: attributes}
+  end
+
+  @doc """
+  Sets the SHA256 for the token.
+  """
+  @spec with_sha256(t(), String.t()) :: t()
+  def with_sha256(%__MODULE__{} = token, sha256) when is_binary(sha256) do
+    %{token | sha256: sha256}
+  end
+
+  @doc """
+  Sets the room preset for the token.
+  """
+  @spec with_room_preset(t(), String.t()) :: t()
+  def with_room_preset(%__MODULE__{} = token, room_preset) when is_binary(room_preset) do
+    %{token | room_preset: room_preset}
+  end
+
+  @doc """
   Generates a JWT token string.
   """
-  @spec to_jwt(t()) :: jwt_token :: String.t()
+  @spec to_jwt(t()) :: jwt_token()
   def to_jwt(%__MODULE__{} = token) do
     current_time = System.system_time(:second)
     grants = token.grants
@@ -126,10 +183,14 @@ defmodule Livekit.AccessToken do
       "video" => video_grants,
       "metadata" => token.metadata,
       "kind" => token.kind,
-      "name" => token.name || token.identity
+      "name" => token.name || token.identity,
+      "sip" => token.sip,
+      "inference" => token.inference,
+      "attributes" => token.attributes,
+      "sha256" => token.sha256,
+      "roomPreset" => token.room_preset
     }
 
-    # in order to produce minimal JWT size, exclude None or empty values
     {:ok, jwt, _claims} =
       claims
       |> minimize_claims()
@@ -138,7 +199,8 @@ defmodule Livekit.AccessToken do
     jwt
   end
 
-  @spec minimize_claims(claims :: map()) :: map()
+  # in order to produce minimal JWT size, exclude None or empty values
+  @spec minimize_claims(claims()) :: claims()
   defp minimize_claims(claims) do
     claims
     |> Stream.reject(fn {_k, v} -> v in [nil, ""] end)
@@ -160,7 +222,7 @@ defmodule Livekit.AccessToken do
   - `{:ok, claims}`: If the token is valid, returns the decoded claims
   - `{:error, reason}`: If the token is invalid
   """
-  @spec verify(jwt_token :: String.t(), api_key :: String.t(), api_secret :: String.t()) ::
+  @spec verify(jwt_token(), api_key :: String.t(), api_secret :: String.t()) ::
           {:ok, map()} | {:error, Joken.error_reason()}
   def verify(token, api_key, api_secret)
       when is_binary(token) and is_binary(api_key) and is_binary(api_secret) do

@@ -1,7 +1,7 @@
 defmodule Livekit.AccessTokenTest do
   use ExUnit.Case
   alias Livekit.AccessToken
-  alias Livekit.AccessToken.VideoGrants
+  alias Livekit.AccessToken.{InferenceGrants, SIPGrants, VideoGrants}
 
   @api_key "api_key_123"
   @api_secret "secret_456"
@@ -69,6 +69,56 @@ defmodule Livekit.AccessTokenTest do
     end
   end
 
+  describe "with_sip_grants/2" do
+    test "sets the SIP grants" do
+      token = AccessToken.new(@api_key, @api_secret)
+
+      sip_grants = %SIPGrants{admin: true, call: true}
+      token = AccessToken.with_sip_grants(token, sip_grants)
+
+      assert token.sip.admin == true
+      assert token.sip.call == true
+    end
+  end
+
+  describe "with_inference_grants/2" do
+    test "sets the inference grants" do
+      token = AccessToken.new(@api_key, @api_secret)
+      inference_grants = %InferenceGrants{perform: true}
+      token = AccessToken.with_inference_grants(token, inference_grants)
+      assert token.inference.perform == true
+    end
+  end
+
+  describe "with_attributes/2" do
+    test "sets the attributes" do
+      token = AccessToken.new(@api_key, @api_secret)
+      attributes = %{"name" => "John Doe"}
+      token = AccessToken.with_attributes(token, attributes)
+      assert token.attributes == attributes
+    end
+  end
+
+  describe "with_sha256/2" do
+    test "sets the SHA256" do
+      token = AccessToken.new(@api_key, @api_secret)
+      sha256 = "sha256_123"
+
+      token = AccessToken.with_sha256(token, sha256)
+      assert token.sha256 == sha256
+    end
+  end
+
+  describe "with_room_preset/2" do
+    test "sets the room preset" do
+      token = AccessToken.new(@api_key, @api_secret)
+      room_preset = "room_preset_123"
+
+      token = AccessToken.with_room_preset(token, room_preset)
+      assert token.room_preset == room_preset
+    end
+  end
+
   describe "to_jwt/1" do
     test "generates a valid JWT token" do
       token =
@@ -117,6 +167,11 @@ defmodule Livekit.AccessTokenTest do
 
       refute Map.has_key?(claims, "metadata")
       refute Map.has_key?(claims, "kind")
+      refute Map.has_key?(claims, "sip")
+      refute Map.has_key?(claims, "inference")
+      refute Map.has_key?(claims, "attributes")
+      refute Map.has_key?(claims, "sha256")
+      refute Map.has_key?(claims, "roomPreset")
       refute Map.has_key?(claims["video"], "roomRecord")
       refute Map.has_key?(claims["video"], "roomCreate")
       refute Map.has_key?(claims["video"], "roomAdmin")

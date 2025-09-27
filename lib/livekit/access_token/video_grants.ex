@@ -4,48 +4,57 @@ defmodule Livekit.AccessToken.VideoGrants do
   """
 
   @derive {Jason.Encoder, keys: :camel}
-  # actions on rooms
+
   defstruct room_create: nil,
             room_list: nil,
             room_record: nil,
-            # actions on a particular room
             room_admin: nil,
             room_join: nil,
             room: "",
-            # allows forwarding participant to room
             destination_room: nil,
-            # permissions within a room
             can_publish: true,
             can_subscribe: true,
             can_publish_data: true,
-            # TrackSource types that a participant may publish.
-            # When set, it supersedes CanPublish. Only sources explicitly set here can be
-            # published
             can_publish_sources: nil,
-            # by default, a participant is not allowed to update its own metadata
             can_update_metadata: nil,
-            # actions on ingress
             ingress_admin: false,
-            # participant is not visible to other participants (useful when making bots)
             hidden: nil,
-            # indicates that the holder can register as an Agent framework worker
             agent: nil
 
   @type t :: %__MODULE__{
+          # actions on rooms
           room_create: boolean() | nil,
           room_list: boolean() | nil,
           room_record: boolean() | nil,
+
+          # actions on a particular room
           room_admin: boolean() | nil,
           room_join: boolean() | nil,
           room: String.t() | nil,
+
+          # allows forwarding participant to room
           destination_room: String.t() | nil,
+
+          # permissions within a room
           can_publish: boolean(),
           can_subscribe: boolean(),
           can_publish_data: boolean(),
+
+          # TrackSource types that a participant may publish.
+          # When set, it supersedes CanPublish. Only sources explicitly set here can be
+          # published
           can_publish_sources: list(String.t()) | nil,
+
+          # by default, a participant is not allowed to update its own metadata
           can_update_metadata: boolean() | nil,
+
+          # actions on ingress
           ingress_admin: boolean() | nil,
+
+          # participant is not visible to other participants (useful when making bots)
           hidden: boolean() | nil,
+
+          # indicates that the holder can register as an Agent framework worker
           agent: boolean() | nil
         }
 
