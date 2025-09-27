@@ -5,12 +5,14 @@ defmodule Livekit.AccessToken do
 
   alias Livekit.AccessToken.VideoGrants
 
+  @default_ttl 3600
+
   defstruct api_key: nil,
             api_secret: nil,
             grants: %VideoGrants{},
             identity: nil,
             name: nil,
-            ttl: nil,
+            ttl: @default_ttl,
             metadata: nil
 
   @type t :: %__MODULE__{
@@ -80,7 +82,6 @@ defmodule Livekit.AccessToken do
   """
   def to_jwt(%__MODULE__{} = token) do
     current_time = System.system_time(:second)
-    exp_time = current_time + (token.ttl || 3600)
 
     video_grants =
       token.grants
@@ -92,7 +93,7 @@ defmodule Livekit.AccessToken do
       "iss" => token.api_key,
       "sub" => token.identity,
       "nbf" => current_time,
-      "exp" => exp_time,
+      "exp" => current_time + token.ttl,
       "video" => video_grants,
       "metadata" => token.metadata,
       "name" => token.name || token.identity
