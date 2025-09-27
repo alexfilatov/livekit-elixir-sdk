@@ -78,11 +78,11 @@ defmodule Livekit.IngressServiceClient do
   ## Parameters
 
   - `client` - The client connection tuple returned from `new/3`
-  - `request` - A `Livekit.CreateIngressRequest` struct
+  - `request` - A CreateIngressRequest struct
 
   ## Returns
 
-  - `{:ok, ingress_info}` - On success, returns `Livekit.IngressInfo`
+  - `{:ok, ingress_info}` - On success, returns an IngressInfo struct
   - `{:error, reason}` - On failure
 
   ## Examples
@@ -119,11 +119,11 @@ defmodule Livekit.IngressServiceClient do
   ## Parameters
 
   - `client` - The client connection tuple returned from `new/3`
-  - `request` - A `Livekit.UpdateIngressRequest` struct
+  - `request` - An UpdateIngressRequest struct
 
   ## Returns
 
-  - `{:ok, ingress_info}` - On success, returns updated `Livekit.IngressInfo`
+  - `{:ok, ingress_info}` - On success, returns an updated IngressInfo struct
   - `{:error, reason}` - On failure
   """
   def update_ingress({channel, metadata}, %Livekit.UpdateIngressRequest{} = request) do
@@ -148,11 +148,11 @@ defmodule Livekit.IngressServiceClient do
   ## Parameters
 
   - `client` - The client connection tuple returned from `new/3`
-  - `request` - A `Livekit.ListIngressRequest` struct (optional, defaults to empty request)
+  - `request` - A ListIngressRequest struct (optional, defaults to empty request)
 
   ## Returns
 
-  - `{:ok, list_response}` - On success, returns `Livekit.ListIngressResponse`
+  - `{:ok, list_response}` - On success, returns a ListIngressResponse struct
   - `{:error, reason}` - On failure
 
   ## Examples
@@ -186,11 +186,11 @@ defmodule Livekit.IngressServiceClient do
   ## Parameters
 
   - `client` - The client connection tuple returned from `new/3`
-  - `request` - A `Livekit.DeleteIngressRequest` struct
+  - `request` - A DeleteIngressRequest struct
 
   ## Returns
 
-  - `{:ok, ingress_info}` - On success, returns the deleted `Livekit.IngressInfo`
+  - `{:ok, ingress_info}` - On success, returns the deleted IngressInfo struct
   - `{:error, reason}` - On failure
 
   ## Examples

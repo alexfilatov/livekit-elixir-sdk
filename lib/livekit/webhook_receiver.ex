@@ -60,7 +60,7 @@ defmodule Livekit.WebhookReceiver do
   - `{:error, reason}`: If the webhook is invalid or cannot be decoded
   """
   @spec receive(binary(), list(binary()) | binary()) ::
-          {:ok, WebhookEvent.t()} | {:error, String.t()}
+          {:ok, map()} | {:error, String.t()}
   def receive(body, [auth_header | _]) when is_binary(auth_header), do: receive(body, auth_header)
   def receive(_body, []), do: {:error, "Missing Authorization header"}
 
@@ -87,7 +87,7 @@ defmodule Livekit.WebhookReceiver do
   - `{:ok, event}`: If the webhook can be decoded, returns the decoded WebhookEvent
   - `{:error, reason}`: If the webhook cannot be decoded
   """
-  @spec decode_event(binary()) :: {:ok, WebhookEvent.t()} | {:error, String.t()}
+  @spec decode_event(binary()) :: {:ok, map()} | {:error, String.t()}
   def decode_event(body) do
     case Jason.decode(body) do
       {:ok, json} ->
