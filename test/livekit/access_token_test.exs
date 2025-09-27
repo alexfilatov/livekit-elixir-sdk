@@ -57,12 +57,25 @@ defmodule Livekit.AccessTokenTest do
     end
   end
 
+  describe "with_kind/2" do
+    for kind <- [:standard, :egress, :ingress, :sip, :agent] do
+      test "sets the kind #{kind}" do
+        token = AccessToken.new(@api_key, @api_secret)
+
+        assert token.kind == nil
+        token = AccessToken.with_kind(token, unquote(kind))
+        assert token.kind == unquote(kind)
+      end
+    end
+  end
+
   describe "to_jwt/1" do
     test "generates a valid JWT token" do
       token =
         AccessToken.new(@api_key, @api_secret)
         |> AccessToken.with_identity("user123")
         |> AccessToken.with_name("name123")
+        |> AccessToken.with_kind(:agent)
         |> AccessToken.with_ttl(3600)
         |> AccessToken.add_grant(VideoGrants.join_room("room123"))
 
@@ -76,6 +89,7 @@ defmodule Livekit.AccessTokenTest do
       assert claims["video"]["room"] == "room123"
       assert claims["video"]["roomJoin"] == true
       assert claims["name"] == "name123"
+      assert claims["kind"] == "agent"
     end
 
     test "uses the identity if name is not set" do
@@ -86,6 +100,29 @@ defmodule Livekit.AccessTokenTest do
       jwt = AccessToken.to_jwt(token)
       {:ok, claims} = Livekit.TokenVerifier.verify(jwt, @api_secret)
       assert claims["name"] == "user123"
+    end
+
+    test "jwt token does not contain nil or empty values" do
+      token =
+        AccessToken.new(@api_key, @api_secret)
+        |> AccessToken.with_identity("user123")
+        |> AccessToken.with_name("name123")
+        |> AccessToken.add_grant(VideoGrants.join_room("room123"))
+
+      jwt = AccessToken.to_jwt(token)
+      {:ok, claims} = Livekit.TokenVerifier.verify(jwt, @api_secret)
+      assert claims["name"] == "name123"
+      assert claims["video"]["room"] == "room123"
+      assert claims["video"]["roomJoin"] == true
+
+      refute Map.has_key?(claims, "metadata")
+      refute Map.has_key?(claims, "kind")
+      refute Map.has_key?(claims["video"], "roomRecord")
+      refute Map.has_key?(claims["video"], "roomCreate")
+      refute Map.has_key?(claims["video"], "roomAdmin")
+      refute Map.has_key?(claims["video"], "roomList")
+      refute Map.has_key?(claims["video"], "hidden")
+      refute Map.has_key?(claims["video"], "agent")
     end
   end
 end

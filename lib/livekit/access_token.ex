@@ -6,6 +6,7 @@ defmodule Livekit.AccessToken do
   alias Livekit.AccessToken.VideoGrants
 
   @default_ttl 3600
+  @participant_kinds [:standard, :egress, :ingress, :sip, :agent]
 
   defstruct api_key: nil,
             api_secret: nil,
@@ -13,7 +14,8 @@ defmodule Livekit.AccessToken do
             identity: nil,
             name: nil,
             ttl: @default_ttl,
-            metadata: nil
+            metadata: nil,
+            kind: nil
 
   @type t :: %__MODULE__{
           api_key: String.t() | nil,
@@ -22,7 +24,8 @@ defmodule Livekit.AccessToken do
           identity: String.t() | nil,
           name: String.t() | nil,
           ttl: integer() | nil,
-          metadata: String.t() | nil
+          metadata: String.t() | nil,
+          kind: nil | :standard | :egress | :ingress | :sip | :agent
         }
 
   @doc """
@@ -78,10 +81,18 @@ defmodule Livekit.AccessToken do
   end
 
   @doc """
+  Sets the kind for the token.
+  """
+  def with_kind(%__MODULE__{} = token, kind) when kind in @participant_kinds do
+    %{token | kind: kind}
+  end
+
+  @doc """
   Generates a JWT token string.
   """
   def to_jwt(%__MODULE__{} = token) do
     current_time = System.system_time(:second)
+    signer = Joken.Signer.create("HS256", token.api_secret)
 
     video_grants =
       token.grants
@@ -96,12 +107,24 @@ defmodule Livekit.AccessToken do
       "exp" => current_time + token.ttl,
       "video" => video_grants,
       "metadata" => token.metadata,
+      "kind" => token.kind,
       "name" => token.name || token.identity
     }
 
-    signer = Joken.Signer.create("HS256", token.api_secret)
-    {:ok, jwt, _claims} = Joken.encode_and_sign(claims, signer)
+    # in order to produce minimal JWT size, exclude None or empty values
+    {:ok, jwt, _claims} =
+      claims
+      |> minimize_claims()
+      |> Joken.encode_and_sign(signer)
+
     jwt
+  end
+
+  defp minimize_claims(claims) do
+    claims
+    |> Stream.reject(fn {_k, v} -> v in [nil, ""] end)
+    |> Stream.map(fn {k, v} -> if is_map(v), do: {k, minimize_claims(v)}, else: {k, v} end)
+    |> Map.new()
   end
 
   @doc """
