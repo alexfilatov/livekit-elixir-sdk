@@ -59,6 +59,43 @@ defmodule Livekit.RoomServiceClientTest do
       assert response.name == room_name
       assert response.sid == "room123"
     end
+
+    test "creates a room with opts", %{bypass: bypass, client: client} do
+      room_name = "test_room"
+      server_fields = %{sid: "room123"}
+
+      test_opts = [
+        node_id: "node123",
+        max_participants: 10,
+        empty_timeout: 600,
+        departure_timeout: 600,
+        metadata: "test metadata"
+      ]
+
+      Bypass.expect_once(bypass, "POST", "/twirp/livekit.RoomService/CreateRoom", fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        request = Livekit.CreateRoomRequest.decode(body)
+        # Node ID not appears in the Room struct
+        assert request.node_id == test_opts[:node_id]
+
+        room =
+          Room
+          |> struct(Map.from_struct(request))
+          |> Map.put(:sid, server_fields.sid)
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/protobuf")
+        |> Plug.Conn.resp(200, Livekit.Room.encode(room))
+      end)
+
+      assert {:ok, response} = RoomServiceClient.create_room(client, room_name, test_opts)
+      assert response.name == room_name
+      assert response.sid == server_fields.sid
+      assert response.max_participants == test_opts[:max_participants]
+      assert response.empty_timeout == test_opts[:empty_timeout]
+      assert response.departure_timeout == test_opts[:departure_timeout]
+      assert response.metadata == test_opts[:metadata]
+    end
   end
 
   describe "list_rooms/2" do
