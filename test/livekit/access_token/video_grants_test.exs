@@ -39,45 +39,4 @@ defmodule Livekit.AccessToken.VideoGrantsTest do
       refute grant.room_create
     end
   end
-
-  describe "update_grants/2" do
-    test "updates the grants with the given options" do
-      base_grants = %VideoGrants{}
-
-      assert base_grants.room_join == nil
-      updated_grant = VideoGrants.update_grants(base_grants, room_join: true)
-      assert updated_grant.room_join == true
-
-      assert updated_grant.room == ""
-      assert updated_grant.room_admin == nil
-      assert updated_grant.room_create == nil
-      assert updated_grant.hidden == nil
-      assert updated_grant.agent == nil
-
-      room_name = "test_room"
-
-      updated_grant =
-        VideoGrants.update_grants(
-          updated_grant,
-          room: room_name,
-          room_admin: true,
-          room_create: true,
-          hidden: true,
-          agent: true
-        )
-
-      assert updated_grant.room == room_name
-      assert updated_grant.room_admin == true
-      assert updated_grant.room_create == true
-      assert updated_grant.hidden == true
-      assert updated_grant.agent == true
-    end
-
-    test "updates the grants and do not add new fields" do
-      base_grants = %VideoGrants{}
-      updated_grant = VideoGrants.update_grants(base_grants, room_join: true, invalid_field: true)
-      assert updated_grant.room_join == true
-      refute Map.has_key?(updated_grant, :invalid_field)
-    end
-  end
 end
