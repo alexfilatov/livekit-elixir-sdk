@@ -124,5 +124,14 @@ defmodule Livekit.AccessTokenTest do
       refute Map.has_key?(claims["video"], "hidden")
       refute Map.has_key?(claims["video"], "agent")
     end
+
+    test "raises an error if identity and room are not set when joining a room" do
+      token = AccessToken.new(@api_key, @api_secret)
+      token = AccessToken.add_grant(token, VideoGrants.join_room("room123"))
+
+      assert_raise RuntimeError, "identity and room must be set when joining a room", fn ->
+        AccessToken.to_jwt(token)
+      end
+    end
   end
 end

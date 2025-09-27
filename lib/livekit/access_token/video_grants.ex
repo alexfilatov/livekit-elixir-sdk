@@ -106,7 +106,7 @@ defmodule Livekit.AccessToken.VideoGrants do
   @spec update_grants(grants :: t(), opts :: Keyword.t()) :: t()
   def update_grants(%__MODULE__{} = grants, opts) do
     Enum.reduce(opts, grants, fn {key, value}, acc ->
-      Map.put(acc, key, value)
+      Map.replace(acc, key, value)
     end)
   end
 end

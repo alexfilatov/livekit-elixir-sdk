@@ -72,5 +72,12 @@ defmodule Livekit.AccessToken.VideoGrantsTest do
       assert updated_grant.hidden == true
       assert updated_grant.agent == true
     end
+
+    test "updates the grants and do not add new fields" do
+      base_grants = %VideoGrants{}
+      updated_grant = VideoGrants.update_grants(base_grants, room_join: true, invalid_field: true)
+      assert updated_grant.room_join == true
+      refute Map.has_key?(updated_grant, :invalid_field)
+    end
   end
 end

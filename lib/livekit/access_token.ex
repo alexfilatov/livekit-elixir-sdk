@@ -92,13 +92,20 @@ defmodule Livekit.AccessToken do
   """
   def to_jwt(%__MODULE__{} = token) do
     current_time = System.system_time(:second)
+    grants = token.grants
     signer = Joken.Signer.create("HS256", token.api_secret)
 
+    if not is_nil(grants) and
+         not is_nil(grants.room_join) and
+         (is_nil(token.identity) or is_nil(grants.room)) do
+      raise "identity and room must be set when joining a room"
+    end
+
     video_grants =
-      token.grants
+      grants
       |> Map.from_struct()
-      |> Enum.map(fn {k, v} -> {Inflex.camelize(to_string(k), :lower), v} end)
-      |> Enum.into(%{})
+      |> Stream.map(fn {k, v} -> {Inflex.camelize(to_string(k), :lower), v} end)
+      |> Map.new()
 
     claims = %{
       "iss" => token.api_key,
