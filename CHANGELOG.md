@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.1.4] - 2025-09-27
+
+### Added
+
+- Support for `name` field during access token creation
+- `node_id` parameter support in create room options
+- Comprehensive test coverage for create room function options
+
+### Fixed
+
+- Resolved Dialyzer type analysis issues across multiple modules
+- Removed Tesla deprecation warnings in room service client
+- Improved type specifications in egress service client
+- Fixed webhook receiver type handling
+- Streamlined mix task implementation
+
 ## [0.1.3] - 2025-08-18
 
 ### Fixed
