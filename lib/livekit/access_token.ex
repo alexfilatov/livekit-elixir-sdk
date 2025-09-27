@@ -82,7 +82,7 @@ defmodule Livekit.AccessToken do
     current_time = System.system_time(:second)
     exp_time = current_time + (token.ttl || 3600)
 
-    video_grant =
+    video_grants =
       token.grants
       |> Map.from_struct()
       |> Enum.map(fn {k, v} -> {Inflex.camelize(to_string(k), :lower), v} end)
@@ -93,7 +93,7 @@ defmodule Livekit.AccessToken do
       "sub" => token.identity,
       "nbf" => current_time,
       "exp" => exp_time,
-      "video" => video_grant,
+      "video" => video_grants,
       "metadata" => token.metadata,
       "name" => token.name || token.identity
     }
