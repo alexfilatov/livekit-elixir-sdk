@@ -3,11 +3,11 @@ defmodule Livekit.AccessToken do
   Handles generation and management of Livekit access tokens.
   """
 
-  alias Livekit.Grants
+  alias Livekit.AccessToken.VideoGrants
 
   defstruct api_key: nil,
             api_secret: nil,
-            grants: %Grants{},
+            grants: %VideoGrants{},
             identity: nil,
             name: nil,
             ttl: nil,
@@ -16,7 +16,7 @@ defmodule Livekit.AccessToken do
   @type t :: %__MODULE__{
           api_key: String.t() | nil,
           api_secret: String.t() | nil,
-          grants: Grants.t(),
+          grants: VideoGrants.t(),
           identity: String.t() | nil,
           name: String.t() | nil,
           ttl: integer() | nil,
@@ -64,7 +64,7 @@ defmodule Livekit.AccessToken do
   @doc """
   Sets the grants for the token.
   """
-  def with_grants(%__MODULE__{} = token, %Livekit.Grants{} = grants) do
+  def with_grants(%__MODULE__{} = token, %Livekit.AccessToken.VideoGrants{} = grants) do
     %{token | grants: grants}
   end
 

@@ -6,7 +6,8 @@ defmodule Livekit.IngressServiceClient do
   including RTMP streams, WebRTC ingress, and file-based input sources.
   """
 
-  alias Livekit.{AccessToken, Grants, Ingress}
+  alias Livekit.{AccessToken, Ingress}
+  alias Livekit.AccessToken.VideoGrants
 
   require Logger
 
@@ -45,7 +46,7 @@ defmodule Livekit.IngressServiceClient do
     token =
       AccessToken.new(api_key, api_secret)
       |> AccessToken.with_identity("ingress_service")
-      |> AccessToken.with_grants(Grants.ingress_admin())
+      |> AccessToken.with_grants(VideoGrants.ingress_admin())
       |> AccessToken.to_jwt()
 
     # Set up auth headers

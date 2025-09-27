@@ -1,4 +1,4 @@
-defmodule Livekit.Grants do
+defmodule Livekit.AccessToken.VideoGrants do
   @moduledoc """
   Defines the structure and types for Livekit access token grants.
   """

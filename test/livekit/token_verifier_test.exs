@@ -1,7 +1,7 @@
 defmodule Livekit.TokenVerifierTest do
   use ExUnit.Case
   alias Livekit.AccessToken
-  alias Livekit.Grants
+  alias Livekit.AccessToken.VideoGrants
   alias Livekit.TokenVerifier
 
   @api_key "api_key_123"
@@ -13,7 +13,7 @@ defmodule Livekit.TokenVerifierTest do
         AccessToken.new(@api_key, @api_secret)
         |> AccessToken.with_identity("user123")
         |> AccessToken.with_ttl(3600)
-        |> AccessToken.add_grant(Grants.join_room("room123"))
+        |> AccessToken.add_grant(VideoGrants.join_room("room123"))
         |> AccessToken.to_jwt()
 
       assert {:ok, claims} = TokenVerifier.verify(token, @api_secret)
@@ -42,7 +42,7 @@ defmodule Livekit.TokenVerifierTest do
         AccessToken.new(@api_key, @api_secret)
         |> AccessToken.with_identity("user123")
         |> AccessToken.with_ttl(3600)
-        |> AccessToken.add_grant(Grants.join_room("room123"))
+        |> AccessToken.add_grant(VideoGrants.join_room("room123"))
         |> AccessToken.to_jwt()
 
       claims = TokenVerifier.verify!(token, @api_secret)

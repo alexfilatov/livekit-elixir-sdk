@@ -1,10 +1,10 @@
-defmodule Livekit.GrantsTest do
+defmodule Livekit.AccessToken.VideoGrantsTest do
   use ExUnit.Case
-  alias Livekit.Grants
+  alias Livekit.AccessToken.VideoGrants
 
   describe "join_room/3" do
     test "creates a room join grant" do
-      grant = Grants.join_room("test_room")
+      grant = VideoGrants.join_room("test_room")
       assert grant.room == "test_room"
       assert grant.room_join == true
       refute grant.room_admin
@@ -14,7 +14,7 @@ defmodule Livekit.GrantsTest do
 
   describe "room_admin/0" do
     test "creates a room admin grant" do
-      grant = Grants.room_admin()
+      grant = VideoGrants.room_admin()
       assert grant.room_admin == true
       refute grant.room_join
       refute grant.room_create
@@ -23,7 +23,7 @@ defmodule Livekit.GrantsTest do
 
   describe "room_create/0" do
     test "creates a room create grant" do
-      grant = Grants.room_create()
+      grant = VideoGrants.room_create()
       assert grant.room_create == true
       refute grant.room_join
       refute grant.room_admin
@@ -32,7 +32,7 @@ defmodule Livekit.GrantsTest do
 
   describe "ingress_admin/0" do
     test "creates an ingress admin grant" do
-      grant = Grants.ingress_admin()
+      grant = VideoGrants.ingress_admin()
       assert grant.ingress_admin == true
       refute grant.room_join
       refute grant.room_admin

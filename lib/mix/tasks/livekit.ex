@@ -269,7 +269,7 @@ defmodule Mix.Tasks.Livekit do
           metadata = Keyword.get(opts, :metadata)
           valid_for = Keyword.get(opts, :valid_for)
 
-          grant = %Livekit.Grants{
+          grant = %Livekit.AccessToken.VideoGrants{
             room: room,
             room_join: true,
             room_admin: Keyword.get(opts, :admin, false)

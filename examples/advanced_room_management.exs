@@ -12,7 +12,8 @@ Mix.install(
 # 1. Set your Livekit server URL, API key, and API secret
 # 2. Run with: `elixir advanced_room_management.exs`
 
-alias Livekit.{AccessToken, RoomServiceClient, Grants}
+alias Livekit.{AccessToken, RoomServiceClient}
+alias Livekit.AccessToken.VideoGrants
 
 # Replace these with your Livekit server credentials
 server_url = "ws://localhost:7880"
@@ -21,7 +22,8 @@ api_secret = "secret"
 
 defmodule RoomManager do
   @max_retries 3
-  @retry_delay 1000 # 1 second
+  # 1 second
+  @retry_delay 1000
 
   def with_retries(fun) do
     do_with_retries(fun, 0)
@@ -33,7 +35,10 @@ defmodule RoomManager do
         {:ok, result}
 
       {:error, :request_failed} ->
-        IO.puts("Request failed, retrying in #{@retry_delay}ms (attempt #{retry_count + 1}/#{@max_retries})")
+        IO.puts(
+          "Request failed, retrying in #{@retry_delay}ms (attempt #{retry_count + 1}/#{@max_retries})"
+        )
+
         Process.sleep(@retry_delay)
         do_with_retries(fun, retry_count + 1)
 
@@ -77,7 +82,7 @@ defmodule RoomManager do
   def ensure_room_exists(client, room_name, opts \\ []) do
     case with_retries(fn -> RoomServiceClient.list_rooms(client) end) do
       {:ok, %{"rooms" => rooms}} ->
-        if Enum.any?(rooms, & &1["name"] == room_name) do
+        if Enum.any?(rooms, &(&1["name"] == room_name)) do
           {:ok, :room_exists}
         else
           create_room_with_token(client, room_name, opts)
@@ -91,14 +96,15 @@ defmodule RoomManager do
   def cleanup_empty_rooms(client) do
     case with_retries(fn -> RoomServiceClient.list_rooms(client) end) do
       {:ok, %{"rooms" => rooms}} ->
-        empty_rooms = Enum.filter(rooms, & &1["num_participants"] == 0)
+        empty_rooms = Enum.filter(rooms, &(&1["num_participants"] == 0))
 
-        results = Enum.map(empty_rooms, fn room ->
-          case with_retries(fn -> RoomServiceClient.delete_room(client, room["name"]) end) do
-            {:ok, _} -> {:ok, room["name"]}
-            {:error, reason} -> {:error, {room["name"], reason}}
-          end
-        end)
+        results =
+          Enum.map(empty_rooms, fn room ->
+            case with_retries(fn -> RoomServiceClient.delete_room(client, room["name"]) end) do
+              {:ok, _} -> {:ok, room["name"]}
+              {:error, reason} -> {:error, {room["name"], reason}}
+            end
+          end)
 
         {
           Enum.filter(results, fn {status, _} -> status == :ok end),
@@ -117,6 +123,7 @@ client = RoomServiceClient.new(server_url, api_key, api_secret)
 # Example usage
 IO.puts("\n=== Creating a room with admin token ===")
 room_name = "advanced-room-#{:rand.uniform(1000)}"
+
 case RoomManager.create_room_with_token(client, room_name) do
   {:ok, %{room: room, token: token}} ->
     IO.puts("Room created successfully:")
@@ -129,6 +136,7 @@ case RoomManager.create_room_with_token(client, room_name) do
 end
 
 IO.puts("\n=== Ensuring room exists ===")
+
 case RoomManager.ensure_room_exists(client, "persistent-room") do
   {:ok, :room_exists} ->
     IO.puts("Room already exists")
@@ -144,6 +152,7 @@ case RoomManager.ensure_room_exists(client, "persistent-room") do
 end
 
 IO.puts("\n=== Cleaning up empty rooms ===")
+
 case RoomManager.cleanup_empty_rooms(client) do
   {successful, failed} ->
     IO.puts("\nSuccessfully deleted rooms:")
@@ -151,6 +160,7 @@ case RoomManager.cleanup_empty_rooms(client) do
 
     unless Enum.empty?(failed) do
       IO.puts("\nFailed to delete rooms:")
+
       Enum.each(failed, fn {:error, {name, reason}} ->
         IO.puts("- #{name}: #{inspect(reason)}")
       end)

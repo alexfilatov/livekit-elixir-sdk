@@ -1,7 +1,7 @@
 defmodule Livekit.AccessTokenTest do
   use ExUnit.Case
   alias Livekit.AccessToken
-  alias Livekit.Grants
+  alias Livekit.AccessToken.VideoGrants
 
   @api_key "api_key_123"
   @api_secret "secret_456"
@@ -50,7 +50,7 @@ defmodule Livekit.AccessTokenTest do
   describe "add_grant/2" do
     test "adds a grant" do
       token = AccessToken.new(@api_key, @api_secret)
-      grant = Grants.join_room("room123")
+      grant = VideoGrants.join_room("room123")
       token = AccessToken.add_grant(token, grant)
       assert token.grants.room == "room123"
       assert token.grants.room_join == true
@@ -64,7 +64,7 @@ defmodule Livekit.AccessTokenTest do
         |> AccessToken.with_identity("user123")
         |> AccessToken.with_name("name123")
         |> AccessToken.with_ttl(3600)
-        |> AccessToken.add_grant(Grants.join_room("room123"))
+        |> AccessToken.add_grant(VideoGrants.join_room("room123"))
 
       jwt = AccessToken.to_jwt(token)
       assert is_binary(jwt)

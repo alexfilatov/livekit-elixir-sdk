@@ -1,6 +1,6 @@
 # Livekit Server SDK for Elixir
 
-This is *not* official Elixir server SDK for [Livekit](https://livekit.io). This SDK allows you to manage rooms and create access tokens from your Elixir backend.
+This is _not_ official Elixir server SDK for [Livekit](https://livekit.io). This SDK allows you to manage rooms and create access tokens from your Elixir backend.
 
 ## Feature Support
 
@@ -242,7 +242,7 @@ mix help livekit
 token = Livekit.AccessToken.new("devkey", "secret")
   |> Livekit.AccessToken.with_identity("user-id")
   |> Livekit.AccessToken.with_ttl(3600) # 1 hour
-  |> Livekit.AccessToken.add_grant(Livekit.Grants.join_room("room-name"))
+  |> Livekit.AccessToken.add_grant(Livekit.AccessToken.VideoGrants.join_room("room-name"))
 
 # Convert to JWT
 jwt = Livekit.AccessToken.to_jwt(token)
@@ -370,14 +370,14 @@ def webhook(conn, _params) do
   with {:ok, body, conn} <- Plug.Conn.read_body(conn),
        auth_header = Plug.Conn.get_req_header(conn, "authorization"),
        {:ok, event} <- Livekit.WebhookReceiver.receive(body, auth_header) do
-    
+
     # Handle the webhook event
     case event.event do
       "room_started" -> handle_room_started(event)
       "participant_joined" -> handle_participant_joined(event)
       # ... handle other events
     end
-    
+
     send_resp(conn, 200, "")
   else
     {:error, reason} ->
@@ -424,26 +424,26 @@ defmodule YourApp.WebhookController do
     with {:ok, body, conn} <- read_body(conn),
          auth_header = get_req_header(conn, "authorization") |> List.first(),
          {:ok, event} <- Livekit.WebhookReceiver.receive(body, auth_header) do
-      
+
       # Handle the webhook event based on its type
       case event.event do
         "room_created" ->
           # Handle room creation event
           IO.puts("Room created: #{event.room.name} (#{event.room.sid})")
-          
+
         "participant_joined" ->
           # Handle participant joined event
           IO.puts("Participant joined: #{event.participant.identity}")
-          
+
         "track_published" ->
           # Handle track published event
           IO.puts("Track published: #{event.track.name}")
-          
+
         _ ->
           # Handle other event types
           IO.puts("Received event: #{event.event}")
       end
-      
+
       conn
       |> put_status(200)
       |> json(%{success: true})
@@ -495,10 +495,10 @@ defmodule YourAppWeb.WebhookController do
     with {:ok, body, conn} <- read_body(conn),
          auth_header = get_req_header(conn, "authorization") |> List.first(),
          {:ok, event} <- Livekit.WebhookReceiver.receive(body, auth_header) do
-      
+
       # Process the webhook event
       process_webhook_event(event)
-      
+
       # Return a success response
       conn
       |> put_status(200)
@@ -506,42 +506,42 @@ defmodule YourAppWeb.WebhookController do
     else
       {:error, reason} ->
         Logger.error("Webhook validation failed: #{inspect(reason)}")
-        
+
         conn
         |> put_status(400)
         |> json(%{error: "Invalid webhook request"})
     end
   end
-  
+
   defp process_webhook_event(event) do
     Logger.info("Received webhook event: #{event.event}")
-    
+
     case event.event do
       "room_created" ->
         handle_room_created(event.room)
-        
+
       "participant_joined" ->
         handle_participant_joined(event.participant, event.room)
-        
+
       "track_published" ->
         handle_track_published(event.track, event.participant, event.room)
-        
+
       # Add more event handlers as needed
       _ ->
         Logger.info("Unhandled event type: #{event.event}")
     end
   end
-  
+
   defp handle_room_created(room) do
     Logger.info("Room created: #{room.name} (#{room.sid})")
     # Your custom logic for room creation
   end
-  
+
   defp handle_participant_joined(participant, room) do
     Logger.info("Participant #{participant.identity} joined room #{room.name}")
     # Your custom logic for participant joining
   end
-  
+
   defp handle_track_published(track, participant, room) do
     Logger.info("Track #{track.sid} published by #{participant.identity} in room #{room.name}")
     # Your custom logic for track publishing
@@ -557,12 +557,12 @@ Add a route for your webhook controller in your router file:
 # lib/your_app_web/router.ex
 defmodule YourAppWeb.Router do
   use YourAppWeb, :router
-  
+
   # ... other router code ...
-  
+
   scope "/api", YourAppWeb do
     pipe_through :api
-    
+
     post "/webhooks/livekit", WebhookController, :handle
   end
 end
@@ -576,9 +576,9 @@ In your LiveKit server configuration, set up the webhook URL to point to your Ph
 # livekit.yaml or equivalent configuration
 webhook:
   # The API key to use for signing webhook messages
-  api_key: 'your_livekit_api_key'
+  api_key: "your_livekit_api_key"
   urls:
-    - 'https://your-app-domain.com/api/webhooks/livekit'
+    - "https://your-app-domain.com/api/webhooks/livekit"
 ```
 
 For more information, see the [official LiveKit webhook documentation](https://docs.livekit.io/home/server/webhooks/).
@@ -671,7 +671,7 @@ Priority development areas for future releases:
 
 1. **Ingress Service Enhancements** - Advanced encoding presets, update semantics, telemetry
 2. **Enhanced Agent Dispatch** - Advanced agent lifecycle management
-3. **SIP Service** - Telephony integration and PSTN connectivity  
+3. **SIP Service** - Telephony integration and PSTN connectivity
 4. **Real-Time Client SDK** - Direct participant connections and WebRTC support
 5. **Advanced Permissions** - Granular access control and specialized grants
 6. **Unified API Client** - Single entry point for all services
