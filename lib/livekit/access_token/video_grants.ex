@@ -8,7 +8,7 @@ defmodule Livekit.AccessToken.VideoGrants do
             room_record: nil,
             room_admin: nil,
             room_join: nil,
-            room: "",
+            room: nil,
             destination_room: nil,
             can_publish: true,
             can_subscribe: true,
