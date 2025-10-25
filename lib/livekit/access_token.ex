@@ -167,9 +167,8 @@ defmodule Livekit.AccessToken do
     grants = Map.get(token, :grants)
     signer = Joken.Signer.create("HS256", token.api_secret)
 
-    if not is_nil(grants) and
-         not is_nil(Map.get(grants, :room_join)) and
-         (is_nil(token.identity) or is_nil(Map.get(grants, :room))) do
+    if is_map(grants) and Map.get(grants, :room_join) == true and
+         (token.identity in [nil, ""] or Map.get(grants, :room) in [nil, ""]) do
       raise "identity and room must be set when joining a room"
     end
 
