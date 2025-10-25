@@ -2,7 +2,7 @@ defmodule Livekit.WebhookIntegrationTest do
   # Change async to false to avoid conflicts with other tests mocking the same modules
   use ExUnit.Case, async: false
 
-  alias Livekit.AccessToken
+  alias Livekit.AccessToken.TokenVerifier
   alias Livekit.WebhookReceiver
 
   import Mock
@@ -87,8 +87,10 @@ defmodule Livekit.WebhookIntegrationTest do
       })
 
       # Mock the token verification
-      with_mock AccessToken,
-        verify: fn ^token, "test_key", "test_secret" -> {:ok, %{"sha256" => sha256}} end do
+      with_mock TokenVerifier,
+        verify_with_issuer: fn ^token, "test_key", "test_secret" ->
+          {:ok, %{"sha256" => sha256}}
+        end do
         # Test
         result = TestWebhookController.handle_webhook(webhook_body, token)
 
@@ -128,8 +130,10 @@ defmodule Livekit.WebhookIntegrationTest do
       })
 
       # Mock the token verification
-      with_mock AccessToken,
-        verify: fn ^token, "test_key", "test_secret" -> {:ok, %{"sha256" => sha256}} end do
+      with_mock TokenVerifier,
+        verify_with_issuer: fn ^token, "test_key", "test_secret" ->
+          {:ok, %{"sha256" => sha256}}
+        end do
         # Test
         result = TestWebhookController.handle_webhook(webhook_body, token)
 
@@ -177,8 +181,10 @@ defmodule Livekit.WebhookIntegrationTest do
       })
 
       # Mock the token verification
-      with_mock AccessToken,
-        verify: fn ^token, "test_key", "test_secret" -> {:ok, %{"sha256" => sha256}} end do
+      with_mock TokenVerifier,
+        verify_with_issuer: fn ^token, "test_key", "test_secret" ->
+          {:ok, %{"sha256" => sha256}}
+        end do
         # Test
         result = TestWebhookController.handle_webhook(webhook_body, token)
 
@@ -202,8 +208,10 @@ defmodule Livekit.WebhookIntegrationTest do
       sha256 = :crypto.hash(:sha256, webhook_body) |> Base.encode16(case: :lower)
 
       # Mock the token verification
-      with_mock AccessToken,
-        verify: fn ^token, "test_key", "test_secret" -> {:ok, %{"sha256" => sha256}} end do
+      with_mock TokenVerifier,
+        verify_with_issuer: fn ^token, "test_key", "test_secret" ->
+          {:ok, %{"sha256" => sha256}}
+        end do
         # Test
         result = TestWebhookController.handle_webhook(webhook_body, token)
 
@@ -232,8 +240,8 @@ defmodule Livekit.WebhookIntegrationTest do
       })
 
       # Mock the token verification to fail
-      with_mock AccessToken,
-        verify: fn ^token, "test_key", "test_secret" -> {:error, "invalid token"} end do
+      with_mock TokenVerifier,
+        verify_with_issuer: fn ^token, "test_key", "test_secret" -> {:error, "invalid token"} end do
         # Test
         result = TestWebhookController.handle_webhook(webhook_body, token)
 
@@ -307,8 +315,10 @@ defmodule Livekit.WebhookIntegrationTest do
         sha256 = :crypto.hash(:sha256, webhook_body) |> Base.encode16(case: :lower)
 
         # Mock the token verification
-        with_mock AccessToken,
-          verify: fn ^token, "test_key", "test_secret" -> {:ok, %{"sha256" => sha256}} end do
+        with_mock TokenVerifier,
+          verify_with_issuer: fn ^token, "test_key", "test_secret" ->
+            {:ok, %{"sha256" => sha256}}
+          end do
           # Test
           result = TestWebhookController.handle_webhook(webhook_body, token)
 
@@ -360,8 +370,10 @@ defmodule Livekit.WebhookIntegrationTest do
       })
 
       # Mock the token verification
-      with_mock AccessToken,
-        verify: fn ^token, "test_key", "test_secret" -> {:ok, %{"sha256" => sha256}} end do
+      with_mock TokenVerifier,
+        verify_with_issuer: fn ^token, "test_key", "test_secret" ->
+          {:ok, %{"sha256" => sha256}}
+        end do
         # Test
         result = TestWebhookController.handle_webhook(webhook_body, token)
 
@@ -408,8 +420,10 @@ defmodule Livekit.WebhookIntegrationTest do
       })
 
       # Mock the token verification
-      with_mock AccessToken,
-        verify: fn ^token, "test_key", "test_secret" -> {:ok, %{"sha256" => sha256}} end do
+      with_mock TokenVerifier,
+        verify_with_issuer: fn ^token, "test_key", "test_secret" ->
+          {:ok, %{"sha256" => sha256}}
+        end do
         # Test
         result = TestWebhookController.handle_webhook(webhook_body, token)
 

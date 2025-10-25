@@ -2,7 +2,7 @@ defmodule Livekit.WebhookPerformanceTest do
   # Change async to false to avoid conflicts with other tests mocking the same modules
   use ExUnit.Case, async: false
 
-  alias Livekit.AccessToken
+  alias Livekit.AccessToken.TokenVerifier
   alias Livekit.WebhookReceiver
 
   import Mock
@@ -140,8 +140,10 @@ defmodule Livekit.WebhookPerformanceTest do
       })
 
       # Mock the token verification
-      with_mock AccessToken,
-        verify: fn ^token, "test_key", "test_secret" -> {:ok, %{"sha256" => sha256}} end do
+      with_mock TokenVerifier,
+        verify_with_issuer: fn ^token, "test_key", "test_secret" ->
+          {:ok, %{"sha256" => sha256}}
+        end do
         # Measure the time it takes to process the webhook
         {time, result} =
           :timer.tc(fn ->
@@ -196,8 +198,10 @@ defmodule Livekit.WebhookPerformanceTest do
       })
 
       # Mock the token verification
-      with_mock AccessToken,
-        verify: fn ^token, "test_key", "test_secret" -> {:ok, %{"sha256" => sha256}} end do
+      with_mock TokenVerifier,
+        verify_with_issuer: fn ^token, "test_key", "test_secret" ->
+          {:ok, %{"sha256" => sha256}}
+        end do
         # Measure the time it takes to process the webhook
         {time, result} =
           :timer.tc(fn ->
@@ -239,8 +243,10 @@ defmodule Livekit.WebhookPerformanceTest do
       {time, result} =
         :timer.tc(fn ->
           # Mock the token verification
-          with_mock AccessToken,
-            verify: fn ^token, "test_key", "test_secret" -> {:ok, %{"sha256" => "any_hash"}} end do
+          with_mock TokenVerifier,
+            verify_with_issuer: fn ^token, "test_key", "test_secret" ->
+              {:ok, %{"sha256" => "any_hash"}}
+            end do
             # Process the webhook
             WebhookReceiver.receive(webhook_body, token)
           end

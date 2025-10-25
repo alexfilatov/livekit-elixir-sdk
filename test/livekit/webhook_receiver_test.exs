@@ -1,7 +1,7 @@
 defmodule Livekit.WebhookReceiverTest do
   use ExUnit.Case, async: true
 
-  alias Livekit.AccessToken
+  alias Livekit.AccessToken.TokenVerifier
   alias Livekit.WebhookReceiver
 
   import Mock
@@ -26,8 +26,12 @@ defmodule Livekit.WebhookReceiverTest do
 
       # Mock the token verification
       with_mocks([
-        {AccessToken, [],
-         [verify: fn ^token, "test_key", "test_secret" -> {:ok, %{"sha256" => sha256}} end]}
+        {TokenVerifier, [],
+         [
+           verify_with_issuer: fn ^token, "test_key", "test_secret" ->
+             {:ok, %{"sha256" => sha256}}
+           end
+         ]}
       ]) do
         # Test
         {:ok, event} = WebhookReceiver.receive(webhook_body, token)
@@ -55,8 +59,8 @@ defmodule Livekit.WebhookReceiverTest do
       })
 
       # Mock the token verification to fail
-      with_mock AccessToken,
-        verify: fn ^token, "test_key", "test_secret" -> {:error, "invalid token"} end do
+      with_mock TokenVerifier,
+        verify_with_issuer: fn ^token, "test_key", "test_secret" -> {:error, "invalid token"} end do
         # Test
         result = WebhookReceiver.receive(webhook_body, token)
 
@@ -79,8 +83,10 @@ defmodule Livekit.WebhookReceiverTest do
       })
 
       # Mock the token verification with incorrect SHA256
-      with_mock AccessToken,
-        verify: fn ^token, "test_key", "test_secret" -> {:ok, %{"sha256" => "wrong_hash"}} end do
+      with_mock TokenVerifier,
+        verify_with_issuer: fn ^token, "test_key", "test_secret" ->
+          {:ok, %{"sha256" => "wrong_hash"}}
+        end do
         # Test
         result = WebhookReceiver.receive(webhook_body, token)
 
@@ -103,7 +109,8 @@ defmodule Livekit.WebhookReceiverTest do
       })
 
       # Mock the token verification with missing SHA256
-      with_mock AccessToken, verify: fn ^token, "test_key", "test_secret" -> {:ok, %{}} end do
+      with_mock TokenVerifier,
+        verify_with_issuer: fn ^token, "test_key", "test_secret" -> {:ok, %{}} end do
         # Test
         result = WebhookReceiver.receive(webhook_body, token)
 
@@ -126,8 +133,10 @@ defmodule Livekit.WebhookReceiverTest do
       # Mock the token verification
       sha256 = :crypto.hash(:sha256, webhook_body) |> Base.encode16(case: :lower)
 
-      with_mock AccessToken,
-        verify: fn ^token, "test_key", "test_secret" -> {:ok, %{"sha256" => sha256}} end do
+      with_mock TokenVerifier,
+        verify_with_issuer: fn ^token, "test_key", "test_secret" ->
+          {:ok, %{"sha256" => sha256}}
+        end do
         # Test
         result = WebhookReceiver.receive(webhook_body, token)
 
@@ -172,8 +181,12 @@ defmodule Livekit.WebhookReceiverTest do
 
       # Mock the token verification
       with_mocks([
-        {AccessToken, [],
-         [verify: fn ^token, "test_key", "test_secret" -> {:ok, %{"sha256" => sha256}} end]}
+        {TokenVerifier, [],
+         [
+           verify_with_issuer: fn ^token, "test_key", "test_secret" ->
+             {:ok, %{"sha256" => sha256}}
+           end
+         ]}
       ]) do
         # Skip this test as the implementation doesn't support list of strings
         # This would need a fix in the WebhookReceiver module

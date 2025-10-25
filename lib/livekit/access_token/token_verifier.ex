@@ -11,7 +11,6 @@ defmodule Livekit.AccessToken.TokenVerifier do
   def verify(token, api_secret) when is_binary(token) and is_binary(api_secret) do
     signer = Joken.Signer.create("HS256", api_secret)
 
-    # TO DO: recreate access token from claims
     case Joken.verify(token, signer) do
       {:ok, claims} ->
         {:ok, parse_claims(claims)}
