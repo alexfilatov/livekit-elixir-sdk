@@ -3,7 +3,6 @@ defmodule Livekit.AccessToken.SIPGrants do
   Defines the structure and types for Livekit access token SIP grants.
   """
 
-  @derive {Jason.Encoder, keys: :camel}
   defstruct admin: false,
             call: false
 

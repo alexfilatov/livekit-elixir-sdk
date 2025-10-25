@@ -3,8 +3,6 @@ defmodule Livekit.AccessToken.InferenceGrants do
   Defines the structure and types for Livekit access token inference grants.
   """
 
-  @derive {Jason.Encoder, keys: :camel}
-
   defstruct perform: false
 
   @type t :: %__MODULE__{

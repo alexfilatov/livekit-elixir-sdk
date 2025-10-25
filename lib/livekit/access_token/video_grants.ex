@@ -3,8 +3,6 @@ defmodule Livekit.AccessToken.VideoGrants do
   Defines the structure and types for Livekit access token grants.
   """
 
-  @derive {Jason.Encoder, keys: :camel}
-
   defstruct room_create: nil,
             room_list: nil,
             room_record: nil,
