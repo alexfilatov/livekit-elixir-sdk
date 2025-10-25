@@ -173,15 +173,6 @@ defmodule Livekit.AccessToken do
       raise "identity and room must be set when joining a room"
     end
 
-    grants =
-      if is_nil(grants) do
-        grants
-      else
-        grants
-        |> Map.from_struct()
-        |> Map.new(fn {k, v} -> {snake_to_lower_camel(k), v} end)
-      end
-
     claims = %{
       "iss" => token.api_key,
       "sub" => token.identity,
@@ -200,11 +191,26 @@ defmodule Livekit.AccessToken do
 
     {:ok, jwt, _claims} =
       claims
-      |> Map.new(fn {k, v} -> {snake_to_lower_camel(k), v} end)
+      |> claims_to_lower_camel()
       |> minimize_claims()
       |> Joken.encode_and_sign(signer)
 
     jwt
+  end
+
+  @spec claims_to_lower_camel(claims()) :: claims()
+  defp claims_to_lower_camel(claims) when is_struct(claims) do
+    claims_to_lower_camel(Map.from_struct(claims))
+  end
+
+  defp claims_to_lower_camel(claims) do
+    Map.new(claims, fn {k, v} ->
+      if is_map(v) do
+        {snake_to_lower_camel(k), claims_to_lower_camel(v)}
+      else
+        {snake_to_lower_camel(k), v}
+      end
+    end)
   end
 
   # in order to produce minimal JWT size, exclude None or empty values
