@@ -1,4 +1,4 @@
-ExUnit.start()
+ExUnit.start(exclude: [:integration])
 
 # Set up test configuration
 Application.put_env(:livekit, :url, "wss://test.livekit.com")

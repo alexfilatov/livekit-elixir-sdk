@@ -58,7 +58,9 @@ defmodule Livekit.MixProject do
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       # Test dependencies
       {:bypass, "~> 2.1", only: :test},
-      {:mock, "~> 0.3.0", only: :test}
+      {:mock, "~> 0.3.0", only: :test},
+      # NIF dependencies (optional — only needed when compiling the Rust WebRTC client)
+      {:rustler, "~> 0.37", runtime: false, optional: true}
     ]
   end
 
@@ -71,7 +73,7 @@ defmodule Livekit.MixProject do
   defp package do
     [
       name: "livekit",
-      files: ~w(lib priv mix.exs README.md LICENSE),
+      files: ~w(lib native priv mix.exs README.md LICENSE),
       licenses: ["Apache-2.0"],
       links: %{
         "GitHub" => "https://github.com/alexfilatov/livekit"

@@ -1,0 +1,256 @@
+# Chat Context: Building Typed Conversation History
+
+`ChatContext` is the conversation backbone of the LiveKit Elixir Agents framework. It holds
+an ordered, typed list of messages, function calls, and function call outputs — everything
+the LLM needs to maintain coherent multi-turn dialogue.
+
+## Setup
+
+```elixir
+Mix.install([
+  {:livekit, path: Path.join(__DIR__, "../../..")},
+  {:kino, "~> 0.14"}
+])
+
+alias Livekit.Agents.ChatContext
+alias Livekit.Agents.ChatContext.{ChatMessage, FunctionCall, FunctionCallOutput}
+```
+
+## Creating a ChatContext
+
+A `ChatContext` starts empty. Items are appended via `ChatContext.add/2` and stored
+oldest-first (the order the LLM needs to see them).
+
+```elixir
+ctx = ChatContext.new()
+IO.inspect(ctx, label: "Empty context")
+IO.puts("Item count: #{length(ctx.items)}")
+```
+
+## Adding Messages
+
+Use `new_message/2` to create typed messages. The four roles are:
+
+- `:system` — the system prompt; **never dropped by truncation**
+- `:user` — the human's turn
+- `:assistant` — the model's response
+- `:tool` — tool result fed back as a message
+
+```elixir
+# Build a typical conversation
+ctx =
+  ChatContext.new()
+  |> ChatContext.add(ChatContext.new_message(:system, ["You are a helpful assistant."]))
+  |> ChatContext.add(ChatContext.new_message(:user, ["What is the capital of France?"]))
+  |> ChatContext.add(ChatContext.new_message(:assistant, ["The capital of France is Paris."]))
+  |> ChatContext.add(ChatContext.new_message(:user, ["And what about Germany?"]))
+  |> ChatContext.add(ChatContext.new_message(:assistant, ["The capital of Germany is Berlin."]))
+
+IO.puts("Context has #{length(ctx.items)} items")
+IO.puts("\nMessages in order:")
+ChatContext.messages(ctx)
+|> Enum.each(fn msg ->
+  IO.puts("  [#{msg.role}] #{Enum.join(msg.content, " ")}")
+end)
+```
+
+## Inspecting Message Structs
+
+Each message carries a unique `id`, a `created_at` timestamp, and an `interrupted` flag.
+The `interrupted` flag is set to `true` when an assistant turn is cancelled mid-sentence
+by user speech.
+
+```elixir
+msg = ChatContext.new_message(:user, ["Hello!"])
+IO.inspect(msg, label: "ChatMessage struct")
+IO.puts("\nid:           #{msg.id}")
+IO.puts("role:         #{msg.role}")
+IO.puts("content:      #{inspect(msg.content)}")
+IO.puts("interrupted:  #{msg.interrupted}")
+IO.puts("created_at:   #{DateTime.to_string(msg.created_at)}")
+```
+
+## Multi-Modal Content
+
+Message content is a **list** rather than a plain string. This allows mixing text with
+structured data for vision or file-attachment use cases.
+
+```elixir
+multimodal_msg = ChatContext.new_message(:user, [
+  "Describe this image:",
+  %{"type" => "image_url", "url" => "https://example.com/photo.jpg"}
+])
+
+IO.puts("Content items: #{length(multimodal_msg.content)}")
+IO.puts("Text part:   #{hd(multimodal_msg.content)}")
+IO.puts("Image part:  #{inspect(List.last(multimodal_msg.content))}")
+```
+
+## Truncation
+
+`truncate/2` limits the context to `max_items` non-system messages. System messages at
+the head of the list are **always preserved** regardless of the limit. This ensures the
+LLM never loses its persona or instructions, even in very long conversations.
+
+```elixir
+# Build a long conversation with a system message at the top
+long_ctx =
+  ChatContext.new()
+  |> ChatContext.add(ChatContext.new_message(:system, ["You are a concise assistant."]))
+
+long_ctx =
+  Enum.reduce(1..20, long_ctx, fn i, acc ->
+    acc
+    |> ChatContext.add(ChatContext.new_message(:user, ["Turn #{i}: user question"]))
+    |> ChatContext.add(ChatContext.new_message(:assistant, ["Turn #{i}: assistant answer"]))
+  end)
+
+IO.puts("Before truncation: #{length(long_ctx.items)} items")
+
+truncated = ChatContext.truncate(long_ctx, 6)
+
+IO.puts("After truncate(ctx, 6): #{length(truncated.items)} items")
+IO.puts("\nItems kept:")
+truncated.items
+|> Enum.each(fn item ->
+  case item do
+    %ChatMessage{role: role, content: content} ->
+      IO.puts("  [#{role}] #{Enum.join(content, " ")}")
+    other ->
+      IO.inspect(other, label: "  other")
+  end
+end)
+```
+
+## Function Calls and Outputs
+
+When the LLM decides to call a tool, it emits a `FunctionCall`. After execution, the
+result is stored in a `FunctionCallOutput`. Both are appended to the context so the LLM
+can see the full tool interaction.
+
+```elixir
+# LLM wants to call get_weather
+fc = ChatContext.new_function_call(
+  "call_abc123",         # call_id: assigned by the LLM provider
+  "get_weather",         # tool name
+  Jason.encode!(%{"city" => "London", "units" => "celsius"})  # JSON arguments
+)
+
+IO.inspect(fc, label: "FunctionCall")
+
+# Tool executor returns the result
+fco = ChatContext.new_function_call_output(
+  "call_abc123",   # call_id must match the FunctionCall
+  "get_weather",   # tool name
+  "Cloudy, 12°C, humidity 78%",
+  false            # is_error: false = success
+)
+
+IO.inspect(fco, label: "FunctionCallOutput")
+```
+
+```elixir
+# Build a context with a complete tool interaction
+tool_ctx =
+  ChatContext.new()
+  |> ChatContext.add(ChatContext.new_message(:system, ["You have weather tools."]))
+  |> ChatContext.add(ChatContext.new_message(:user, ["What's the weather in London?"]))
+  |> ChatContext.add(fc)    # LLM decided to call the tool
+  |> ChatContext.add(fco)   # Tool result returned
+
+IO.puts("Full tool interaction context (#{length(tool_ctx.items)} items):")
+Enum.each(tool_ctx.items, fn item ->
+  case item do
+    %ChatMessage{role: r, content: c} -> IO.puts("  [ChatMessage:#{r}] #{inspect(c)}")
+    %FunctionCall{name: n, arguments: a} -> IO.puts("  [FunctionCall] #{n}(#{a})")
+    %FunctionCallOutput{name: n, output: o, is_error: e} -> IO.puts("  [FunctionCallOutput] #{n} -> #{o} (error=#{e})")
+  end
+end)
+```
+
+## Truncation and Orphan Prevention
+
+Truncation drops the oldest non-system items. But what if a truncation boundary falls
+between a `FunctionCall` and its `FunctionCallOutput`? The output would become an "orphan"
+— the LLM would see a tool result with no corresponding call, causing confusion.
+
+`truncate/2` detects and drops leading orphaned `FunctionCallOutput` items automatically.
+
+```elixir
+# Build a context where truncation would produce an orphan
+orphan_ctx =
+  ChatContext.new()
+  |> ChatContext.add(ChatContext.new_message(:system, ["System message."]))
+  |> ChatContext.add(ChatContext.new_function_call("c1", "tool_a", "{}"))
+  |> ChatContext.add(ChatContext.new_function_call_output("c1", "tool_a", "result_a"))
+  |> ChatContext.add(ChatContext.new_message(:user, ["Turn 2 user"]))
+  |> ChatContext.add(ChatContext.new_function_call("c2", "tool_b", "{}"))
+  |> ChatContext.add(ChatContext.new_function_call_output("c2", "tool_b", "result_b"))
+
+# max_items=4 keeps the last 4 non-system items.
+# The first FunctionCallOutput (c1) has no FunctionCall in the window → orphan → dropped.
+truncated_orphan = ChatContext.truncate(orphan_ctx, 4)
+
+IO.puts("After truncate(ctx, 4): #{length(truncated_orphan.items)} items")
+IO.puts("Items:")
+Enum.each(truncated_orphan.items, fn item ->
+  case item do
+    %ChatMessage{role: r} -> IO.puts("  ChatMessage(#{r})")
+    %FunctionCall{name: n, call_id: cid} -> IO.puts("  FunctionCall(#{n}, call_id=#{cid})")
+    %FunctionCallOutput{name: n, call_id: cid} -> IO.puts("  FunctionCallOutput(#{n}, call_id=#{cid})")
+  end
+end)
+```
+
+## Merging Contexts
+
+`merge/2` combines two contexts, deduplicating by `id` and sorting by `created_at`.
+Use this when building a context from multiple sources (e.g., a loaded history + new messages).
+
+```elixir
+ctx_a =
+  ChatContext.new()
+  |> ChatContext.add(ChatContext.new_message(:user, ["First message"]))
+
+# Small sleep so timestamps differ and sort order is deterministic
+Process.sleep(2)
+
+ctx_b =
+  ChatContext.new()
+  |> ChatContext.add(ChatContext.new_message(:assistant, ["First response"]))
+
+merged = ChatContext.merge(ctx_a, ctx_b)
+IO.puts("Merged context has #{length(merged.items)} items")
+Enum.each(merged.items, fn %ChatMessage{role: r, content: c} ->
+  IO.puts("  [#{r}] #{inspect(c)}")
+end)
+```
+
+## JSON Encoding
+
+All three item types implement `Jason.Encoder` so you can serialize the full context
+for logging, caching, or debugging.
+
+```elixir
+ctx_to_encode =
+  ChatContext.new()
+  |> ChatContext.add(ChatContext.new_message(:user, ["Encode this context"]))
+  |> ChatContext.add(ChatContext.new_function_call("cx1", "search", "{\"q\":\"elixir\"}"))
+  |> ChatContext.add(ChatContext.new_function_call_output("cx1", "search", "10 results found"))
+
+json = Jason.encode!(ctx_to_encode.items, pretty: true)
+IO.puts("JSON representation:\n#{json}")
+```
+
+## Summary
+
+You now know how to:
+
+- Create a `ChatContext` and add typed messages with `new_message/2`
+- Use multi-modal content lists for text + structured data
+- Record tool interactions with `new_function_call/3` and `new_function_call_output/4`
+- Truncate a long context while preserving system messages and avoiding orphan outputs
+- Merge contexts from multiple sources with `merge/2`
+- Serialize the context to JSON for debugging or persistence
+
+Next: `03_tool_calling.livemd` — wiring tools into the LLM function-calling loop.

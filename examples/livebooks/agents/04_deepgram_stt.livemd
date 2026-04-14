@@ -1,0 +1,286 @@
+# Deepgram STT: Real Speech-to-Text
+
+The `Livekit.Agents.STT.Deepgram` module implements the `Livekit.Agents.STT` behaviour
+using Deepgram's API. It supports both batch HTTP transcription and real-time WebSocket
+streaming.
+
+This livebook requires a **Deepgram API key**. You can get one for free at
+https://console.deepgram.com — the free tier includes 200 hours of transcription.
+A mock mode section at the bottom runs without any key.
+
+## Setup
+
+```elixir
+Mix.install([
+  {:livekit, path: Path.join(__DIR__, "../../..")},
+  {:kino, "~> 0.14"}
+])
+
+alias Livekit.Agents.STT.Deepgram
+alias Livekit.Agents.STT.SpeechEvent
+alias Livekit.Agents.AudioFrame
+```
+
+## Configuration
+
+Enter your Deepgram API key below. The key is stored only for this session.
+
+```elixir
+api_key_input = Kino.Input.text("Deepgram API Key", type: :password)
+```
+
+```elixir
+deepgram_key = Kino.Input.read(api_key_input)
+
+if deepgram_key == "" do
+  IO.puts("No API key entered — live transcription cells will be skipped.")
+  IO.puts("Scroll to the Mock Mode section to run without a key.")
+end
+
+IO.puts("Key configured: #{if deepgram_key != "", do: "yes (#{byte_size(deepgram_key)} chars)", else: "no"}")
+```
+
+## Inspecting Capabilities
+
+Before making any API calls, check what features the provider declares.
+
+```elixir
+IO.inspect(Deepgram.capabilities(), label: "Deepgram capabilities")
+```
+
+Expected output:
+- `streaming: true` — supports real-time WebSocket streaming
+- `interim_results: true` — emits partial transcripts mid-utterance
+- `diarization: true` — can identify multiple speakers
+- `languages: [...]` — supported BCP-47 language codes
+
+## Batch Transcription
+
+`transcribe/2` sends a single audio binary to Deepgram's HTTP API and returns a final
+`SpeechEvent`. This is the simplest way to transcribe a short utterance or file.
+
+The audio format must be raw linear-16 PCM (or specify encoding in opts).
+For this demo we use 100ms of silence — Deepgram handles it gracefully.
+
+```elixir
+# Only run if the user provided an API key
+if deepgram_key != "" do
+  config = %{
+    api_key: deepgram_key,
+    model: "nova-2",
+    language: "en-US",
+    smart_format: true,
+    punctuate: true
+  }
+
+  # 100ms of 48kHz 16-bit mono silence
+  silence = :binary.copy(<<0, 0>>, 4800)
+
+  IO.puts("Sending 100ms silence to Deepgram batch endpoint...")
+
+  case Deepgram.transcribe(silence, config: config) do
+    {:ok, %SpeechEvent{text: text, confidence: conf, language: lang}} ->
+      IO.puts("Transcript: #{inspect(text)}")
+      IO.puts("Confidence: #{conf}")
+      IO.puts("Language:   #{lang}")
+
+    {:error, reason} ->
+      IO.puts("Error: #{inspect(reason)}")
+  end
+else
+  IO.puts("(skipped — no API key)")
+end
+```
+
+## Configuring the Model
+
+Deepgram offers several models with different accuracy/speed tradeoffs:
+
+| Model | Best For |
+|-------|----------|
+| `nova-2` | Best accuracy (default, recommended) |
+| `nova` | Good accuracy, slightly faster |
+| `enhanced` | Older enhanced model |
+| `base` | Fastest, lowest accuracy |
+
+```elixir
+if deepgram_key != "" do
+  models_to_try = ["nova-2", "nova", "base"]
+  fake_audio = :binary.copy(<<100, 50>>, 2400)  # non-silent audio
+
+  Enum.each(models_to_try, fn model ->
+    config = %{api_key: deepgram_key, model: model, language: "en-US"}
+
+    case Deepgram.transcribe(fake_audio, config: config) do
+      {:ok, %SpeechEvent{text: text}} ->
+        IO.puts("Model #{model}: #{inspect(text)}")
+      {:error, reason} ->
+        IO.puts("Model #{model}: error - #{inspect(reason)}")
+    end
+  end)
+else
+  IO.puts("(skipped — no API key)")
+end
+```
+
+## Streaming Transcription
+
+`Deepgram.stream/1` opens a WebSocket to Deepgram and returns a `stream_pid`. Feed audio
+frames by sending `{:audio_chunk, binary}` to the stream pid. The stream sends back
+`{:speech_event, %SpeechEvent{}}` messages including interim results.
+
+Event sequence: `:start` -> zero or more `:interim` -> `:final` -> `:end`
+
+```elixir
+if deepgram_key != "" do
+  config = %{
+    api_key: deepgram_key,
+    model: "nova-2",
+    language: "en-US",
+    smart_format: true,
+    interim_results: true
+  }
+
+  IO.puts("Opening Deepgram streaming session...")
+
+  case Deepgram.stream(config) do
+    {:ok, stream_pid} ->
+      IO.puts("Stream pid: #{inspect(stream_pid)}")
+
+      # Send a few audio chunks
+      Enum.each(1..5, fn i ->
+        chunk = :binary.copy(<<i * 20, i * 10>>, 960)  # ~20ms of audio
+        send(stream_pid, {:audio_chunk, chunk})
+        Process.sleep(20)
+      end)
+
+      # Signal end of audio
+      send(stream_pid, :end_of_audio)
+
+      # Collect events for up to 5 seconds
+      events =
+        Stream.repeatedly(fn ->
+          receive do
+            {:speech_event, event} -> event
+          after
+            5000 -> nil
+          end
+        end)
+        |> Stream.take_while(&(&1 != nil))
+        |> Enum.to_list()
+
+      IO.puts("\nReceived #{length(events)} speech events:")
+      Enum.each(events, fn e ->
+        IO.puts("  [#{e.type}] conf=#{Float.round(e.confidence, 2)} text=#{inspect(e.text)}")
+      end)
+
+    {:error, reason} ->
+      IO.puts("Stream error: #{inspect(reason)}")
+  end
+else
+  IO.puts("(skipped — no API key)")
+end
+```
+
+## Provider Validation
+
+`validate_config/1` lets you check a config map before using it. Deepgram's implementation
+verifies the `:api_key` field is present.
+
+```elixir
+# Valid config
+case Deepgram.validate_config(%{api_key: "some-key", model: "nova-2"}) do
+  :ok -> IO.puts("Config valid: ok")
+  {:error, r} -> IO.puts("Config invalid: #{inspect(r)}")
+end
+
+# Missing api_key
+case Deepgram.validate_config(%{model: "nova-2"}) do
+  :ok -> IO.puts("Config valid (unexpected)")
+  {:error, r} -> IO.puts("Config invalid (expected): #{inspect(r)}")
+end
+```
+
+## Mock Mode — No API Key Required
+
+Set `mock_mode: true` to run without any API calls. The mock returns a simulated
+`SpeechEvent` that reflects the audio length. Useful for integration tests and local
+development without spending API credits.
+
+```elixir
+mock_config = %{
+  api_key: "unused-in-mock-mode",
+  model: "nova-2",
+  language: "en-US",
+  mock_mode: true
+}
+
+audio = :binary.copy(<<100>>, 9600)  # 200ms of audio
+
+{:ok, event} = Deepgram.transcribe(audio, config: mock_config)
+
+IO.puts("Mock transcript: #{inspect(event.text)}")
+IO.puts("Mock confidence: #{event.confidence}")
+IO.puts("Mock type:       #{event.type}")
+```
+
+```elixir
+# Mock streaming also works
+{:ok, mock_stream} = Deepgram.stream(Map.put(mock_config, :mock_mode, true))
+
+send(mock_stream, {:audio_chunk, :binary.copy(<<50>>, 480)})
+send(mock_stream, :end_of_audio)
+
+mock_events =
+  Stream.repeatedly(fn ->
+    receive do
+      {:speech_event, e} -> e
+    after
+      1000 -> nil
+    end
+  end)
+  |> Stream.take_while(&(&1 != nil))
+  |> Enum.to_list()
+
+IO.puts("Mock stream events: #{length(mock_events)}")
+Enum.each(mock_events, fn e -> IO.puts("  [#{e.type}] #{inspect(e.text)}") end)
+```
+
+## Using Deepgram in the Voice Pipeline
+
+Once you have a Deepgram config, plug it into `Pipeline.Config` as the `:stt` provider:
+
+```elixir
+# (Illustrative — Pipeline requires LLM and TTS too)
+alias Livekit.Agents.Pipeline
+
+pipeline_snippet = """
+config = %Pipeline.Config{
+  stt: {Livekit.Agents.STT.Deepgram, %{
+    api_key: "YOUR_DEEPGRAM_KEY",
+    model: "nova-2",
+    language: "en-US",
+    smart_format: true
+  }},
+  llm: {MyLLM, %{...}},
+  tts: {MyTTS, %{...}}
+}
+
+{:ok, pid} = Pipeline.start_link(config)
+"""
+
+IO.puts("Pipeline config snippet:\n#{pipeline_snippet}")
+```
+
+## Summary
+
+You now know how to:
+
+- Configure `Livekit.Agents.STT.Deepgram` with API key, model, and language settings
+- Use batch `transcribe/2` for short audio clips
+- Use `stream/1` for real-time WebSocket transcription with interim results
+- Select the right Deepgram model for your accuracy/speed needs
+- Use mock mode for testing without API calls
+- Plug Deepgram into the voice pipeline
+
+Next: `05_openai_llm.livemd` — chat completions and streaming with OpenAI.

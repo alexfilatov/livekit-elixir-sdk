@@ -119,6 +119,15 @@ defmodule Livekit.DataPacket.Kind do
   field(:LOSSY, 1)
 end
 
+defmodule Livekit.ServerInfo.Edition do
+  @moduledoc false
+
+  use Protobuf, enum: true, protoc_gen_elixir_version: "0.15.0", syntax: :proto3
+
+  field(:Standard, 0)
+  field(:Cloud, 1)
+end
+
 defmodule Livekit.EncodingOptions do
   @moduledoc false
 
@@ -311,4 +320,18 @@ defmodule Livekit.DataPacket do
   @moduledoc false
 
   use Protobuf, protoc_gen_elixir_version: "0.15.0", syntax: :proto3
+end
+
+defmodule Livekit.ServerInfo do
+  @moduledoc false
+
+  use Protobuf, protoc_gen_elixir_version: "0.15.0", syntax: :proto3
+
+  field(:edition, 1, type: Livekit.ServerInfo.Edition, enum: true)
+  field(:version, 2, type: :string)
+  field(:protocol, 3, type: :int32)
+  field(:region, 4, type: :string)
+  field(:node_id, 5, type: :string, json_name: "nodeId")
+  field(:debug_info, 6, type: :string, json_name: "debugInfo")
+  field(:agent_protocol, 7, type: :int32, json_name: "agentProtocol")
 end
