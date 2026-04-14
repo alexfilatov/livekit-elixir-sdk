@@ -21,7 +21,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 7: Voice Pipeline** - Streaming STT -> LLM -> TTS pipeline with VAD, turn detection, and interruption handling (completed 2026-04-14)
 - [x] **Phase 8: State & Events** - User and agent state machines, typed events, :telemetry integration, and Registry pub/sub (completed 2026-04-14)
 - [ ] **Phase 9: Worker Infrastructure** - WebSocket worker protocol, OTP supervision tree, job lifecycle, and graceful shutdown
-- [ ] **Phase 10: Livebook Showcases** - Interactive Livebook tutorials for every framework feature (no API keys for most)
+- [x] **Phase 10: Livebook Showcases** - Interactive Livebook tutorials for every framework feature (no API keys for most) (completed 2026-04-14)
 
 ## Phase Details
 
@@ -171,7 +171,7 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 10-01-PLAN.md — Livebooks 01-03: provider behaviours, chat context, tool calling (no API keys)
+- [x] 10-01-PLAN.md — Livebooks 01-03: provider behaviours, chat context, tool calling (no API keys)
 - [x] 10-02-PLAN.md — Livebooks 04-06: Deepgram STT, OpenAI LLM, OpenAI TTS (API keys + mock mode)
 - [x] 10-03-PLAN.md — Livebooks 07-09: voice pipeline, state/events, worker infrastructure (no API keys)
 
@@ -191,4 +191,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 7. Voice Pipeline | 3/3 | Complete   | 2026-04-14 |
 | 8. State & Events | 2/2 | Complete   | 2026-04-14 |
 | 9. Worker Infrastructure | 1/2 | In Progress|  |
-| 10. Livebook Showcases | 2/3 | In Progress|  |
+| 10. Livebook Showcases | 3/3 | Complete   | 2026-04-14 |
