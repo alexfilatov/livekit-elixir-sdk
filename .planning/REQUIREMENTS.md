@@ -76,12 +76,12 @@
 
 ### Worker Infrastructure
 
-- [ ] **WRKR-01**: WebSocket client connecting to LiveKit server agent protocol
-- [ ] **WRKR-02**: Worker registration with heartbeat and status reporting
-- [ ] **WRKR-03**: Job lifecycle: availability request -> assignment -> execution -> completion
-- [ ] **WRKR-04**: OTP supervision tree: WorkerSupervisor -> Worker -> JobSupervisor -> AgentSession
-- [ ] **WRKR-05**: Graceful shutdown via drain (stop accepting, wait for in-flight)
-- [ ] **WRKR-06**: Load-based availability reporting (CPU/process metrics)
+- [x] **WRKR-01**: WebSocket client connecting to LiveKit server agent protocol
+- [x] **WRKR-02**: Worker registration with heartbeat and status reporting
+- [x] **WRKR-03**: Job lifecycle: availability request -> assignment -> execution -> completion
+- [x] **WRKR-04**: OTP supervision tree: WorkerSupervisor -> Worker -> JobSupervisor -> AgentSession
+- [x] **WRKR-05**: Graceful shutdown via drain (stop accepting, wait for in-flight)
+- [x] **WRKR-06**: Load-based availability reporting (CPU/process metrics)
 
 ### Testing
 
@@ -177,12 +177,12 @@
 | EVNT-04 | Phase 8 | Complete |
 | EVNT-05 | Phase 8 | Complete |
 | TEST-05 | Phase 8 | Complete |
-| WRKR-01 | Phase 9 | Pending |
-| WRKR-02 | Phase 9 | Pending |
-| WRKR-03 | Phase 9 | Pending |
-| WRKR-04 | Phase 9 | Pending |
-| WRKR-05 | Phase 9 | Pending |
-| WRKR-06 | Phase 9 | Pending |
+| WRKR-01 | Phase 9 | Complete |
+| WRKR-02 | Phase 9 | Complete |
+| WRKR-03 | Phase 9 | Complete |
+| WRKR-04 | Phase 9 | Complete |
+| WRKR-05 | Phase 9 | Complete |
+| WRKR-06 | Phase 9 | Complete |
 | TEST-06 | Phase 9 | Pending |
 
 **Coverage:**
