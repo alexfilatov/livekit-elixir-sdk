@@ -1,0 +1,414 @@
+# Voice Pipeline: STT -> LLM -> TTS with VAD and Turn Detection
+
+The `Livekit.Agents.Pipeline` GenServer orchestrates the full voice processing chain.
+Audio frames flow in via `push_frame/2`, are classified by the energy-based VAD,
+collected by the turn detector, then processed asynchronously: STT -> LLM -> TTS.
+
+This livebook uses inline mock providers — no API keys required.
+
+## Setup
+
+```elixir
+Mix.install([
+  {:livekit, path: Path.join(__DIR__, "../../..")},
+  {:kino, "~> 0.14"}
+])
+
+alias Livekit.Agents.Pipeline
+alias Livekit.Agents.Pipeline.{Config, EnergyVAD}
+alias Livekit.Agents.AudioFrame
+alias Livekit.Agents.ChatContext
+alias Livekit.Agents.ChatContext.ChatMessage
+alias Livekit.Agents.STT.SpeechEvent
+```
+
+## The Processing Chain
+
+Before writing any code, understand what happens when audio enters the pipeline:
+
+```
+push_frame/2
+    |
+    v
+EnergyVAD.classify/2   → :speech or :silence
+    |
+    v
+TurnDetector.push_frame/2
+    |
+    v (after silence_ms of silence)
+{:turn_end, [frames...]}  sent to Pipeline GenServer
+    |
+    v
+Task.async:
+  STT.transcribe(audio_binary)
+    → LLM.chat(context_with_user_message)
+    → TTS.synthesize(assistant_text)
+    |
+    v
+{:pipeline_audio, %AudioFrame{}}  sent to subscriber
+```
+
+If new speech arrives while a Task is running, the task is immediately cancelled
+(interruption) and the turn detector is reset.
+
+## Defining Mock Providers
+
+We define inline mock modules that implement the behaviour contracts but return
+synthetic data rather than calling any external API.
+
+```elixir
+defmodule MockSTT do
+  use Livekit.Agents.STT
+
+  @impl true
+  def transcribe(audio_binary, _opts) do
+    words = byte_size(audio_binary) |> div(960) |> max(1)
+    {:ok, %SpeechEvent{
+      type: :final,
+      text: "mock transcription of #{words} audio chunk(s)",
+      confidence: 0.95,
+      language: "en"
+    }}
+  end
+
+  @impl true
+  def capabilities do
+    %{streaming: false, interim_results: false, diarization: false, languages: ["en"]}
+  end
+end
+
+defmodule MockLLM do
+  use Livekit.Agents.LLM
+
+  @impl true
+  def chat(chat_context, _opts) do
+    user_msg =
+      chat_context.items
+      |> Enum.filter(&match?(%ChatMessage{role: :user}, &1))
+      |> List.last()
+
+    user_text = case user_msg do
+      %ChatMessage{content: content} -> Enum.join(content, " ")
+      nil -> "(no user message)"
+    end
+
+    reply = %ChatMessage{
+      id: :crypto.strong_rand_bytes(4) |> Base.encode16(case: :lower),
+      role: :assistant,
+      content: ["I heard you say: #{user_text}. How can I help?"],
+      interrupted: false,
+      created_at: DateTime.utc_now()
+    }
+
+    {:ok, reply}
+  end
+
+  @impl true
+  def capabilities do
+    %{streaming: false, tool_calling: false, vision: false, max_context_tokens: 4096}
+  end
+end
+
+defmodule MockTTS do
+  use Livekit.Agents.TTS
+
+  @impl true
+  def synthesize(text, _opts) do
+    # Generate PCM bytes proportional to text length (simulate speech duration)
+    byte_count = String.length(text) * 160  # ~10ms per character at 16kHz
+    {:ok, :binary.copy(<<0, 0>>, div(byte_count, 2))}
+  end
+
+  @impl true
+  def capabilities do
+    %{streaming: false, voices: ["mock"], audio_formats: [:pcm], word_timing: false}
+  end
+end
+
+IO.puts("Mock providers defined: MockSTT, MockLLM, MockTTS")
+```
+
+## Starting the Pipeline
+
+```elixir
+pipeline_config = %Config{
+  stt: {MockSTT, %{}},
+  llm: {MockLLM, %{}},
+  tts: {MockTTS, %{}},
+  subscriber: self(),       # receive {:pipeline_audio, frame} messages
+  vad_threshold: 0.01,      # RMS amplitude for silence detection
+  silence_ms: 300           # ms of silence before turn ends
+}
+
+{:ok, pipeline} = Pipeline.start_link(pipeline_config)
+IO.puts("Pipeline started: #{inspect(pipeline)}")
+
+# Initial metrics
+metrics = Pipeline.get_metrics(pipeline)
+IO.inspect(metrics, label: "Initial metrics")
+```
+
+## Understanding EnergyVAD
+
+Before sending audio to the pipeline, it's useful to understand how the energy-based
+VAD classifies frames. The `EnergyVAD` module is available for direct use.
+
+```elixir
+# A vad_config is created by EnergyVAD.new/1
+vad_config = EnergyVAD.new(%{threshold: 0.01})
+
+# Silence: all-zero bytes → low energy → :silence
+silent_frame = %AudioFrame{
+  data: :binary.copy(<<0, 0>>, 480),
+  sample_rate: 48_000,
+  channels: 1,
+  format: :s16le
+}
+
+# Speech: non-zero bytes → higher energy → :speech
+speech_frame = %AudioFrame{
+  data: :binary.copy(<<80, 40>>, 480),
+  sample_rate: 48_000,
+  channels: 1,
+  format: :s16le
+}
+
+IO.puts("Silent frame classification: #{EnergyVAD.classify(silent_frame, vad_config)}")
+IO.puts("Speech frame classification: #{EnergyVAD.classify(speech_frame, vad_config)}")
+```
+
+## Simulating a Voice Turn
+
+A complete voice turn consists of:
+1. Speech frames (energy above threshold)
+2. A silence gap (energy below threshold, lasting `silence_ms`)
+
+After `silence_ms` of silence, the pipeline triggers STT -> LLM -> TTS.
+
+```elixir
+# Helper to create speech frames
+make_speech = fn count ->
+  Enum.map(1..count, fn _i ->
+    %AudioFrame{
+      data: :binary.copy(<<100, 50>>, 960),  # ~20ms at 48kHz
+      sample_rate: 48_000,
+      channels: 1,
+      format: :s16le
+    }
+  end)
+end
+
+# Helper to create silence frames
+make_silence = fn count ->
+  Enum.map(1..count, fn _i ->
+    %AudioFrame{
+      data: :binary.copy(<<0, 0>>, 960),
+      sample_rate: 48_000,
+      channels: 1,
+      format: :s16le
+    }
+  end)
+end
+
+# Push: 10 speech frames (200ms) then 20 silence frames (400ms > 300ms threshold)
+IO.puts("Pushing speech frames...")
+Enum.each(make_speech.(10), fn frame ->
+  Pipeline.push_frame(pipeline, frame)
+end)
+
+IO.puts("Pushing silence frames (triggering turn end)...")
+Enum.each(make_silence.(20), fn frame ->
+  Pipeline.push_frame(pipeline, frame)
+end)
+
+# Wait for the pipeline to process (STT + LLM + TTS)
+Process.sleep(500)
+
+# Collect the audio output
+audio_frames =
+  Stream.repeatedly(fn ->
+    receive do
+      {:pipeline_audio, frame} -> frame
+    after
+      200 -> nil
+    end
+  end)
+  |> Stream.take_while(&(&1 != nil))
+  |> Enum.to_list()
+
+IO.puts("\nReceived #{length(audio_frames)} audio frame(s) from pipeline")
+Enum.each(audio_frames, fn f ->
+  IO.puts("  AudioFrame: #{byte_size(f.data)} bytes")
+end)
+
+metrics = Pipeline.get_metrics(pipeline)
+IO.puts("\nMetrics after first turn:")
+IO.inspect(metrics, pretty: true)
+```
+
+## Multiple Turns in Sequence
+
+The pipeline maintains a `ChatContext` across turns. Each user utterance is appended
+as a `:user` message; each assistant reply as an `:assistant` message. The LLM sees
+the full history on every call.
+
+```elixir
+# Three turns in quick succession
+Enum.each(1..3, fn i ->
+  IO.puts("\n--- Turn #{i} ---")
+
+  Enum.each(make_speech.(5), fn frame -> Pipeline.push_frame(pipeline, frame) end)
+  Enum.each(make_silence.(20), fn frame -> Pipeline.push_frame(pipeline, frame) end)
+
+  # Wait for each turn to complete
+  Process.sleep(400)
+
+  receive do
+    {:pipeline_audio, frame} ->
+      IO.puts("Turn #{i} audio: #{byte_size(frame.data)} bytes")
+  after
+    500 -> IO.puts("Turn #{i}: no audio received (unexpected)")
+  end
+end)
+
+final_metrics = Pipeline.get_metrics(pipeline)
+IO.puts("\nFinal metrics (#{final_metrics.turns_processed} turns processed):")
+IO.inspect(final_metrics, pretty: true)
+```
+
+## Interruption Handling
+
+If new speech arrives while the pipeline is processing (status: :processing or :speaking),
+the active task is immediately cancelled. This prevents a stale response from the previous
+turn being played back after the user has already started speaking again.
+
+```elixir
+# Start a turn
+Enum.each(make_speech.(5), fn f -> Pipeline.push_frame(pipeline, f) end)
+Enum.each(make_silence.(20), fn f -> Pipeline.push_frame(pipeline, f) end)
+
+# Immediately start another turn before the first completes
+Process.sleep(50)  # let the first turn start processing
+IO.puts("Interrupting with new speech...")
+
+Enum.each(make_speech.(5), fn f -> Pipeline.push_frame(pipeline, f) end)
+Enum.each(make_silence.(20), fn f -> Pipeline.push_frame(pipeline, f) end)
+
+Process.sleep(600)
+
+# Drain any audio frames from the mailbox
+interruption_frames =
+  Stream.repeatedly(fn ->
+    receive do
+      {:pipeline_audio, f} -> f
+    after
+      200 -> nil
+    end
+  end)
+  |> Stream.take_while(&(&1 != nil))
+  |> Enum.to_list()
+
+IO.puts("Audio frames after interruption test: #{length(interruption_frames)}")
+IO.puts("(The pipeline should have cancelled the first task and processed only the second turn.)")
+```
+
+## Telemetry Events
+
+The pipeline emits three `:telemetry` events per successful turn. Attach a handler to
+measure latency in production or tests.
+
+```elixir
+# Attach a telemetry handler to capture pipeline events
+:telemetry.attach_many(
+  "livebook-pipeline-telemetry",
+  [
+    [:livekit, :agents, :pipeline, :stt_complete],
+    [:livekit, :agents, :pipeline, :llm_first_token],
+    [:livekit, :agents, :pipeline, :tts_start]
+  ],
+  fn event_name, measurements, _metadata, _config ->
+    stage = List.last(event_name)
+    IO.puts("[telemetry] #{stage}: #{inspect(measurements)}")
+  end,
+  nil
+)
+
+# Trigger one more turn to observe telemetry
+Enum.each(make_speech.(5), fn f -> Pipeline.push_frame(pipeline, f) end)
+Enum.each(make_silence.(20), fn f -> Pipeline.push_frame(pipeline, f) end)
+
+Process.sleep(500)
+
+:telemetry.detach("livebook-pipeline-telemetry")
+IO.puts("Telemetry handler detached")
+```
+
+## Swapping Providers
+
+The pipeline is provider-agnostic. Any module implementing the behaviour contracts can be
+swapped in without code changes. This is the core extensibility point.
+
+```elixir
+# Define an alternative TTS that speaks slower (more bytes)
+defmodule VerboseMockTTS do
+  use Livekit.Agents.TTS
+
+  @impl true
+  def synthesize(text, _opts) do
+    # Triple the output to simulate slower, more detailed speech
+    byte_count = String.length(text) * 480
+    {:ok, :binary.copy(<<0, 0>>, div(byte_count, 2))}
+  end
+
+  @impl true
+  def capabilities do
+    %{streaming: false, voices: ["verbose"], audio_formats: [:pcm], word_timing: false}
+  end
+end
+
+# Stop the old pipeline and start one with the new TTS
+Pipeline.stop(pipeline)
+
+verbose_config = %Config{
+  stt: {MockSTT, %{}},
+  llm: {MockLLM, %{}},
+  tts: {VerboseMockTTS, %{}},   # swapped provider
+  subscriber: self(),
+  vad_threshold: 0.01,
+  silence_ms: 300
+}
+
+{:ok, verbose_pipeline} = Pipeline.start_link(verbose_config)
+
+Enum.each(make_speech.(5), fn f -> Pipeline.push_frame(verbose_pipeline, f) end)
+Enum.each(make_silence.(20), fn f -> Pipeline.push_frame(verbose_pipeline, f) end)
+
+Process.sleep(500)
+
+case receive do
+  {:pipeline_audio, frame} -> frame
+after
+  500 -> nil
+end do
+  nil -> IO.puts("No audio received")
+  frame -> IO.puts("VerboseTTS audio: #{byte_size(frame.data)} bytes (expect ~3x original)")
+end
+
+Pipeline.stop(verbose_pipeline)
+IO.puts("Pipeline stopped cleanly")
+```
+
+## Summary
+
+You now know how to:
+
+- Start a `Pipeline` GenServer with `{module, config}` provider tuples
+- Understand the `push_frame/2` -> VAD -> TurnDetector -> Task flow
+- Use `EnergyVAD.classify/2` directly to understand frame classification
+- Simulate voice turns with speech + silence frame sequences
+- Observe pipeline audio output via `{:pipeline_audio, frame}` subscriber messages
+- Trigger interruption by sending speech while a task is running
+- Attach `:telemetry` handlers to capture stage-level latency
+- Swap providers by building a new `Config` and restarting the pipeline
+
+Next: `08_state_events.livemd` — state machines, typed events, and EventBus pub/sub.
