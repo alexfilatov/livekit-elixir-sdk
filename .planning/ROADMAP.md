@@ -21,6 +21,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 7: Voice Pipeline** - Streaming STT -> LLM -> TTS pipeline with VAD, turn detection, and interruption handling (completed 2026-04-14)
 - [x] **Phase 8: State & Events** - User and agent state machines, typed events, :telemetry integration, and Registry pub/sub (completed 2026-04-14)
 - [ ] **Phase 9: Worker Infrastructure** - WebSocket worker protocol, OTP supervision tree, job lifecycle, and graceful shutdown
+- [ ] **Phase 10: Livebook Showcases** - Interactive Livebook tutorials for every framework feature (no API keys for most)
 
 ## Phase Details
 
@@ -163,10 +164,21 @@ Plans:
 - [x] 09-01-PLAN.md — Gun dep + WorkerSupervisor (one_for_one) + JobSupervisor (DynamicSupervisor) + Worker refactor (Gun WebSocket, heartbeat, drain, load)
 - [ ] 09-02-PLAN.md — Full ExUnit test suite for all WRKR-0x requirements and TEST-06; mock mode only
 
+### Phase 10: Livebook Showcases
+**Goal**: Interactive Livebook tutorials covering every feature of the LiveKit Elixir Agents framework; each accepts API keys via Kino.Input; most work without any keys
+**Depends on**: Phase 9
+**Requirements**: LB-01, LB-02, LB-03, LB-04, LB-05, LB-06, LB-07, LB-08, LB-09
+**Plans**: 3 plans
+
+Plans:
+- [ ] 10-01-PLAN.md — Livebooks 01-03: provider behaviours, chat context, tool calling (no API keys)
+- [ ] 10-02-PLAN.md — Livebooks 04-06: Deepgram STT, OpenAI LLM, OpenAI TTS (API keys + mock mode)
+- [ ] 10-03-PLAN.md — Livebooks 07-09: voice pipeline, state/events, worker infrastructure (no API keys)
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -179,13 +191,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 | 7. Voice Pipeline | 3/3 | Complete   | 2026-04-14 |
 | 8. State & Events | 2/2 | Complete   | 2026-04-14 |
 | 9. Worker Infrastructure | 1/2 | In Progress|  |
-
-### Phase 10: Livebook Showcases
-
-**Goal:** [To be planned]
-**Requirements**: TBD
-**Depends on:** Phase 9
-**Plans:** 0 plans
-
-Plans:
-- [ ] TBD (run /gsd-plan-phase 10 to break down)
+| 10. Livebook Showcases | 0/3 | Planned    |  |
