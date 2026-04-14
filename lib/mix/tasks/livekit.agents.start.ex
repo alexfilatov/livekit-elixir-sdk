@@ -468,7 +468,7 @@ defmodule Mix.Tasks.Livekit.Agents.Start do
   defp signal_handler_loop(supervisor_pid) do
     receive do
       {:EXIT, _pid, reason} ->
-        Logger.warn("Received exit signal: #{inspect(reason)}")
+        Logger.warning("Received exit signal: #{inspect(reason)}")
         graceful_shutdown(supervisor_pid)
 
     after
@@ -512,7 +512,7 @@ defmodule Mix.Tasks.Livekit.Agents.Start do
         end)
 
         if active_workers != config.workers do
-          Logger.warn("Worker count mismatch: #{active_workers}/#{config.workers} active")
+          Logger.warning("Worker count mismatch: #{active_workers}/#{config.workers} active")
         end
 
         production_loop(config, supervisor_pid)

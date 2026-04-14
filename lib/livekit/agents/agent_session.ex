@@ -327,7 +327,7 @@ defmodule Livekit.Agents.AgentSession do
   def handle_info({:DOWN, _ref, :process, pid, reason}, state) do
     cond do
       pid == state.voice_agent ->
-        Logger.warn("Voice agent process went down: #{inspect(reason)}")
+        Logger.warning("Voice agent process went down: #{inspect(reason)}")
         {:noreply, %{state | voice_agent: nil}}
 
       true ->

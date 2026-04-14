@@ -263,7 +263,7 @@ defmodule Livekit.Agents.Pipeline do
   defp process_through_llm(pipeline, text) do
     case find_node_by_type(pipeline, :llm) do
       nil ->
-        Logger.warn("No LLM node available, skipping LLM processing")
+        Logger.warning("No LLM node available, skipping LLM processing")
         {:ok, text}
 
       llm_node ->
@@ -286,7 +286,7 @@ defmodule Livekit.Agents.Pipeline do
   defp process_through_tts(pipeline, text) do
     case find_node_by_type(pipeline, :tts) do
       nil ->
-        Logger.warn("No TTS node available, skipping TTS processing")
+        Logger.warning("No TTS node available, skipping TTS processing")
         {:ok, nil}
 
       tts_node ->

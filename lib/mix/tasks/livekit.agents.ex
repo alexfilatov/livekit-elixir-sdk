@@ -95,7 +95,7 @@ defmodule Mix.Tasks.Livekit.Agents.Console do
   use Mix.Task
   require Logger
 
-  alias Livekit.Agents.{Worker, VoiceAgent, AgentSession}
+  alias Livekit.Agents.{VoiceAgent, AgentSession}
 
   @shortdoc "Start agent in console mode"
 

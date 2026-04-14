@@ -2,382 +2,389 @@ defmodule Livekit.Agents.LLM.OpenAI do
   @moduledoc """
   OpenAI Large Language Model provider for LiveKit agents.
 
-  This module provides LLM functionality using OpenAI's API,
-  supporting text generation, tool calls, and conversation management.
+  Pure functional module implementing `@behaviour Livekit.Agents.LLM`. Sends HTTP
+  POST requests to `/v1/chat/completions` via Tesla, converts `ChatContext` items to
+  the OpenAI messages wire format, and parses responses into `ChatMessage` or
+  `FunctionCall` structs.
+
+  ## Streaming
+
+  `stream/2` spawns a process that reads Server-Sent Events from the OpenAI streaming
+  endpoint and forwards `{:llm_chunk, %LLMChunk{}}` messages to the caller. A terminal
+  chunk with `type: :done` signals the end of the stream.
+
+  ## Mock mode
+
+  Set `mock: true` in the `Config` or omit `api_key` to receive deterministic synthetic
+  responses without making any API calls. Useful for testing and local development.
+
+  ## Usage
+
+      alias Livekit.Agents.LLM.OpenAI
+      alias Livekit.Agents.LLM.OpenAI.Config
+      alias Livekit.Agents.ChatContext
+
+      config = %Config{api_key: System.get_env("OPENAI_API_KEY")}
+      ctx = ChatContext.new() |> ChatContext.add(ChatContext.new_message(:user, ["Hello!"]))
+
+      {:ok, message} = OpenAI.chat(ctx, config: config)
+      {:ok, pid} = OpenAI.stream(ctx, config: config)
   """
 
-  use GenServer
+  use Livekit.Agents.LLM
+
   require Logger
+
+  alias Livekit.Agents.ChatContext
+  alias Livekit.Agents.ChatContext.{ChatMessage, FunctionCall, FunctionCallOutput}
+  alias Livekit.Agents.LLM.LLMChunk
+  alias Livekit.Agents.Tool.ToolContext
 
   defmodule Config do
     @moduledoc """
-    Configuration for OpenAI LLM provider.
+    Configuration for the OpenAI LLM provider.
+
+    ## Fields
+
+    - `:api_key` — OpenAI API key. Required unless `:mock` is `true`.
+    - `:model` — OpenAI model name (default: `"gpt-4o-mini"`).
+    - `:instructions` — System prompt injected at the start of every conversation.
+    - `:temperature` — Sampling temperature 0.0–2.0 (default: `0.7`).
+    - `:max_tokens` — Maximum tokens in the response (default: `1000`).
+    - `:mock` — When `true`, return synthetic responses without API calls (default: `false`).
+    - `:base_url` — Base URL for the OpenAI API (default: `"https://api.openai.com"`).
+      Override for testing with Bypass.
     """
 
     @type t :: %__MODULE__{
-      api_key: String.t(),
-      model: String.t(),
-      instructions: String.t(),
-      temperature: float(),
-      max_tokens: pos_integer(),
-      tools: list(),
-      tool_choice: String.t() | nil,
-      stream: boolean(),
-      response_format: String.t()
-    }
+            api_key: String.t() | nil,
+            model: String.t(),
+            instructions: String.t(),
+            temperature: float(),
+            max_tokens: pos_integer(),
+            mock: boolean(),
+            base_url: String.t()
+          }
 
-    defstruct [
-      api_key: nil,
-      model: "gpt-4o-mini",
-      instructions: "You are a helpful AI assistant.",
-      temperature: 0.7,
-      max_tokens: 1000,
-      tools: [],
-      tool_choice: nil,
-      stream: false,
-      response_format: "text"
-    ]
+    defstruct api_key: nil,
+              model: "gpt-4o-mini",
+              instructions: "You are a helpful AI assistant.",
+              temperature: 0.7,
+              max_tokens: 1000,
+              mock: false,
+              base_url: "https://api.openai.com"
   end
 
-  defmodule Message do
-    @moduledoc """
-    Represents a conversation message.
-    """
+  # ---------------------------------------------------------------------------
+  # Behaviour callbacks
+  # ---------------------------------------------------------------------------
 
-    @type role :: :system | :user | :assistant | :tool
-
-    @type t :: %__MODULE__{
-      role: role(),
-      content: String.t(),
-      tool_calls: list() | nil,
-      tool_call_id: String.t() | nil,
-      name: String.t() | nil
-    }
-
-    defstruct [:role, :content, :tool_calls, :tool_call_id, :name]
+  @doc """
+  Returns the capabilities of the OpenAI LLM provider.
+  """
+  @impl Livekit.Agents.LLM
+  @spec capabilities() :: %{
+          streaming: boolean(),
+          tool_calling: boolean(),
+          vision: boolean(),
+          max_context_tokens: pos_integer() | nil
+        }
+  def capabilities do
+    %{streaming: true, tool_calling: true, vision: false, max_context_tokens: 128_000}
   end
 
-  defmodule State do
-    @moduledoc false
+  @doc """
+  Validates a `Config` struct.
 
-    @type t :: %__MODULE__{
-      config: Config.t(),
-      client: Tesla.Client.t(),
-      conversation_history: list(Message.t()),
-      metrics: map()
-    }
+  Returns `:ok` when `config.mock` is `true` (no API key required).
+  Returns `{:error, :missing_api_key}` when the API key is `nil` or an empty string.
+  """
+  @impl Livekit.Agents.LLM
+  @spec validate_config(Config.t()) :: :ok | {:error, :missing_api_key}
+  def validate_config(%Config{mock: true}), do: :ok
 
-    defstruct [
-      :config,
-      :client,
-      conversation_history: [],
-      metrics: %{
-        requests_sent: 0,
-        responses_received: 0,
-        tokens_used: 0,
-        tool_calls_made: 0,
-        errors: 0
+  def validate_config(%Config{api_key: key}) when key in [nil, ""],
+    do: {:error, :missing_api_key}
+
+  def validate_config(%Config{}), do: :ok
+
+  @doc """
+  Sends a `ChatContext` to the OpenAI chat completions endpoint and returns a single
+  response item — either a `ChatMessage` (text response) or a `FunctionCall` (tool call).
+
+  ## Options
+
+  - `:config` — `Config.t()` (required)
+  - `:model` — overrides `config.model`
+  - `:temperature` — overrides `config.temperature`
+  - `:max_tokens` — overrides `config.max_tokens`
+  - `:tool_context` — `ToolContext.t()` whose tools are sent in the request body
+
+  ## Returns
+
+  - `{:ok, ChatMessage.t()}` for text responses
+  - `{:ok, FunctionCall.t()}` when the model requests a tool call
+  - `{:error, reason}` on failure
+  """
+  @impl Livekit.Agents.LLM
+  @spec chat(ChatContext.t(), keyword()) ::
+          {:ok, ChatMessage.t() | FunctionCall.t()} | {:error, term()}
+  def chat(%ChatContext{} = ctx, opts \\ []) do
+    config = Keyword.fetch!(opts, :config)
+
+    if mock_mode?(config) do
+      {:ok, mock_chat_response()}
+    else
+      do_chat(ctx, config, opts)
+    end
+  end
+
+  @doc """
+  Starts a streaming LLM response process.
+
+  The spawned process sends `{:llm_chunk, %LLMChunk{type: :text, content: text}}` messages
+  to the caller for each token fragment, followed by a terminal
+  `{:llm_chunk, %LLMChunk{type: :done}}` message when the stream ends.
+
+  On error the process sends `{:error, reason}` to the caller.
+
+  ## Options
+
+  Same as `chat/2`.
+  """
+  @impl Livekit.Agents.LLM
+  @spec stream(ChatContext.t(), keyword()) :: {:ok, pid()} | {:error, term()}
+  def stream(%ChatContext{} = ctx, opts \\ []) do
+    config = Keyword.fetch!(opts, :config)
+    subscriber = self()
+
+    if mock_mode?(config) do
+      pid =
+        spawn(fn ->
+          send(subscriber, {:llm_chunk, %LLMChunk{type: :text, content: "Mock"}})
+          send(subscriber, {:llm_chunk, %LLMChunk{type: :done}})
+        end)
+
+      {:ok, pid}
+    else
+      pid = spawn(fn -> do_stream(ctx, config, opts, subscriber) end)
+      {:ok, pid}
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Private — HTTP (chat)
+  # ---------------------------------------------------------------------------
+
+  defp do_chat(%ChatContext{} = ctx, %Config{} = config, opts) do
+    model = Keyword.get(opts, :model, config.model)
+    temperature = Keyword.get(opts, :temperature, config.temperature)
+    max_tokens = Keyword.get(opts, :max_tokens, config.max_tokens)
+    tool_context = Keyword.get(opts, :tool_context)
+
+    truncated_ctx = ChatContext.truncate(ctx, max(div(config.max_tokens, 1), 20))
+    messages = to_openai_messages(truncated_ctx.items)
+
+    body =
+      %{
+        model: model,
+        messages: messages,
+        temperature: temperature,
+        max_tokens: max_tokens
       }
-    ]
+      |> maybe_add_tools(tool_context)
+
+    client = build_client(config)
+
+    case Tesla.post(client, "/v1/chat/completions", body) do
+      {:ok, env} -> parse_chat_response(env)
+      {:error, reason} -> {:error, {:request_failed, reason}}
+    end
   end
 
-  # Client API
+  defp maybe_add_tools(body, nil), do: body
 
-  @doc """
-  Starts the OpenAI LLM provider.
-  """
-  @spec start_link(Config.t()) :: GenServer.on_start()
-  def start_link(config) do
-    GenServer.start_link(__MODULE__, config)
+  defp maybe_add_tools(body, %ToolContext{} = tool_context) do
+    Map.put(body, :tools, ToolContext.to_openai_tools(tool_context))
   end
 
-  @doc """
-  Processes text input and generates a response.
-  """
-  @spec process_text(pid(), String.t()) :: {:ok, String.t()} | {:error, term()}
-  def process_text(llm_pid, text) do
-    GenServer.call(llm_pid, {:process_text, text}, 30_000)
-  end
+  # ---------------------------------------------------------------------------
+  # Private — HTTP (stream)
+  # ---------------------------------------------------------------------------
 
-  @doc """
-  Adds a message to the conversation history.
-  """
-  @spec add_message(pid(), Message.t()) :: :ok
-  def add_message(llm_pid, message) do
-    GenServer.cast(llm_pid, {:add_message, message})
-  end
+  defp do_stream(%ChatContext{} = ctx, %Config{} = config, opts, subscriber) do
+    model = Keyword.get(opts, :model, config.model)
+    temperature = Keyword.get(opts, :temperature, config.temperature)
+    max_tokens = Keyword.get(opts, :max_tokens, config.max_tokens)
+    tool_context = Keyword.get(opts, :tool_context)
 
-  @doc """
-  Gets the current conversation history.
-  """
-  @spec get_conversation_history(pid()) :: list(Message.t())
-  def get_conversation_history(llm_pid) do
-    GenServer.call(llm_pid, :get_conversation_history)
-  end
+    truncated_ctx = ChatContext.truncate(ctx, max(div(config.max_tokens, 1), 20))
+    messages = to_openai_messages(truncated_ctx.items)
 
-  @doc """
-  Clears the conversation history.
-  """
-  @spec clear_conversation(pid()) :: :ok
-  def clear_conversation(llm_pid) do
-    GenServer.cast(llm_pid, :clear_conversation)
-  end
+    body =
+      %{
+        model: model,
+        messages: messages,
+        temperature: temperature,
+        max_tokens: max_tokens,
+        stream: true
+      }
+      |> maybe_add_tools(tool_context)
 
-  @doc """
-  Updates the system instructions.
-  """
-  @spec update_instructions(pid(), String.t()) :: :ok
-  def update_instructions(llm_pid, instructions) do
-    GenServer.cast(llm_pid, {:update_instructions, instructions})
-  end
+    client = build_stream_client(config)
 
-  @doc """
-  Gets provider metrics.
-  """
-  @spec get_metrics(pid()) :: map()
-  def get_metrics(llm_pid) do
-    GenServer.call(llm_pid, :get_metrics)
-  end
+    case Tesla.post(client, "/v1/chat/completions", body) do
+      {:ok, %Tesla.Env{status: 200, body: raw_body}} ->
+        process_sse_body(raw_body, subscriber)
+        send(subscriber, {:llm_chunk, %LLMChunk{type: :done}})
 
-  # GenServer Callbacks
-
-  @impl true
-  def init(config) do
-    Logger.info("Starting OpenAI LLM provider with model: #{config.model}")
-
-    case validate_config(config) do
-      :ok ->
-        client = create_http_client(config)
-
-        # Initialize with system message
-        system_message = %Message{
-          role: :system,
-          content: config.instructions
-        }
-
-        state = %State{
-          config: config,
-          client: client,
-          conversation_history: [system_message]
-        }
-
-        {:ok, state}
+      {:ok, %Tesla.Env{status: status, body: error_body}} ->
+        send(subscriber, {:error, {:api_error, status, error_body}})
 
       {:error, reason} ->
-        Logger.error("Invalid OpenAI configuration: #{inspect(reason)}")
-        {:stop, reason}
+        send(subscriber, {:error, {:request_failed, reason}})
     end
   end
 
-  @impl true
-  def handle_call({:process_text, text}, _from, state) do
-    case generate_response(state, text) do
-      {:ok, response, new_state} ->
-        {:reply, {:ok, response}, new_state}
-
-      {:error, reason, new_state} ->
-        {:reply, {:error, reason}, new_state}
-    end
+  defp process_sse_body(body, subscriber) when is_binary(body) do
+    body
+    |> String.split("\n")
+    |> Enum.each(fn line -> handle_sse_line(line, subscriber) end)
   end
 
-  @impl true
-  def handle_call(:get_conversation_history, _from, state) do
-    {:reply, state.conversation_history, state}
-  end
+  defp handle_sse_line(line, subscriber) do
+    case parse_sse_line(line) do
+      {:text, content} ->
+        send(subscriber, {:llm_chunk, %LLMChunk{type: :text, content: content}})
 
-  @impl true
-  def handle_call(:get_metrics, _from, state) do
-    {:reply, state.metrics, state}
-  end
-
-  @impl true
-  def handle_cast({:add_message, message}, state) do
-    new_history = [message | state.conversation_history]
-    new_state = %{state | conversation_history: new_history}
-    {:noreply, new_state}
-  end
-
-  @impl true
-  def handle_cast(:clear_conversation, state) do
-    # Keep only the system message
-    system_message = %Message{
-      role: :system,
-      content: state.config.instructions
-    }
-
-    new_state = %{state | conversation_history: [system_message]}
-    {:noreply, new_state}
-  end
-
-  @impl true
-  def handle_cast({:update_instructions, instructions}, state) do
-    # Update the system message
-    new_system_message = %Message{
-      role: :system,
-      content: instructions
-    }
-
-    # Replace the first (system) message in history
-    new_history = case state.conversation_history do
-      [%Message{role: :system} | rest] ->
-        [new_system_message | rest]
-
-      history ->
-        [new_system_message | history]
-    end
-
-    new_config = %{state.config | instructions: instructions}
-    new_state = %{state | config: new_config, conversation_history: new_history}
-
-    {:noreply, new_state}
-  end
-
-  # Private Functions
-
-  defp validate_config(config) do
-    cond do
-      is_nil(config.api_key) or config.api_key == "" ->
-        {:error, :missing_api_key}
-
-      config.temperature < 0 or config.temperature > 2 ->
-        {:error, :invalid_temperature}
-
-      config.max_tokens <= 0 ->
-        {:error, :invalid_max_tokens}
-
-      true ->
+      :skip ->
         :ok
     end
   end
 
-  defp create_http_client(config) do
+  defp parse_sse_line("data: [DONE]"), do: :skip
+
+  defp parse_sse_line("data: " <> json_str) do
+    case Jason.decode(json_str) do
+      {:ok, %{"choices" => [%{"delta" => delta} | _]}} ->
+        case delta["content"] do
+          content when is_binary(content) and content != "" ->
+            {:text, content}
+
+          _ ->
+            :skip
+        end
+
+      _ ->
+        :skip
+    end
+  end
+
+  defp parse_sse_line(_), do: :skip
+
+  # ---------------------------------------------------------------------------
+  # Private — response parsing
+  # ---------------------------------------------------------------------------
+
+  defp parse_chat_response(%Tesla.Env{status: 200, body: body}) do
+    choice = List.first(body["choices"])
+    message = choice["message"]
+
+    case message["tool_calls"] do
+      [_ | _] = tool_calls ->
+        function_calls =
+          Enum.map(tool_calls, fn tc ->
+            ChatContext.new_function_call(
+              tc["id"],
+              tc["function"]["name"],
+              tc["function"]["arguments"]
+            )
+          end)
+
+        {:ok, List.first(function_calls)}
+
+      _ ->
+        content = message["content"] || ""
+        {:ok, ChatContext.new_message(:assistant, [content])}
+    end
+  end
+
+  defp parse_chat_response(%Tesla.Env{status: status, body: body}) do
+    {:error, {:api_error, status, body}}
+  end
+
+  # ---------------------------------------------------------------------------
+  # Private — message conversion
+  # ---------------------------------------------------------------------------
+
+  defp to_openai_messages(items) do
+    Enum.map(items, &item_to_openai_message/1)
+  end
+
+  defp item_to_openai_message(%ChatMessage{role: role, content: parts}) do
+    %{"role" => Atom.to_string(role), "content" => content_to_string(parts)}
+  end
+
+  defp item_to_openai_message(%FunctionCall{call_id: id, name: name, arguments: args}) do
+    %{
+      "role" => "assistant",
+      "tool_calls" => [
+        %{
+          "id" => id,
+          "type" => "function",
+          "function" => %{"name" => name, "arguments" => args}
+        }
+      ]
+    }
+  end
+
+  defp item_to_openai_message(%FunctionCallOutput{call_id: id, name: name, output: out}) do
+    %{"role" => "tool", "tool_call_id" => id, "name" => name, "content" => out}
+  end
+
+  defp content_to_string([single]) when is_binary(single), do: single
+  defp content_to_string(parts), do: Jason.encode!(parts)
+
+  # ---------------------------------------------------------------------------
+  # Private — HTTP clients
+  # ---------------------------------------------------------------------------
+
+  defp build_client(%Config{api_key: key, base_url: base_url}) do
     middleware = [
-      {Tesla.Middleware.BaseUrl, "https://api.openai.com/v1"},
+      {Tesla.Middleware.BaseUrl, base_url},
       {Tesla.Middleware.Headers, [
-        {"Authorization", "Bearer #{config.api_key}"},
+        {"Authorization", "Bearer #{key}"},
         {"Content-Type", "application/json"}
       ]},
-      Tesla.Middleware.JSON,
-      {Tesla.Middleware.Logger, debug: false}
+      Tesla.Middleware.JSON
     ]
 
     Tesla.client(middleware, Tesla.Adapter.Hackney)
   end
 
-  defp generate_response(state, user_text) do
-    try do
-      # Add user message to history
-      user_message = %Message{role: :user, content: user_text}
-      messages_for_api = build_messages_for_api([user_message | state.conversation_history])
+  defp build_stream_client(%Config{api_key: key, base_url: base_url}) do
+    middleware = [
+      {Tesla.Middleware.BaseUrl, base_url},
+      {Tesla.Middleware.Headers, [
+        {"Authorization", "Bearer #{key}"},
+        {"Content-Type", "application/json"}
+      ]},
+      Tesla.Middleware.JSON
+    ]
 
-      # For development, use mock response
-      response_text = mock_llm_response(user_text)
-
-      # Add messages to conversation history
-      assistant_message = %Message{role: :assistant, content: response_text}
-      new_history = [assistant_message, user_message | state.conversation_history]
-
-      # Update metrics
-      new_metrics = state.metrics
-                   |> Map.update!(:requests_sent, &(&1 + 1))
-                   |> Map.update!(:responses_received, &(&1 + 1))
-                   |> Map.update!(:tokens_used, &(&1 + estimate_tokens(user_text) + estimate_tokens(response_text)))
-
-      new_state = %{state |
-        conversation_history: new_history,
-        metrics: new_metrics
-      }
-
-      {:ok, response_text, new_state}
-    rescue
-      error ->
-        Logger.error("OpenAI LLM error: #{inspect(error)}")
-        error_metrics = Map.update!(state.metrics, :errors, &(&1 + 1))
-        new_state = %{state | metrics: error_metrics}
-        {:error, error, new_state}
-    end
+    Tesla.client(middleware, {Tesla.Adapter.Hackney, [recv_timeout: 60_000]})
   end
 
-  defp build_messages_for_api(messages) do
-    # Convert internal message format to OpenAI API format
-    messages
-    |> Enum.reverse()  # API expects chronological order
-    |> Enum.map(fn message ->
-      base_message = %{
-        role: Atom.to_string(message.role),
-        content: message.content
-      }
+  # ---------------------------------------------------------------------------
+  # Private — helpers
+  # ---------------------------------------------------------------------------
 
-      # Add optional fields if present
-      base_message
-      |> maybe_add_field(:tool_calls, message.tool_calls)
-      |> maybe_add_field(:tool_call_id, message.tool_call_id)
-      |> maybe_add_field(:name, message.name)
-    end)
+  defp mock_mode?(%Config{mock: true}), do: true
+  defp mock_mode?(%Config{api_key: key}) when key in [nil, ""], do: true
+  defp mock_mode?(%Config{}), do: false
+
+  defp mock_chat_response do
+    ChatContext.new_message(:assistant, ["I'm a mock LLM response."])
   end
 
-  defp maybe_add_field(map, _key, nil), do: map
-  defp maybe_add_field(map, key, value), do: Map.put(map, key, value)
-
-  defp build_api_request_body(state, messages) do
-    base_body = %{
-      model: state.config.model,
-      messages: messages,
-      temperature: state.config.temperature,
-      max_tokens: state.config.max_tokens
-    }
-
-    # Add optional fields
-    base_body
-    |> maybe_add_field(:tools, format_tools(state.config.tools))
-    |> maybe_add_field(:tool_choice, state.config.tool_choice)
-    |> maybe_add_field(:stream, state.config.stream)
-  end
-
-  defp format_tools([]), do: nil
-  defp format_tools(tools) do
-    Enum.map(tools, fn tool ->
-      %{
-        type: "function",
-        function: tool
-      }
-    end)
-  end
-
-  defp estimate_tokens(text) do
-    # Rough estimation: ~4 characters per token
-    div(String.length(text), 4)
-  end
-
-  # Mock function for development
-  defp mock_llm_response(user_text) do
-    # Simple mock responses based on input
-    user_text_lower = String.downcase(user_text)
-
-    cond do
-      String.contains?(user_text_lower, ["hello", "hi"]) ->
-        "Hello! How can I help you today?"
-
-      String.contains?(user_text_lower, ["weather"]) ->
-        "I'd be happy to help with weather information, but I don't have access to current weather data. You might want to check a weather app or website for the most up-to-date information."
-
-      String.contains?(user_text_lower, ["time"]) ->
-        "I don't have access to the current time, but you can check your device's clock or ask about a specific timezone."
-
-      String.contains?(user_text_lower, ["how are you", "how do you feel"]) ->
-        "I'm doing well, thank you for asking! I'm here and ready to help with whatever you need."
-
-      String.contains?(user_text_lower, ["thank you", "thanks"]) ->
-        "You're welcome! Is there anything else I can help you with?"
-
-      String.contains?(user_text_lower, ["goodbye", "bye"]) ->
-        "Goodbye! Have a great day!"
-
-      String.length(user_text) < 10 ->
-        "I understand. Could you tell me more about what you'd like to know or discuss?"
-
-      true ->
-        "That's interesting! I appreciate you sharing that with me. How can I assist you further with this topic?"
-    end
-  end
 end
