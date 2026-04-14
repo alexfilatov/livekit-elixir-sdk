@@ -110,7 +110,10 @@ Plans:
   3. Audio format selection (PCM, MP3, Opus, AAC, FLAC) changes the Content-Type and encoding of the returned bytes
   4. Synthesizing the same text twice within TTL returns the cached result without a second HTTP request
   5. All OpenAI TTS calls pass `mix test` without a real API key when configured in mock mode
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 06-01-PLAN.md — Refactor openai.ex to pure functional @behaviour TTS; real HTTP POST to /v1/audio/speech; Cache Agent module; mock mode with sine wave
+- [ ] 06-02-PLAN.md — Full ExUnit test suite: Cache unit tests, Bypass HTTP tests, mock mode tests, cache hit verification
 
 ### Phase 7: Voice Pipeline
 **Goal**: Streaming STT -> LLM -> TTS pipeline with energy-based VAD, configurable turn detection, and interruption handling
@@ -163,7 +166,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 | 3. Tool System | 2/2 | Complete   | 2026-04-14 |
 | 4. Deepgram STT | 3/3 | Complete   | 2026-04-14 |
 | 5. OpenAI LLM | 2/2 | Complete   | 2026-04-14 |
-| 6. OpenAI TTS | 0/? | Not started | - |
+| 6. OpenAI TTS | 0/2 | Not started | - |
 | 7. Voice Pipeline | 0/? | Not started | - |
 | 8. State & Events | 0/? | Not started | - |
 | 9. Worker Infrastructure | 0/? | Not started | - |
