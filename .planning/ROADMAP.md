@@ -158,7 +158,10 @@ Plans:
   4. The OTP supervision tree (WorkerSupervisor -> Worker -> JobSupervisor -> AgentSession) starts cleanly and each level restarts independently
   5. Calling drain stops the worker from accepting new jobs and waits for all in-flight sessions to complete before shutting down
   6. Worker availability reporting reflects current process load metrics
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 09-01-PLAN.md — Gun dep + WorkerSupervisor (one_for_one) + JobSupervisor (DynamicSupervisor) + Worker refactor (Gun WebSocket, heartbeat, drain, load)
+- [ ] 09-02-PLAN.md — Full ExUnit test suite for all WRKR-0x requirements and TEST-06; mock mode only
 
 ## Progress
 
@@ -175,4 +178,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 | 6. OpenAI TTS | 2/2 | Complete   | 2026-04-14 |
 | 7. Voice Pipeline | 3/3 | Complete   | 2026-04-14 |
 | 8. State & Events | 2/2 | Complete   | 2026-04-14 |
-| 9. Worker Infrastructure | 0/? | Not started | - |
+| 9. Worker Infrastructure | 0/2 | Not started | - |
