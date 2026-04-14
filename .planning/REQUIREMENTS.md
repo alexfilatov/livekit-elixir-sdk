@@ -85,7 +85,7 @@
 
 ### Testing
 
-- [ ] **TEST-01**: 100% test coverage for all new behaviour modules
+- [x] **TEST-01**: 100% test coverage for all new behaviour modules
 - [ ] **TEST-02**: 100% test coverage for ChatContext and tool system
 - [ ] **TEST-03**: 100% test coverage for all provider implementations (using mock mode)
 - [ ] **TEST-04**: 100% test coverage for pipeline, VAD, turn detection
@@ -131,7 +131,7 @@
 | BEHV-03 | Phase 1 | Complete |
 | BEHV-04 | Phase 1 | Complete |
 | BEHV-05 | Phase 1 | Complete |
-| TEST-01 | Phase 1 | Pending |
+| TEST-01 | Phase 1 | Complete |
 | CHAT-01 | Phase 2 | Pending |
 | CHAT-02 | Phase 2 | Pending |
 | CHAT-03 | Phase 2 | Pending |
