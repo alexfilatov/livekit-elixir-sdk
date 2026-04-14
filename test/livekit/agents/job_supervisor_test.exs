@@ -24,12 +24,10 @@ defmodule Livekit.Agents.JobSupervisorTest do
     %AgentSession.Config{
       room_name: room_name,
       participant_identity: "agent-1",
-      # Use a dummy URL so RoomServiceClient.new/3 does not crash on nil.
-      # AgentSession mock-connects without making real HTTP calls.
-      server_url: "http://localhost:7880",
+      # server_url nil = mock mode; no real Room or RoomIO started.
+      server_url: nil,
       api_key: "test-key",
-      api_secret: "test-secret",
-      voice_agent_config: nil
+      api_secret: "test-secret"
     }
   end
 

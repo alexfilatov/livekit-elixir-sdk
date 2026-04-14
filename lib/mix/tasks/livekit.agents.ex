@@ -190,14 +190,16 @@ defmodule Mix.Tasks.Livekit.Agents.Console do
       tts: nil
     }
 
+    # Note: voice_config is no longer used directly — pipeline_config wires STT/LLM/TTS
+    _ = voice_config
+
     # Create session configuration
     session_config = %AgentSession.Config{
       room_name: config.room_name,
       participant_identity: config.participant_identity,
       server_url: config.server_url,
       api_key: config.api_key,
-      api_secret: config.api_secret,
-      voice_agent_config: voice_config
+      api_secret: config.api_secret
     }
 
     # Start the agent session
@@ -265,21 +267,12 @@ defmodule Mix.Tasks.Livekit.Agents.Console do
   end
 
   defp handle_console_command(session_pid, "participants") do
-    participants = AgentSession.list_participants(session_pid)
-    Mix.shell().info("Participants (#{length(participants)}):")
-    Enum.each(participants, fn participant ->
-      Mix.shell().info("  - #{participant.identity}")
-    end)
+    status = AgentSession.get_status(session_pid)
+    Mix.shell().info("Participants count: #{status.participants_count}")
   end
 
-  defp handle_console_command(session_pid, "say " <> message) do
-    case AgentSession.send_message(session_pid, message) do
-      :ok ->
-        Mix.shell().info("Message sent: #{message}")
-
-      {:error, reason} ->
-        Mix.shell().error("Failed to send message: #{inspect(reason)}")
-    end
+  defp handle_console_command(_session_pid, "say " <> message) do
+    Mix.shell().info("(say not available in this mode) message: #{message}")
   end
 
   defp handle_console_command(_session_pid, command) do

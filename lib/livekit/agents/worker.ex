@@ -565,8 +565,7 @@ defmodule Livekit.Agents.Worker do
         participant_identity: participant_identity,
         server_url: state.config.server_url,
         api_key: state.config.api_key,
-        api_secret: state.config.api_secret,
-        voice_agent_config: nil
+        api_secret: state.config.api_secret
       }
 
       case JobSupervisor.start_job(session_config) do

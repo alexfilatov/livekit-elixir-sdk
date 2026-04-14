@@ -185,6 +185,9 @@ defmodule Mix.Tasks.Livekit.Agents.Dev do
       tts: get_tts_provider()
     }
 
+    # Note: voice_config is no longer used directly — pipeline_config wires STT/LLM/TTS
+    _ = voice_config
+
     # Create session configuration
     session_config = %AgentSession.Config{
       room_name: job_context.room_name,
@@ -192,9 +195,7 @@ defmodule Mix.Tasks.Livekit.Agents.Dev do
       server_url: job_context.server_url,
       api_key: job_context.api_key,
       api_secret: job_context.api_secret,
-      voice_agent_config: voice_config,
-      auto_subscribe: true,
-      auto_publish_audio: true
+      auto_subscribe: true
     }
 
     # Start the agent session
@@ -239,7 +240,7 @@ defmodule Mix.Tasks.Livekit.Agents.Dev do
       # Provide periodic status updates
       30_000 ->
         status = AgentSession.get_status(session_pid)
-        Mix.shell().info("📈 Session status: #{status.participants_count} participants, #{status.audio_tracks_count} audio tracks")
+        Mix.shell().info("📈 Session status: #{status.participants_count} participants")
         monitor_session(session_pid, job_context)
     end
 

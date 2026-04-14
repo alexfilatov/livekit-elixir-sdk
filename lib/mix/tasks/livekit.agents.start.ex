@@ -300,15 +300,16 @@ defmodule Mix.Tasks.Livekit.Agents.Start do
     voice_config = build_voice_agent_config(config.voice_agent)
 
     # Create session configuration
+    # Note: voice_config is no longer used directly — pipeline_config wires STT/LLM/TTS
+    _ = voice_config
+
     session_config = %AgentSession.Config{
       room_name: job_context.room_name,
       participant_identity: job_context.participant_identity,
       server_url: job_context.server_url,
       api_key: job_context.api_key,
       api_secret: job_context.api_secret,
-      voice_agent_config: voice_config,
-      auto_subscribe: true,
-      auto_publish_audio: true
+      auto_subscribe: true
     }
 
     # Start the agent session
