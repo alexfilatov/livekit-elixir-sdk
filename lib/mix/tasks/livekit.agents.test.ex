@@ -519,13 +519,9 @@ defmodule Mix.Tasks.Livekit.Agents.Test do
           model: "gpt-4o-mini"
         }
 
-        case OpenAI.start_link(openai_config) do
-          {:ok, pid} ->
-            GenServer.stop(pid)
-            :ok
-
-          error ->
-            error
+        case OpenAI.validate_config(openai_config) do
+          :ok -> :ok
+          error -> error
         end
     end
   end

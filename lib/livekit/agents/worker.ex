@@ -14,7 +14,6 @@ defmodule Livekit.Agents.Worker do
   require Logger
 
   alias Livekit.Agents.{AgentSession, VoiceAgent, JobContext}
-  alias Livekit.{AccessToken, RoomServiceClient}
 
   defmodule Config do
     @moduledoc """
@@ -303,7 +302,7 @@ defmodule Livekit.Agents.Worker do
     # Handle monitored process (job session) going down
     case find_job_by_pid(state.active_jobs, pid) do
       {job_id, _job_info} ->
-        Logger.warn("Job session #{job_id} process went down: #{inspect(reason)}")
+        Logger.warning("Job session #{job_id} process went down: #{inspect(reason)}")
         new_active_jobs = Map.delete(state.active_jobs, job_id)
 
         new_metrics = state.metrics
@@ -399,14 +398,14 @@ defmodule Livekit.Agents.Worker do
 
   defp handle_job_request(state, job_request) do
     if map_size(state.active_jobs) >= state.config.max_concurrent_jobs do
-      Logger.warn("Rejecting job request - worker at capacity")
+      Logger.warning("Rejecting job request - worker at capacity")
       # Send rejection response
       state
     else
       Logger.info("Processing job request for room: #{job_request.room_name}")
 
       case start_job_session(state, job_request) do
-        {:ok, session_pid, job_info} ->
+        {:ok, _session_pid, job_info} ->
           new_active_jobs = Map.put(state.active_jobs, job_request.job_id, job_info)
 
           new_metrics = state.metrics

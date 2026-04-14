@@ -271,16 +271,6 @@ defmodule Livekit.Agents.TTS.OpenAI do
     end
   end
 
-  defp build_api_request_body(config, text) do
-    %{
-      model: Atom.to_string(config.model) |> String.replace("_", "-"),
-      input: text,
-      voice: Atom.to_string(config.voice),
-      response_format: Atom.to_string(config.response_format),
-      speed: config.speed
-    }
-  end
-
   defp generate_cache_key(config, text) do
     # Create a hash-based cache key including relevant config parameters
     key_data = "#{config.model}_#{config.voice}_#{config.speed}_#{text}"
