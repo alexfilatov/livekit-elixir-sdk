@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.1.4
 milestone_name: milestone
-status: verifying
-stopped_at: Completed 06-openai-tts-02-PLAN.md
-last_updated: "2026-04-14T11:40:43.116Z"
+status: executing
+stopped_at: Completed 07-voice-pipeline-01-PLAN.md
+last_updated: "2026-04-14T11:53:48.424Z"
 last_activity: 2026-04-14
 progress:
   total_phases: 9
   completed_phases: 6
-  total_plans: 14
-  completed_plans: 14
-  percent: 100
+  total_plans: 17
+  completed_plans: 15
+  percent: 88
 ---
 
 # Project State
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-14)
 
 **Core value:** A developer can build and deploy a working voice AI agent using only Elixir — connecting to a LiveKit room, transcribing speech, generating responses via LLM, and speaking back — with real provider integrations, not mocks.
-**Current focus:** Phase 06 — openai-tts
+**Current focus:** Phase 07 — voice-pipeline
 
 ## Current Position
 
-Phase: 06 (openai-tts) — EXECUTING
-Plan: 2 of 2
-Status: Phase complete — ready for verification
+Phase: 07 (voice-pipeline) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
 Last activity: 2026-04-14
 
 Progress: [░░░░░░░░░░] 0%
@@ -65,6 +65,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 05-openai-llm P01 | 397 | 1 tasks | 9 files |
 | Phase 06-openai-tts P01 | 20 | 2 tasks | 3 files |
 | Phase 06-openai-tts P02 | 15 | 2 tasks | 2 files |
+| Phase 07-voice-pipeline P01 | 234 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -101,6 +102,7 @@ Recent decisions affecting current work:
 - [Phase 06-openai-tts]: Cache opt-in via pid kwarg avoids global supervision; Tesla.Middleware.JSON restricted to application/json decode to pass raw audio bytes; no Logger middleware to prevent Bearer token disclosure
 - [Phase 06-openai-tts]: Used async: true for TTS tests — Bypass unique ports and per-test Cache pids provide full isolation
 - [Phase 06-openai-tts]: Added boundary speed and tts-1-hd model serialization tests beyond plan spec for complete coverage
+- [Phase 07-voice-pipeline]: TurnDetector accepts pre-classified tuples — EnergyVAD alias removed to avoid dead code warning
 
 ### Pending Todos
 
@@ -112,6 +114,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-14T11:40:43.113Z
-Stopped at: Completed 06-openai-tts-02-PLAN.md
+Last session: 2026-04-14T11:53:48.421Z
+Stopped at: Completed 07-voice-pipeline-01-PLAN.md
 Resume file: None

@@ -128,7 +128,7 @@ Plans:
   6. :telemetry events are emitted at each stage (stt_complete, llm_first_token, tts_start) with timing metadata
 **Plans**: 3 plans
 Plans:
-- [ ] 07-01-PLAN.md — EnergyVAD pure module (classify/2 via AudioFrame.is_silence?); TurnDetector GenServer (timer-based turn boundaries)
+- [x] 07-01-PLAN.md — EnergyVAD pure module (classify/2 via AudioFrame.is_silence?); TurnDetector GenServer (timer-based turn boundaries)
 - [ ] 07-02-PLAN.md — Pipeline GenServer rewrite: push_frame/2 cast, Task.async STT->LLM->TTS, interruption, ChatContext ownership, :telemetry events
 - [ ] 07-03-PLAN.md — Full ExUnit test suite: EnergyVAD unit, TurnDetector unit, Pipeline integration with inline mock providers
 
@@ -170,6 +170,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 | 4. Deepgram STT | 3/3 | Complete   | 2026-04-14 |
 | 5. OpenAI LLM | 2/2 | Complete   | 2026-04-14 |
 | 6. OpenAI TTS | 2/2 | Complete   | 2026-04-14 |
-| 7. Voice Pipeline | 0/3 | Not started | - |
+| 7. Voice Pipeline | 1/3 | In Progress|  |
 | 8. State & Events | 0/? | Not started | - |
 | 9. Worker Infrastructure | 0/? | Not started | - |
