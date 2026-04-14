@@ -66,7 +66,7 @@ Plans:
   4. A tool handler returning `{:error, reason}` causes a `ToolError` that is surfaced back to the LLM as a function call output
 **Plans**: 2 plans
 Plans:
-- [ ] 03-01-PLAN.md — ToolSpec + ToolContext + ToolError structs; Tool.run/3 execution loop with max_tool_steps cap and error isolation
+- [x] 03-01-PLAN.md — ToolSpec + ToolContext + ToolError structs; Tool.run/3 execution loop with max_tool_steps cap and error isolation
 - [ ] 03-02-PLAN.md — Full ExUnit test suite for all TOOL-0x requirements; 100% coverage gate
 
 ### Phase 4: Deepgram STT

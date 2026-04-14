@@ -24,11 +24,11 @@
 
 ### Tool System
 
-- [ ] **TOOL-01**: Define tool specification struct with name, description, parameter schema
-- [ ] **TOOL-02**: Tool execution loop: LLM generates call -> execute -> feed result back -> repeat
-- [ ] **TOOL-03**: Configurable max_tool_steps to prevent infinite loops
-- [ ] **TOOL-04**: ToolError handling that surfaces failures back to LLM
-- [ ] **TOOL-05**: JSON schema generation from tool definitions
+- [x] **TOOL-01**: Define tool specification struct with name, description, parameter schema
+- [x] **TOOL-02**: Tool execution loop: LLM generates call -> execute -> feed result back -> repeat
+- [x] **TOOL-03**: Configurable max_tool_steps to prevent infinite loops
+- [x] **TOOL-04**: ToolError handling that surfaces failures back to LLM
+- [x] **TOOL-05**: JSON schema generation from tool definitions
 
 ### Deepgram STT Provider
 
@@ -139,11 +139,11 @@
 | CHAT-05 | Phase 2 | Complete |
 | CHAT-06 | Phase 2 | Complete |
 | TEST-02 | Phase 2 | Complete |
-| TOOL-01 | Phase 3 | Pending |
-| TOOL-02 | Phase 3 | Pending |
-| TOOL-03 | Phase 3 | Pending |
-| TOOL-04 | Phase 3 | Pending |
-| TOOL-05 | Phase 3 | Pending |
+| TOOL-01 | Phase 3 | Complete |
+| TOOL-02 | Phase 3 | Complete |
+| TOOL-03 | Phase 3 | Complete |
+| TOOL-04 | Phase 3 | Complete |
+| TOOL-05 | Phase 3 | Complete |
 | DSTT-01 | Phase 4 | Pending |
 | DSTT-02 | Phase 4 | Pending |
 | DSTT-03 | Phase 4 | Pending |
