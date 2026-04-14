@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Provider Behaviours** - Define the STT, TTS, LLM, and VAD contracts that all providers must implement (completed 2026-04-14)
 - [x] **Phase 2: Chat Context** - Typed message structs and the ChatContext module for conversation history management (completed 2026-04-14)
 - [x] **Phase 3: Tool System** - Tool specification, JSON schema generation, and the LLM function-calling execution loop (completed 2026-04-14)
-- [ ] **Phase 4: Deepgram STT** - Real Deepgram provider: batch HTTP and streaming WebSocket transcription
+- [x] **Phase 4: Deepgram STT** - Real Deepgram provider: batch HTTP and streaming WebSocket transcription (completed 2026-04-14)
 - [ ] **Phase 5: OpenAI LLM** - Real OpenAI provider: chat completions with SSE streaming and tool calling
 - [ ] **Phase 6: OpenAI TTS** - Real OpenAI provider: audio synthesis with voice/format options and response caching
 - [ ] **Phase 7: Voice Pipeline** - Streaming STT -> LLM -> TTS pipeline with VAD, turn detection, and interruption handling
@@ -83,7 +83,7 @@ Plans:
 Plans:
 - [x] 04-01-PLAN.md — Refactor deepgram.ex to implement @behaviour STT; real Tesla HTTP batch transcription; AudioBuffer helper; mock mode
 - [x] 04-02-PLAN.md — DeepgramStream GenServer (Gun WebSocket); interim/final results; stream/1 callback on Deepgram module
-- [ ] 04-03-PLAN.md — Full ExUnit test suite: AudioBuffer unit tests, Deepgram HTTP tests (Bypass), DeepgramStream mock streaming tests
+- [x] 04-03-PLAN.md — Full ExUnit test suite: AudioBuffer unit tests, Deepgram HTTP tests (Bypass), DeepgramStream mock streaming tests
 
 ### Phase 5: OpenAI LLM
 **Goal**: Real OpenAI LLM provider with SSE streaming, tool calling support, and token-aware conversation truncation
@@ -158,7 +158,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 | 1. Provider Behaviours | 3/3 | Complete   | 2026-04-14 |
 | 2. Chat Context | 2/2 | Complete   | 2026-04-14 |
 | 3. Tool System | 2/2 | Complete   | 2026-04-14 |
-| 4. Deepgram STT | 2/3 | In Progress|  |
+| 4. Deepgram STT | 3/3 | Complete   | 2026-04-14 |
 | 5. OpenAI LLM | 0/? | Not started | - |
 | 6. OpenAI TTS | 0/? | Not started | - |
 | 7. Voice Pipeline | 0/? | Not started | - |

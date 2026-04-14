@@ -87,7 +87,7 @@
 
 - [x] **TEST-01**: 100% test coverage for all new behaviour modules
 - [x] **TEST-02**: 100% test coverage for ChatContext and tool system
-- [ ] **TEST-03**: 100% test coverage for all provider implementations (using mock mode)
+- [x] **TEST-03**: 100% test coverage for all provider implementations (using mock mode)
 - [ ] **TEST-04**: 100% test coverage for pipeline, VAD, turn detection
 - [ ] **TEST-05**: 100% test coverage for state machines and events
 - [ ] **TEST-06**: 100% test coverage for worker infrastructure
@@ -162,7 +162,7 @@
 | OTTS-04 | Phase 6 | Pending |
 | OTTS-05 | Phase 6 | Pending |
 | OTTS-06 | Phase 6 | Pending |
-| TEST-03 | Phase 4, 5, 6 | Pending |
+| TEST-03 | Phase 4, 5, 6 | Complete |
 | PIPE-01 | Phase 7 | Pending |
 | PIPE-02 | Phase 7 | Pending |
 | PIPE-03 | Phase 7 | Pending |
