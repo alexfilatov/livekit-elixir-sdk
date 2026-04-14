@@ -192,20 +192,20 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 8. State & Events | 2/2 | Complete   | 2026-04-14 |
 | 9. Worker Infrastructure | 1/2 | In Progress|  |
 | 10. Livebook Showcases | 3/3 | Complete   | 2026-04-14 |
-| 11. WebRTC Room Client | 3/4 | In Progress|  |
+| 11. WebRTC Room Client | 4/4 | Complete   | 2026-04-14 |
 
 ### Phase 11: WebRTC Room Client (Rustler NIFs)
 
 **Goal:** Elixir bindings to livekit-client-sdk-rust via Rustler NIFs, enabling agents to join LiveKit rooms, receive/publish audio tracks, and receive participant events
 **Requirements**: WRTC-01, WRTC-02, WRTC-03, WRTC-04, WRTC-05, WRTC-06, WRTC-07, WRTC-08, WRTC-09, WRTC-10, WRTC-11
 **Depends on:** Phase 10
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 
 Plans:
 - [x] 11-01-PLAN.md — Rust NIF crate scaffold (Cargo.toml, runtime, atoms, resources, Elixir stub)
 - [x] 11-02-PLAN.md — room_connect + room_disconnect NIFs with full D-12 event forwarding
 - [x] 11-03-PLAN.md — audio_subscribe + audio_publish_frame NIFs with PCM binary transfer
-- [ ] 11-04-PLAN.md — Elixir wrapper modules (Room, AudioTrack, VideoTrack, Participant) + unit and integration tests
+- [x] 11-04-PLAN.md — Elixir wrapper modules (Room, AudioTrack, VideoTrack, Participant) + unit and integration tests
 
 ### Phase 12: RoomIO and Agent Session Integration
 
