@@ -64,7 +64,10 @@ Plans:
   2. When the LLM returns a function call, the execution loop invokes the registered handler and feeds the result back automatically
   3. Setting `max_tool_steps: N` causes the loop to stop after N tool calls and return the final assistant message
   4. A tool handler returning `{:error, reason}` causes a `ToolError` that is surfaced back to the LLM as a function call output
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 03-01-PLAN.md — ToolSpec + ToolContext + ToolError structs; Tool.run/3 execution loop with max_tool_steps cap and error isolation
+- [ ] 03-02-PLAN.md — Full ExUnit test suite for all TOOL-0x requirements; 100% coverage gate
 
 ### Phase 4: Deepgram STT
 **Goal**: Real Deepgram provider that implements the STT behaviour for both batch HTTP and streaming WebSocket transcription
@@ -150,7 +153,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 |-------|----------------|--------|-----------|
 | 1. Provider Behaviours | 3/3 | Complete   | 2026-04-14 |
 | 2. Chat Context | 2/2 | Complete   | 2026-04-14 |
-| 3. Tool System | 0/? | Not started | - |
+| 3. Tool System | 0/2 | Not started | - |
 | 4. Deepgram STT | 0/? | Not started | - |
 | 5. OpenAI LLM | 0/? | Not started | - |
 | 6. OpenAI TTS | 0/? | Not started | - |
