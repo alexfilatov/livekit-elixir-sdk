@@ -1,0 +1,440 @@
+# Provider Behaviours: Implementing Custom STT, TTS, LLM, and VAD
+
+The LiveKit Elixir Agents framework is built around four behaviour contracts that define
+the interface every provider must implement. This tutorial walks through each contract and
+shows you how to build your own conforming provider modules.
+
+## Setup
+
+```elixir
+Mix.install([
+  {:livekit, path: Path.join(__DIR__, "../../..")},
+  {:kino, "~> 0.14"}
+])
+
+alias Livekit.Agents.STT
+alias Livekit.Agents.STT.SpeechEvent
+alias Livekit.Agents.TTS
+alias Livekit.Agents.LLM
+alias Livekit.Agents.LLM.LLMChunk
+alias Livekit.Agents.VAD
+alias Livekit.Agents.VAD.VADEvent
+alias Livekit.Agents.AudioFrame
+```
+
+## The STT Behaviour
+
+The `Livekit.Agents.STT` behaviour contract requires two callbacks:
+
+- `transcribe/2` — batch transcription: receives audio bytes, returns a `SpeechEvent`
+- `capabilities/0` — declares what optional features the provider supports
+
+The `stream/1` and `validate_config/1` callbacks are optional.
+
+### Anatomy of a SpeechEvent
+
+```elixir
+# A SpeechEvent carries the transcript text, confidence score, and language.
+# The :type field tracks where in the stream this event falls.
+event = %SpeechEvent{
+  type: :final,      # :start | :interim | :final | :end
+  text: "Hello from the Livebook",
+  confidence: 0.97,
+  language: "en"
+}
+
+IO.inspect(event, label: "SpeechEvent")
+```
+
+### Implementing a Batch-Only STT Provider
+
+```elixir
+defmodule MySTT do
+  use Livekit.Agents.STT  # injects @behaviour and default validate_config/1
+
+  @impl true
+  def transcribe(audio_binary, opts) do
+    # In a real provider you would POST audio_binary to an external API.
+    # Here we simulate a response based on audio length.
+    language = Keyword.get(opts, :language, "en")
+    simulated_text = "Heard #{byte_size(audio_binary)} bytes of audio"
+
+    event = %SpeechEvent{
+      type: :final,
+      text: simulated_text,
+      confidence: 0.90,
+      language: language
+    }
+
+    {:ok, event}
+  end
+
+  @impl true
+  def capabilities do
+    %{
+      streaming: false,      # this provider is batch-only
+      interim_results: false,
+      diarization: false,
+      languages: ["en", "fr", "de"]
+    }
+  end
+end
+
+IO.inspect(MySTT.capabilities(), label: "MySTT capabilities")
+```
+
+### Using the STT Provider
+
+```elixir
+# Simulate audio bytes (100ms of silence at 48kHz 16-bit mono)
+fake_audio = :binary.copy(<<0, 0>>, 4800)
+
+{:ok, result} = MySTT.transcribe(fake_audio, language: "en")
+
+IO.puts("Transcript: #{result.text}")
+IO.puts("Confidence: #{result.confidence}")
+IO.puts("Language:   #{result.language}")
+IO.puts("Type:       #{result.type}")
+```
+
+### Implementing a Streaming STT Provider
+
+Streaming providers implement `stream/1`. The returned pid receives audio frames and
+sends `{:speech_event, %SpeechEvent{}}` messages back to the subscriber.
+
+```elixir
+defmodule MyStreamingSTT do
+  use Livekit.Agents.STT
+
+  @impl true
+  def transcribe(audio_binary, _opts) do
+    {:ok, %SpeechEvent{type: :final, text: "batch fallback", confidence: 1.0, language: "en"}}
+  end
+
+  @impl true
+  def stream(_config) do
+    subscriber = self()
+    pid = spawn_link(fn -> streaming_loop(subscriber, []) end)
+    {:ok, pid}
+  end
+
+  @impl true
+  def capabilities do
+    %{streaming: true, interim_results: true, diarization: false, languages: ["en"]}
+  end
+
+  defp streaming_loop(subscriber, accumulated_frames) do
+    receive do
+      {:audio_chunk, audio_binary} ->
+        # Emit an interim result for each chunk received
+        interim = %SpeechEvent{
+          type: :interim,
+          text: "Processing #{byte_size(audio_binary)} bytes...",
+          confidence: 0.5,
+          language: "en"
+        }
+        send(subscriber, {:speech_event, interim})
+        streaming_loop(subscriber, [audio_binary | accumulated_frames])
+
+      :finish ->
+        # Emit the final transcript and signal stream end
+        final_text = "Transcribed #{length(accumulated_frames)} audio chunks"
+        send(subscriber, {:speech_event, %SpeechEvent{type: :final, text: final_text, confidence: 0.95, language: "en"}})
+        send(subscriber, {:speech_event, %SpeechEvent{type: :end, text: "", confidence: 0.0, language: "en"}})
+    end
+  end
+end
+
+# Demonstrate streaming
+{:ok, stream_pid} = MyStreamingSTT.stream(%{})
+
+# Feed some audio chunks
+send(stream_pid, {:audio_chunk, :binary.copy(<<0>>, 1000)})
+send(stream_pid, {:audio_chunk, :binary.copy(<<0>>, 2000)})
+send(stream_pid, :finish)
+
+# Collect events
+events =
+  Stream.repeatedly(fn ->
+    receive do
+      {:speech_event, event} -> event
+    after
+      500 -> nil
+    end
+  end)
+  |> Stream.take_while(&(&1 != nil))
+  |> Enum.to_list()
+
+IO.puts("Received #{length(events)} speech events:")
+Enum.each(events, fn e -> IO.puts("  [#{e.type}] #{e.text}") end)
+```
+
+## The TTS Behaviour
+
+The `Livekit.Agents.TTS` behaviour requires `synthesize/2` and `capabilities/0`. The
+optional `stream/1` allows text to be fed in chunks and audio frames to be streamed back.
+
+```elixir
+defmodule MyTTS do
+  use Livekit.Agents.TTS
+
+  @impl true
+  def synthesize(text, opts) do
+    voice = Keyword.get(opts, :voice, "default")
+    format = Keyword.get(opts, :format, :pcm)
+
+    IO.puts("[MyTTS] synthesize/2 called: voice=#{voice}, format=#{format}, text=#{inspect(text)}")
+
+    # Produce a minimal silent PCM payload (16-bit, 24kHz, 1 channel, 100ms)
+    # 24000 samples/sec * 0.1 sec * 2 bytes/sample = 4800 bytes
+    audio_bytes = :binary.copy(<<0, 0>>, 2400)
+    {:ok, audio_bytes}
+  end
+
+  @impl true
+  def capabilities do
+    %{
+      streaming: false,
+      voices: ["default", "narrator", "assistant"],
+      audio_formats: [:pcm, :mp3],
+      word_timing: false
+    }
+  end
+end
+
+{:ok, audio} = MyTTS.synthesize("Hello, world!", voice: "narrator", format: :pcm)
+IO.puts("Audio produced: #{byte_size(audio)} bytes (PCM)")
+IO.inspect(MyTTS.capabilities(), label: "MyTTS capabilities")
+```
+
+## The LLM Behaviour
+
+The `Livekit.Agents.LLM` behaviour requires `chat/2` and `capabilities/0`. The optional
+`stream/2` delivers token-by-token chunks as `LLMChunk` structs.
+
+### LLMChunk types
+
+- `:text` — a fragment of the response text
+- `:tool_call` — a function call the model wants to make
+- `:done` — signals end of stream
+
+```elixir
+defmodule MyLLM do
+  use Livekit.Agents.LLM
+
+  @impl true
+  def chat(chat_context, opts) do
+    model = Keyword.get(opts, :model, "mock-1")
+
+    # Count messages to produce a contextual reply
+    msg_count = length(chat_context.items)
+
+    reply = %Livekit.Agents.ChatContext.ChatMessage{
+      id: :crypto.strong_rand_bytes(4) |> Base.encode16(case: :lower),
+      role: :assistant,
+      content: ["You have #{msg_count} items in context. (model: #{model})"],
+      interrupted: false,
+      created_at: DateTime.utc_now()
+    }
+
+    {:ok, reply}
+  end
+
+  @impl true
+  def stream(chat_context, opts) do
+    subscriber = self()
+    pid = spawn_link(fn ->
+      words = ["Hello", " from", " streaming", " LLM!"]
+      Enum.each(words, fn word ->
+        chunk = %LLMChunk{type: :text, content: word}
+        send(subscriber, {:llm_chunk, chunk})
+        Process.sleep(10)  # simulate token delay
+      end)
+      send(subscriber, {:llm_chunk, %LLMChunk{type: :done, content: nil}})
+    end)
+    {:ok, pid}
+  end
+
+  @impl true
+  def capabilities do
+    %{
+      streaming: true,
+      tool_calling: false,
+      vision: false,
+      max_context_tokens: 4096
+    }
+  end
+end
+
+# Test batch chat
+alias Livekit.Agents.ChatContext
+
+ctx = ChatContext.new()
+ctx = ChatContext.add(ctx, ChatContext.new_message(:user, ["What time is it?"]))
+
+{:ok, reply} = MyLLM.chat(ctx, model: "mock-gpt")
+IO.puts("LLM reply: #{inspect(reply.content)}")
+```
+
+```elixir
+# Test streaming
+{:ok, stream_pid} = MyLLM.stream(ChatContext.new(), [])
+
+chunks =
+  Stream.repeatedly(fn ->
+    receive do
+      {:llm_chunk, chunk} -> chunk
+    after
+      500 -> nil
+    end
+  end)
+  |> Stream.take_while(&(&1 != nil))
+  |> Enum.to_list()
+
+IO.puts("Received #{length(chunks)} LLM chunks:")
+Enum.each(chunks, fn c -> IO.puts("  [#{c.type}] #{inspect(c.content)}") end)
+
+# Reconstruct the full response text
+full_text = chunks
+  |> Enum.filter(&(&1.type == :text))
+  |> Enum.map_join("", & &1.content)
+
+IO.puts("Full streamed response: #{inspect(full_text)}")
+```
+
+## The VAD Behaviour
+
+Voice Activity Detection (VAD) is streaming-only — there is no batch API. The provider
+implements `stream/1`, starts a loop process that accepts `{:audio_frame, frame}` messages,
+and sends back `{:vad_event, %VADEvent{}}` messages.
+
+### VADEvent types
+
+- `:speech_start` — speech just detected
+- `:inference` — mid-utterance probability reading
+- `:speech_end` — silence detected; the frames field contains the full utterance
+
+```elixir
+defmodule MyVAD do
+  use Livekit.Agents.VAD
+
+  @impl true
+  def stream(config) do
+    threshold = Map.get(config, :threshold, 0.5)
+    subscriber = self()
+    pid = spawn_link(fn -> vad_loop(subscriber, threshold, false, []) end)
+    {:ok, pid}
+  end
+
+  @impl true
+  def capabilities do
+    %{realtime: true, speech_probability: true}
+  end
+
+  defp vad_loop(subscriber, threshold, was_speaking, accumulated) do
+    receive do
+      {:audio_frame, frame} ->
+        # Simple energy-based detection: non-zero bytes = speech
+        energy = frame.data
+          |> :binary.bin_to_list()
+          |> Enum.sum()
+        probability = min(energy / (byte_size(frame.data) * 128), 1.0)
+        is_speech = probability >= threshold
+
+        cond do
+          is_speech and not was_speaking ->
+            send(subscriber, {:vad_event, %VADEvent{type: :speech_start, probability: probability, frames: [frame]}})
+            vad_loop(subscriber, threshold, true, [frame])
+
+          is_speech and was_speaking ->
+            send(subscriber, {:vad_event, %VADEvent{type: :inference, probability: probability, frames: [frame]}})
+            vad_loop(subscriber, threshold, true, accumulated ++ [frame])
+
+          not is_speech and was_speaking ->
+            send(subscriber, {:vad_event, %VADEvent{type: :speech_end, probability: probability, frames: accumulated}})
+            vad_loop(subscriber, threshold, false, [])
+
+          true ->
+            vad_loop(subscriber, threshold, false, [])
+        end
+
+      :stop ->
+        :ok
+    end
+  end
+end
+
+# Demonstrate VAD
+{:ok, vad_pid} = MyVAD.stream(%{threshold: 0.3})
+
+# Send a "silent" frame (all zeros)
+silent_frame = %AudioFrame{data: :binary.copy(<<0>>, 480), sample_rate: 48_000, channels: 1, format: :s16le}
+send(vad_pid, {:audio_frame, silent_frame})
+
+# Send a "speech" frame (non-zero bytes)
+speech_frame = %AudioFrame{data: :binary.copy(<<100>>, 480), sample_rate: 48_000, channels: 1, format: :s16le}
+send(vad_pid, {:audio_frame, speech_frame})
+send(vad_pid, {:audio_frame, speech_frame})
+
+# Send silence again to trigger speech_end
+send(vad_pid, {:audio_frame, silent_frame})
+
+Process.sleep(50)
+
+# Collect events
+events =
+  Stream.repeatedly(fn ->
+    receive do
+      {:vad_event, e} -> e
+    after
+      100 -> nil
+    end
+  end)
+  |> Stream.take_while(&(&1 != nil))
+  |> Enum.to_list()
+
+send(vad_pid, :stop)
+
+IO.puts("VAD events received: #{length(events)}")
+Enum.each(events, fn e ->
+  IO.puts("  [#{e.type}] probability=#{Float.round(e.probability, 2)}, frames=#{length(e.frames)}")
+end)
+```
+
+## Checking Provider Capabilities at Runtime
+
+Capabilities let callers adapt to what a provider supports without conditional code
+scattered everywhere. Use `function_exported?/3` to check optional callbacks.
+
+```elixir
+providers = [MySTT, MyStreamingSTT, MyTTS, MyLLM, MyVAD]
+
+IO.puts("Provider capability summary:\n")
+
+Enum.each(providers, fn mod ->
+  caps = mod.capabilities()
+  IO.puts("  #{mod}")
+  Enum.each(caps, fn {k, v} -> IO.puts("    #{k}: #{inspect(v)}") end)
+
+  streaming_arity = if mod in [MyLLM] do 2 else 1 end
+  has_stream = function_exported?(mod, :stream, streaming_arity)
+  IO.puts("    stream/#{streaming_arity} exported: #{has_stream}")
+  IO.puts("")
+end)
+```
+
+## Summary
+
+You now know how to:
+
+- Implement a batch-only STT provider with `use Livekit.Agents.STT`
+- Implement a streaming STT provider that sends `{:speech_event, event}` messages
+- Implement a TTS provider that returns raw audio bytes
+- Implement a streaming LLM provider that sends `{:llm_chunk, chunk}` messages
+- Implement a VAD provider that processes audio frames and emits `{:vad_event, event}` messages
+- Query provider capabilities at runtime using `capabilities/0` and `function_exported?/3`
+
+Any module implementing these contracts can be passed to `Pipeline.Config` as a
+`{module, config_map}` tuple and plugged into the full voice pipeline.
+
+Next: `02_chat_context.livemd` — building typed conversation history.
