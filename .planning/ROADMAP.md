@@ -37,7 +37,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 3 plans
 Plans:
 - [x] 01-01-PLAN.md — Define STT behaviour (transcribe/2, stream/1, capabilities/0) + SpeechEvent struct
-- [ ] 01-02-PLAN.md — Define LLM behaviour (chat/2, stream/2, capabilities/0) + LLMChunk struct; VAD behaviour (stream/1, capabilities/0) + VADEvent struct
+- [x] 01-02-PLAN.md — Define LLM behaviour (chat/2, stream/2, capabilities/0) + LLMChunk struct; VAD behaviour (stream/1, capabilities/0) + VADEvent struct
 - [ ] 01-03-PLAN.md — Conformance-stub tests for all four behaviours; 100% coverage gate
 
 ### Phase 2: Chat Context
@@ -145,7 +145,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Provider Behaviours | 1/3 | In Progress|  |
+| 1. Provider Behaviours | 2/3 | In Progress|  |
 | 2. Chat Context | 0/? | Not started | - |
 | 3. Tool System | 0/? | Not started | - |
 | 4. Deepgram STT | 0/? | Not started | - |

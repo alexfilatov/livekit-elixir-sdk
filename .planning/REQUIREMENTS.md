@@ -7,11 +7,11 @@
 
 ### Provider Behaviours
 
-- [ ] **BEHV-01**: Define `Livekit.Agents.STT` behaviour with callbacks for streaming and batch transcription
-- [ ] **BEHV-02**: Define `Livekit.Agents.TTS` behaviour with callbacks for streaming and batch synthesis
-- [ ] **BEHV-03**: Define `Livekit.Agents.LLM` behaviour with callbacks for chat completion and streaming
-- [ ] **BEHV-04**: Define `Livekit.Agents.VAD` behaviour with callbacks for voice activity detection
-- [ ] **BEHV-05**: Each behaviour defines capability introspection (what features provider supports)
+- [x] **BEHV-01**: Define `Livekit.Agents.STT` behaviour with callbacks for streaming and batch transcription
+- [x] **BEHV-02**: Define `Livekit.Agents.TTS` behaviour with callbacks for streaming and batch synthesis
+- [x] **BEHV-03**: Define `Livekit.Agents.LLM` behaviour with callbacks for chat completion and streaming
+- [x] **BEHV-04**: Define `Livekit.Agents.VAD` behaviour with callbacks for voice activity detection
+- [x] **BEHV-05**: Each behaviour defines capability introspection (what features provider supports)
 
 ### Chat Context
 
@@ -126,11 +126,11 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BEHV-01 | Phase 1 | Pending |
-| BEHV-02 | Phase 1 | Pending |
-| BEHV-03 | Phase 1 | Pending |
-| BEHV-04 | Phase 1 | Pending |
-| BEHV-05 | Phase 1 | Pending |
+| BEHV-01 | Phase 1 | Complete |
+| BEHV-02 | Phase 1 | Complete |
+| BEHV-03 | Phase 1 | Complete |
+| BEHV-04 | Phase 1 | Complete |
+| BEHV-05 | Phase 1 | Complete |
 | TEST-01 | Phase 1 | Pending |
 | CHAT-01 | Phase 2 | Pending |
 | CHAT-02 | Phase 2 | Pending |

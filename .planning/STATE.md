@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.1.4
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-provider-behaviours-01-01-PLAN.md
-last_updated: "2026-04-14T09:32:53.125Z"
+stopped_at: Completed 01-provider-behaviours-01-02-PLAN.md
+last_updated: "2026-04-14T09:34:09.039Z"
 last_activity: 2026-04-14
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
-  percent: 33
+  completed_plans: 2
+  percent: 67
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-14)
 ## Current Position
 
 Phase: 01 (provider-behaviours) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-04-14
 
@@ -53,6 +53,7 @@ Progress: [░░░░░░░░░░] 0%
 
 *Updated after each plan completion*
 | Phase 01-provider-behaviours P01 | 15m | 2 tasks | 2 files |
+| Phase 01-provider-behaviours P02 | 15m | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -67,6 +68,8 @@ Recent decisions affecting current work:
 - [Initialization]: Energy-based VAD first — simpler, no ML dependencies, good enough for MVP
 - [Initialization]: Mock mode alongside real — tests run without API keys
 - [Phase 01-provider-behaviours]: @optional_callbacks [stream: 1, validate_config: 1] used (arity-qualified) in both STT and TTS behaviours for batch-only provider validity
+- [Phase 01-provider-behaviours]: chat_context typed as term() in LLM behaviour Phase 1 — no forward reference to ChatContext (tightened in Phase 2)
+- [Phase 01-provider-behaviours]: @optional_callbacks [stream: 2, validate_config: 1] for LLM (arity 2); stream/1 NOT optional for VAD (streaming-only by D-04)
 
 ### Pending Todos
 
@@ -78,6 +81,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-14T09:32:53.122Z
-Stopped at: Completed 01-provider-behaviours-01-01-PLAN.md
+Last session: 2026-04-14T09:34:09.036Z
+Stopped at: Completed 01-provider-behaviours-01-02-PLAN.md
 Resume file: None
