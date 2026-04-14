@@ -43,7 +43,8 @@ defmodule Livekit.Agents.STT.DeepgramStream do
             conn: pid() | nil,
             stream_ref: reference() | nil,
             buffer: AudioBuffer.t() | nil,
-            connected: boolean()
+            connected: boolean(),
+            finishing: boolean()
           }
 
     defstruct [
@@ -52,7 +53,8 @@ defmodule Livekit.Agents.STT.DeepgramStream do
       conn: nil,
       stream_ref: nil,
       buffer: nil,
-      connected: false
+      connected: false,
+      finishing: false
     ]
   end
 
@@ -133,7 +135,20 @@ defmodule Livekit.Agents.STT.DeepgramStream do
       when conn == state.conn do
     Logger.debug("Deepgram WebSocket connected")
     send(state.subscriber, {:speech_event, %SpeechEvent{type: :start}})
-    {:noreply, %{state | connected: true}}
+    new_state = %{state | connected: true}
+
+    # Flush any audio that accumulated in the buffer before the connection was ready
+    new_state =
+      case AudioBuffer.flush(new_state.buffer) do
+        {data, flushed_buffer} when byte_size(data) > 0 ->
+          :gun.ws_send(new_state.conn, new_state.stream_ref, {:binary, data})
+          %{new_state | buffer: flushed_buffer}
+
+        _ ->
+          new_state
+      end
+
+    {:noreply, new_state}
   end
 
   def handle_info({:gun_ws, conn, _stream_ref, {:text, frame}}, state)
@@ -169,6 +184,11 @@ defmodule Livekit.Agents.STT.DeepgramStream do
     {:noreply, state}
   end
 
+  # ISSUE-08: Discard audio after finish has been called
+  def handle_cast({:send_audio, _audio}, %State{finishing: true} = state) do
+    {:noreply, state}
+  end
+
   def handle_cast({:send_audio, audio}, %State{connected: false} = state) do
     # Not yet connected — buffer and wait
     new_buffer = AudioBuffer.push(state.buffer, audio, state.config.sample_rate)
@@ -189,28 +209,27 @@ defmodule Livekit.Agents.STT.DeepgramStream do
   end
 
   def handle_cast(:finish, state) do
-    # Flush any remaining buffered audio before closing
-    remaining =
-      if state.buffer do
-        {data, _} = AudioBuffer.flush(state.buffer)
-        data
-      else
-        <<>>
+    # ISSUE-09: In mock mode (buffer == nil), the mock process already sends :end — skip it
+    if is_nil(state.buffer) do
+      {:noreply, %{state | finishing: true}}
+    else
+      # Flush any remaining buffered audio before closing
+      {remaining, _} = AudioBuffer.flush(state.buffer)
+
+      if byte_size(remaining) > 0 and state.connected do
+        :gun.ws_send(state.conn, state.stream_ref, {:binary, remaining})
       end
 
-    if byte_size(remaining) > 0 and state.connected do
-      :gun.ws_send(state.conn, state.stream_ref, {:binary, remaining})
-    end
+      if state.connected do
+        close_msg = Jason.encode!(%{"type" => "CloseStream"})
+        :gun.ws_send(state.conn, state.stream_ref, {:text, close_msg})
+      else
+        # Never connected — emit terminal event directly
+        send(state.subscriber, {:speech_event, %SpeechEvent{type: :end}})
+      end
 
-    if state.connected do
-      close_msg = Jason.encode!(%{"type" => "CloseStream"})
-      :gun.ws_send(state.conn, state.stream_ref, {:text, close_msg})
-    else
-      # Never connected — emit terminal event directly
-      send(state.subscriber, {:speech_event, %SpeechEvent{type: :end}})
+      {:noreply, %{state | finishing: true}}
     end
-
-    {:noreply, state}
   end
 
   def handle_cast(:mock_done, state) do
@@ -258,8 +277,10 @@ defmodule Livekit.Agents.STT.DeepgramStream do
         emit_results(state, data)
 
       {:ok, %{"type" => "UtteranceEnd"}} ->
-        # Deepgram signals end of an utterance — emit :end and let stream continue
-        send(state.subscriber, {:speech_event, %SpeechEvent{type: :end}})
+        # UtteranceEnd signals the end of a single utterance, not the stream.
+        # Emit :final so the pipeline can process the completed utterance while
+        # the WebSocket remains open for further speech.
+        send(state.subscriber, {:speech_event, %SpeechEvent{type: :final}})
         state
 
       {:ok, %{"type" => "SpeechStarted"}} ->

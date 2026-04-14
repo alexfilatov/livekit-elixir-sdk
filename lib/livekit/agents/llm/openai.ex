@@ -182,7 +182,9 @@ defmodule Livekit.Agents.LLM.OpenAI do
     max_tokens = Keyword.get(opts, :max_tokens, config.max_tokens)
     tool_context = Keyword.get(opts, :tool_context)
 
-    truncated_ctx = ChatContext.truncate(ctx, max(div(config.max_tokens, 1), 20))
+    # Estimate max messages to keep: ~100 tokens per message, cap at 100 entries
+    max_messages = min(div(128_000, 100), 100)
+    truncated_ctx = ChatContext.truncate(ctx, max(max_messages, 20))
     messages = to_openai_messages(truncated_ctx.items)
 
     body =
@@ -218,7 +220,9 @@ defmodule Livekit.Agents.LLM.OpenAI do
     max_tokens = Keyword.get(opts, :max_tokens, config.max_tokens)
     tool_context = Keyword.get(opts, :tool_context)
 
-    truncated_ctx = ChatContext.truncate(ctx, max(div(config.max_tokens, 1), 20))
+    # Estimate max messages to keep: ~100 tokens per message, cap at 100 entries
+    max_messages = min(div(128_000, 100), 100)
+    truncated_ctx = ChatContext.truncate(ctx, max(max_messages, 20))
     messages = to_openai_messages(truncated_ctx.items)
 
     body =
@@ -301,6 +305,9 @@ defmodule Livekit.Agents.LLM.OpenAI do
             )
           end)
 
+        # Return the first FunctionCall so the caller receives a single item per the
+        # behaviour contract. All FunctionCall structs are available in the ChatContext
+        # when the Tool.run loop adds them there before calling chat/2 again.
         {:ok, List.first(function_calls)}
 
       _ ->

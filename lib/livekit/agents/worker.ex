@@ -212,6 +212,12 @@ defmodule Livekit.Agents.Worker do
     end
   end
 
+  # ISSUE-06: Guard against double-drain blocking the first caller
+  @impl true
+  def handle_call(:drain, _from, %{draining: true} = state) do
+    {:reply, :ok, state}
+  end
+
   @impl true
   def handle_call(:drain, from, state) do
     Logger.info("Worker drain initiated, active_jobs=#{map_size(state.active_jobs)}")

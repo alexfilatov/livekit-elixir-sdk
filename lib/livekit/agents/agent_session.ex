@@ -412,9 +412,13 @@ defmodule Livekit.Agents.AgentSession do
   end
 
   defp start_room_monitoring(state) do
-    # Start a process to simulate room events
-    # In real implementation, this would listen to WebRTC events
-    spawn_link(fn -> simulate_room_events(self()) end)
+    # Only simulate room events in mock/development mode (no real room connection).
+    # In a real implementation this would be replaced by WebRTC event listeners.
+    unless state.config.server_url && state.config.server_url != "" do
+      session_pid = self()
+      spawn_link(fn -> simulate_room_events(session_pid) end)
+    end
+
     state
   end
 

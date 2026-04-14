@@ -65,7 +65,12 @@ defmodule Livekit.Agents.EventBus do
   """
   @spec subscribe(session_id :: String.t()) :: {:ok, term()} | {:error, term()}
   def subscribe(session_id) do
-    Registry.register(@registry, session_id, self())
+    # ISSUE-15: Handle Registry not started gracefully
+    try do
+      Registry.register(@registry, session_id, self())
+    catch
+      :exit, _ -> {:error, :not_started}
+    end
   end
 
   @doc """
@@ -114,6 +119,13 @@ defmodule Livekit.Agents.EventBus do
   @spec stop() :: :ok
   def stop do
     :telemetry.detach(@telemetry_handler_id)
+
+    # ISSUE-26: Also stop the Registry process if it is running
+    case Process.whereis(@registry) do
+      nil -> :ok
+      pid -> GenServer.stop(pid, :normal, 5_000)
+    end
+
     :ok
   end
 
@@ -134,14 +146,15 @@ defmodule Livekit.Agents.EventBus do
         metadata,
         _config
       ) do
+    # ISSUE-20: stt_complete should emit :stt_latency_ms, not :ttft_ms
     value = Map.get(measurements, :monotonic_time, System.monotonic_time(:millisecond))
 
-    emit_to_all_sessions(%Events.TelemetryMeasurement{
-      metric: :ttft_ms,
+    emit_to_session(%Events.TelemetryMeasurement{
+      metric: :stt_latency_ms,
       value: System.convert_time_unit(value, :native, :millisecond),
       metadata: metadata,
       timestamp: DateTime.utc_now()
-    })
+    }, metadata)
   end
 
   def handle_telemetry_event(
@@ -152,12 +165,12 @@ defmodule Livekit.Agents.EventBus do
       ) do
     value = Map.get(measurements, :monotonic_time, System.monotonic_time(:millisecond))
 
-    emit_to_all_sessions(%Events.TelemetryMeasurement{
+    emit_to_session(%Events.TelemetryMeasurement{
       metric: :ttft_ms,
       value: System.convert_time_unit(value, :native, :millisecond),
       metadata: metadata,
       timestamp: DateTime.utc_now()
-    })
+    }, metadata)
   end
 
   def handle_telemetry_event(
@@ -169,12 +182,12 @@ defmodule Livekit.Agents.EventBus do
     value = Map.get(measurements, :monotonic_time, System.monotonic_time(:millisecond))
     bytes = Map.get(measurements, :bytes, 0)
 
-    emit_to_all_sessions(%Events.TelemetryMeasurement{
+    emit_to_session(%Events.TelemetryMeasurement{
       metric: :end_to_end_latency_ms,
       value: System.convert_time_unit(value, :native, :millisecond),
       metadata: Map.put(metadata, :bytes, bytes),
       timestamp: DateTime.utc_now()
-    })
+    }, metadata)
   end
 
   def handle_telemetry_event(_event_name, _measurements, _metadata, _config), do: :ok
@@ -183,8 +196,20 @@ defmodule Livekit.Agents.EventBus do
   # Private Helpers
   # ---------------------------------------------------------------------------
 
+  # Dispatches a telemetry measurement only to subscribers of the session that
+  # emitted the event (identified by the :session_id key in telemetry metadata).
+  # Falls back to broadcasting to all sessions when no session_id is present,
+  # preserving backwards-compatible behaviour for callers that don't set it yet.
+  @spec emit_to_session(Events.TelemetryMeasurement.t(), map()) :: :ok
+  defp emit_to_session(event, %{session_id: session_id}) when is_binary(session_id) do
+    publish(session_id, event)
+  end
+
+  defp emit_to_session(event, _metadata) do
+    emit_to_all_sessions(event)
+  end
+
   # Broadcasts a telemetry measurement to all currently registered session subscribers.
-  # This fans out to every registered key in the Registry.
   @spec emit_to_all_sessions(Events.TelemetryMeasurement.t()) :: :ok
   defp emit_to_all_sessions(event) do
     # Select all {key, pid, value} entries from the Registry

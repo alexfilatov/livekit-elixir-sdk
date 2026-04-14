@@ -28,19 +28,34 @@ defmodule Livekit.Agents.WorkerSupervisor do
   @doc """
   Starts the WorkerSupervisor and its children.
 
-  Accepts a `Worker.Config` struct. The supervisor is registered locally as
-  `#{__MODULE__}` so only one instance runs per node by default.
+  Accepts a `Worker.Config` struct and an optional keyword list of options.
+
+  ## Options
+
+  - `:name` — registration name for the supervisor (default: `#{__MODULE__}`).
+  - `:worker_name` — registration name for the `Worker` child
+    (default: derived from `worker_config.worker_id` when present, else `Worker`).
   """
-  @spec start_link(Worker.Config.t()) :: Supervisor.on_start()
-  def start_link(worker_config) do
-    Supervisor.start_link(__MODULE__, worker_config, name: __MODULE__)
+  @spec start_link(Worker.Config.t(), keyword()) :: Supervisor.on_start()
+  def start_link(worker_config, opts \\ []) do
+    name = Keyword.get(opts, :name, __MODULE__)
+    Supervisor.start_link(__MODULE__, {worker_config, opts}, name: name)
   end
 
   @impl true
-  def init(worker_config) do
+  def init({worker_config, opts}) do
+    worker_name =
+      Keyword.get_lazy(opts, :worker_name, fn ->
+        if Map.get(worker_config, :worker_id) do
+          {:via, Registry, {Livekit.Agents.WorkerRegistry, worker_config.worker_id}}
+        else
+          Worker
+        end
+      end)
+
     children = [
       {JobSupervisor, [name: JobSupervisor]},
-      {Worker, {worker_config, [name: Worker]}}
+      {Worker, {worker_config, [name: worker_name]}}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)

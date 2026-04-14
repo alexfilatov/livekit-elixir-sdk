@@ -25,3 +25,7 @@ livekit-*.tar
 # Temporary files, for example, from tests.
 /tmp/
 # vendor/
+
+# Rustler NIF compiled artifacts
+/priv/native/
+/native/livekit_webrtc/target/

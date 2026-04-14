@@ -51,10 +51,16 @@ defmodule Livekit.Agents.Pipeline.TurnDetector do
     - `:silence_ms` — milliseconds of consecutive silence after which
       `{:turn_end, frames}` is sent. Defaults to `500`.
     - `:subscriber` — PID of the process that receives turn events (required).
+    - `:max_utterance_frames` — maximum number of speech frames to accumulate
+      before forcing a turn end. Defaults to `3000` (~60 s at 20 ms/frame).
     """
 
-    @type t :: %__MODULE__{silence_ms: pos_integer(), subscriber: pid()}
-    defstruct silence_ms: 500, subscriber: nil
+    @type t :: %__MODULE__{
+            silence_ms: pos_integer(),
+            subscriber: pid(),
+            max_utterance_frames: pos_integer()
+          }
+    defstruct silence_ms: 500, subscriber: nil, max_utterance_frames: 3000
   end
 
   # ---------------------------------------------------------------------------
@@ -151,7 +157,19 @@ defmodule Livekit.Agents.Pipeline.TurnDetector do
 
     # 3. Accumulate the speech frame (append in order)
     new_frames = state.utterance_frames ++ [frame]
-    {:noreply, %{state | utterance_frames: new_frames, silence_timer: nil}}
+    state = %{state | utterance_frames: new_frames, silence_timer: nil}
+
+    # 4. Force turn end if max_utterance_frames is reached to prevent unbounded accumulation
+    if length(state.utterance_frames) >= state.config.max_utterance_frames do
+      Logger.warning(
+        "TurnDetector: max_utterance_frames (#{state.config.max_utterance_frames}) reached — forcing turn end"
+      )
+
+      send(state.config.subscriber, {:turn_end, state.utterance_frames})
+      {:noreply, %{state | utterance_frames: [], silence_timer: nil, vad_state: :silence}}
+    else
+      {:noreply, state}
+    end
   end
 
   @impl true

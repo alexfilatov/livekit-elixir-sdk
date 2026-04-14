@@ -180,16 +180,21 @@ defmodule Livekit.Agents.TTS.OpenAI do
         :shimmer -> 293.66
       end
 
-    samples =
-      for i <- 0..(sample_count - 1) do
-        sin_value = :math.sin(2 * :math.pi() * frequency * i / config.sample_rate)
-        envelope = compute_envelope(i, sample_count)
-        pcm_value = round(sin_value * envelope * 16_000)
-        pcm_value = max(-32_768, min(32_767, pcm_value))
-        <<pcm_value::little-signed-16>>
-      end
+    # ISSUE-10: Guard against empty range when sample_count is 0
+    if sample_count <= 0 do
+      <<>>
+    else
+      samples =
+        for i <- 0..(sample_count - 1) do
+          sin_value = :math.sin(2 * :math.pi() * frequency * i / config.sample_rate)
+          envelope = compute_envelope(i, sample_count)
+          pcm_value = round(sin_value * envelope * 16_000)
+          pcm_value = max(-32_768, min(32_767, pcm_value))
+          <<pcm_value::little-signed-16>>
+        end
 
-    IO.iodata_to_binary(samples)
+      IO.iodata_to_binary(samples)
+    end
   end
 
   defp estimate_audio_duration(text) do

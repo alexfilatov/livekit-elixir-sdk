@@ -53,6 +53,7 @@ defmodule Livekit.Agents.Pipeline do
   require Logger
 
   alias Livekit.Agents.{AudioFrame, ChatContext}
+  alias Livekit.Agents.ChatContext.FunctionCall
   alias Livekit.Agents.Pipeline.{EnergyVAD, TurnDetector}
 
   # ---------------------------------------------------------------------------
@@ -190,6 +191,15 @@ defmodule Livekit.Agents.Pipeline do
 
   @impl true
   def init(%Config{} = config) do
+    # ISSUE-01: Validate that provider configs are non-nil
+    {_stt_mod, stt_config} = config.stt
+    if is_nil(stt_config), do: raise("STT provider config cannot be nil")
+
+    {_llm_mod, llm_config} = config.llm
+    if is_nil(llm_config), do: raise("LLM provider config cannot be nil")
+
+    {_tts_mod, tts_config} = config.tts
+    if is_nil(tts_config), do: raise("TTS provider config cannot be nil")
     vad_config = EnergyVAD.new(%{threshold: config.vad_threshold})
 
     case TurnDetector.start_link(silence_ms: config.silence_ms, subscriber: self()) do
@@ -239,6 +249,13 @@ defmodule Livekit.Agents.Pipeline do
   end
 
   @impl true
+  def handle_info({:turn_end, _frames}, %State{status: :processing} = state) do
+    # ISSUE-14: Discard stale turn_end while already processing a turn
+    Logger.debug("Pipeline: ignoring stale turn_end — already processing")
+    {:noreply, state}
+  end
+
+  @impl true
   def handle_info({:turn_end, frames}, %State{} = state) do
     config = state.config
     chat_context = state.chat_context
@@ -255,11 +272,26 @@ defmodule Livekit.Agents.Pipeline do
                  ),
                  config,
                  config.llm_opts
-               ),
-             :ok <- emit_telemetry(:llm_first_token, %{role: llm_response.role}),
-             {:ok, audio_binary} <- do_tts(llm_response.content, config, config.tts_opts),
-             :ok <- emit_telemetry(:tts_start, %{bytes: byte_size(audio_binary)}) do
-          {:ok, speech_event.text, llm_response, audio_binary}
+               ) do
+          # ISSUE-19: Handle FunctionCall responses from LLM
+          case llm_response do
+            %FunctionCall{} ->
+              Logger.warning(
+                "Pipeline received FunctionCall but tool execution not yet supported in pipeline"
+              )
+
+              {:ok, speech_event.text, nil, nil}
+
+            _ ->
+              # ISSUE-02: Convert content list to string before passing to TTS
+              text = content_to_string(llm_response.content)
+
+              with :ok <- emit_telemetry(:llm_first_token, %{role: llm_response.role}),
+                   {:ok, audio_binary} <- do_tts(text, config, config.tts_opts),
+                   :ok <- emit_telemetry(:tts_start, %{bytes: byte_size(audio_binary)}) do
+                {:ok, speech_event.text, llm_response, audio_binary}
+              end
+          end
         end
       end)
 
@@ -273,6 +305,12 @@ defmodule Livekit.Agents.Pipeline do
 
     state =
       case result do
+        {:ok, user_text, nil, nil} ->
+          # FunctionCall response — no audio to send, context unchanged for now
+          Logger.debug("Pipeline turn complete (FunctionCall) — user: #{inspect(user_text)}")
+          updated_metrics = Map.update!(state.metrics, :turns_processed, &(&1 + 1))
+          %{state | metrics: updated_metrics, active_task: nil, status: :idle}
+
         {:ok, user_text, llm_response, audio_binary} ->
           Logger.debug(
             "Pipeline turn complete — user: #{inspect(user_text)}, assistant: #{inspect(llm_response.content)}"
@@ -281,7 +319,7 @@ defmodule Livekit.Agents.Pipeline do
           updated_ctx =
             ChatContext.add(
               state.chat_context,
-              ChatContext.new_message(:assistant, [llm_response.content])
+              ChatContext.new_message(:assistant, [content_to_string(llm_response.content)])
             )
 
           if state.config.subscriber do
@@ -301,6 +339,11 @@ defmodule Livekit.Agents.Pipeline do
 
         {:error, reason} ->
           Logger.error("Pipeline processing error: #{inspect(reason)}")
+          # ISSUE-18: Surface errors to subscriber
+          if state.config.subscriber do
+            send(state.config.subscriber, {:pipeline_error, reason})
+          end
+
           updated_metrics = Map.update!(state.metrics, :errors, &(&1 + 1))
           %{state | metrics: updated_metrics, active_task: nil, status: :idle}
       end
@@ -333,30 +376,49 @@ defmodule Livekit.Agents.Pipeline do
     {:reply, state.metrics, state}
   end
 
+  # ISSUE-04/16: Shut down active task and turn detector on termination
+  @impl true
+  def terminate(_reason, state) do
+    if state.active_task, do: Task.shutdown(state.active_task, :brutal_kill)
+
+    if state.turn_detector && Process.alive?(state.turn_detector) do
+      GenServer.stop(state.turn_detector, :normal, 1_000)
+    end
+
+    :ok
+  end
+
   # ---------------------------------------------------------------------------
   # Private Helpers
   # ---------------------------------------------------------------------------
 
+  # ISSUE-02: Normalize LLM content (list or binary) to a plain string for TTS
+  @spec content_to_string(term()) :: String.t()
+  defp content_to_string([single]) when is_binary(single), do: single
+  defp content_to_string(parts) when is_list(parts), do: Enum.map_join(parts, " ", &to_string/1)
+  defp content_to_string(binary) when is_binary(binary), do: binary
+  defp content_to_string(_), do: ""
+
   @spec do_stt([AudioFrame.t()], Config.t(), keyword()) ::
           {:ok, Livekit.Agents.STT.SpeechEvent.t()} | {:error, term()}
   defp do_stt(frames, config, opts) do
-    {stt_module, _stt_config} = config.stt
+    {stt_module, stt_config} = config.stt
     audio_binary = frames |> Enum.map(& &1.data) |> IO.iodata_to_binary()
-    stt_module.transcribe(audio_binary, opts)
+    stt_module.transcribe(audio_binary, Keyword.merge(opts, config: stt_config))
   end
 
   @spec do_llm(ChatContext.t(), Config.t(), keyword()) ::
           {:ok, map()} | {:error, term()}
   defp do_llm(chat_context, config, opts) do
-    {llm_module, _llm_config} = config.llm
-    llm_module.chat(chat_context, opts)
+    {llm_module, llm_config} = config.llm
+    llm_module.chat(chat_context, Keyword.merge(opts, config: llm_config))
   end
 
   @spec do_tts(String.t(), Config.t(), keyword()) ::
           {:ok, binary()} | {:error, term()}
   defp do_tts(text, config, opts) do
-    {tts_module, _tts_config} = config.tts
-    tts_module.synthesize(text, opts)
+    {tts_module, tts_config} = config.tts
+    tts_module.synthesize(text, Keyword.merge(opts, config: tts_config))
   end
 
   @spec emit_telemetry(atom(), map()) :: :ok

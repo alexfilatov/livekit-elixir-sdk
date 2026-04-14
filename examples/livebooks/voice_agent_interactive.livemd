@@ -1,63 +1,182 @@
 # LiveKit Voice Agent - Interactive Demo
 
+## Section
+
 ```elixir
+# Setup Instructions:
+# 1. First, compile the LiveKit project by running this in the terminal:
+#    cd /path/to/livekit && mix deps.get && mix compile
+# 2. Then run this Livebook from the livekit directory
+
+# Check if we're running from the correct directory and find LiveKit project
+current_dir = File.cwd!()
+
+# Try to find the LiveKit project in several possible locations
+possible_livekit_paths = [
+  current_dir,                                                    # Current directory
+  Path.expand("../..", current_dir),                             # Two levels up (if in examples/livebooks)
+  "/Users/alex/livekit",                                         # Specific path based on your setup
+  "/Users/alex/Projects/my/livekit/livekit",                    # Alternative path
+  Path.join(System.user_home!(), "livekit"),                    # Home directory
+  Path.join(System.user_home!(), "Projects/my/livekit/livekit") # Projects directory
+]
+
+livekit_root = Enum.find(possible_livekit_paths, fn path ->
+  File.exists?(Path.join(path, "mix.exs")) and
+  File.exists?(Path.join(path, "lib/livekit.ex"))
+end)
+
+IO.puts("Current directory: #{current_dir}")
+IO.puts("Searching for LiveKit project...")
+
+if livekit_root do
+  IO.puts("✅ Found LiveKit project at: #{livekit_root}")
+else
+  IO.puts("❌ Could not find LiveKit project in any of these locations:")
+  Enum.each(possible_livekit_paths, fn path -> IO.puts("  - #{path}") end)
+  IO.puts("\nPlease ensure the LiveKit project exists and try one of these:")
+  IO.puts("1. Start Livebook from the LiveKit directory: cd /Users/alex/livekit && livebook server")
+  IO.puts("2. Or copy this notebook to your LiveKit project directory")
+end
+
+# Install dependencies for Livebook
 Mix.install([
-  {:livekit, path: "../.."},
   {:kino, "~> 0.12.0"},
   {:req, "~> 0.4.0"}
 ])
+
+# If we found the project, set it up
+if livekit_root do
+  # Check if compiled
+  ebin_path = Path.join([livekit_root, "_build", "dev", "lib", "livekit", "ebin"])
+  if File.exists?(ebin_path) do
+    IO.puts("✅ LiveKit appears to be compiled")
+    Code.prepend_path(ebin_path)
+
+    # Also add dependencies to the path
+    deps_path = Path.join([livekit_root, "_build", "dev", "lib"])
+    if File.exists?(deps_path) do
+      deps_dirs = File.ls!(deps_path)
+      Enum.each(deps_dirs, fn dep ->
+        dep_ebin = Path.join([deps_path, dep, "ebin"])
+        if File.exists?(dep_ebin) do
+          Code.prepend_path(dep_ebin)
+        end
+      end)
+      IO.puts("✅ Added dependency paths")
+    end
+  else
+    IO.puts("⚠️ LiveKit not compiled. Please run 'mix compile' in the LiveKit directory first.")
+    IO.puts("Run this command: cd #{livekit_root} && mix deps.get && mix compile")
+  end
+end
+```
+
+<!-- Setup Verification -->
+
+```elixir
+# Verify that LiveKit modules are available
+modules_to_check = [
+  Livekit,
+  Livekit.AccessToken,
+  Livekit.Agents.VoiceAgent,
+  Livekit.Agents.AgentSession,
+  Livekit.Agents.AudioFrame,
+  Livekit.Agents.JobContext
+]
+
+IO.puts("🔍 Checking LiveKit modules...")
+
+all_loaded = Enum.all?(modules_to_check, fn module ->
+  if Code.ensure_loaded?(module) do
+    IO.puts("✅ #{module}")
+    true
+  else
+    IO.puts("❌ #{module} - NOT LOADED")
+    false
+  end
+end)
+
+if all_loaded do
+  IO.puts("\n🎉 All LiveKit modules loaded successfully!")
+  IO.puts("LiveKit version: #{Livekit.version()}")
+else
+  IO.puts("\n❌ Some modules failed to load.")
+  IO.puts("Please ensure you've compiled the LiveKit project:")
+  IO.puts("1. cd #{livekit_root}")
+  IO.puts("2. mix deps.get")
+  IO.puts("3. mix compile")
+  IO.puts("4. Restart this Livebook")
+end
 ```
 
 ## Introduction
 
 This Livebook demonstrates how to create and interact with a LiveKit Voice Agent using the Elixir SDK. You'll be able to:
 
-- Configure a voice agent with STT, LLM, and TTS providers
-- Connect to a LiveKit room
-- Have real-time voice conversations with the AI agent
-- Monitor agent performance and metrics
+* Configure a voice agent with STT, LLM, and TTS providers
+* Connect to a LiveKit room
+* Have real-time voice conversations with the AI agent
+* Monitor agent performance and metrics
 
 ## 🔧 Configuration
 
 First, let's set up all the necessary API keys and configuration:
 
 ```elixir
-# API Keys Configuration
-api_keys_form = Kino.Control.form(
-  [
-    livekit_url: Kino.Input.text("LiveKit Server URL", default: "ws://localhost:7880"),
-    livekit_api_key: Kino.Input.password("LiveKit API Key"),
-    livekit_api_secret: Kino.Input.password("LiveKit API Secret"),
-    deepgram_api_key: Kino.Input.password("Deepgram API Key (for STT)"),
-    openai_api_key: Kino.Input.password("OpenAI API Key (for LLM and TTS)")
-  ],
-  submit: "Save Configuration"
-)
+# API Keys Configuration using individual inputs
+livekit_url_input = Kino.Input.text("LiveKit Server URL", default: "ws://localhost:7880")
+livekit_api_key_input = Kino.Input.text("LiveKit API Key", default: "devkey")
+livekit_api_secret_input = Kino.Input.text("LiveKit API Secret", default: "devsecret")
+deepgram_api_key_input = Kino.Input.text("Deepgram API Key (for STT)", default: "YOUR_DEEPGRAM_API_KEY")
+openai_api_key_input = Kino.Input.text("OpenAI API Key (for LLM and TTS)", default: "YOUR_OPENAI_API_KEY")
+
+Kino.Layout.grid([
+  livekit_url_input,
+  livekit_api_key_input,
+  livekit_api_secret_input,
+  deepgram_api_key_input,
+  openai_api_key_input
+], columns: 1)
 ```
 
 ```elixir
-# Agent Configuration
-agent_config_form = Kino.Control.form(
-  [
-    room_name: Kino.Input.text("Room Name", default: "voice-agent-demo"),
-    agent_name: Kino.Input.text("Agent Name", default: "Kelly"),
-    agent_instructions: Kino.Input.textarea("Agent Instructions",
-      default: """
-      You are Kelly, a helpful and friendly AI assistant. You have a great sense of humor and love to help people.
-      Keep your responses concise and engaging. You can help with questions, have conversations, and provide assistance.
-      """),
-    openai_model: Kino.Input.select("OpenAI Model",
-      options: [{"GPT-4o Mini", "gpt-4o-mini"}, {"GPT-4o", "gpt-4o"}, {"GPT-3.5 Turbo", "gpt-3.5-turbo"}],
-      default: "gpt-4o-mini"),
-    openai_voice: Kino.Input.select("OpenAI Voice",
-      options: [{"Alloy", "alloy"}, {"Echo", "echo"}, {"Fable", "fable"}, {"Onyx", "onyx"}, {"Nova", "nova"}, {"Shimmer", "shimmer"}],
-      default: "alloy"),
-    deepgram_model: Kino.Input.select("Deepgram Model",
-      options: [{"Nova 2", "nova-2"}, {"Nova", "nova"}, {"Enhanced", "enhanced"}, {"Base", "base"}],
-      default: "nova-2")
-  ],
-  submit: "Configure Agent"
-)
+# Agent Configuration using individual inputs
+room_name_input = Kino.Input.text("Room Name", default: "voice-agent-demo")
+agent_name_input = Kino.Input.text("Agent Name", default: "Kelly")
+agent_instructions_input = Kino.Input.textarea("Agent Instructions",
+  default: """
+  You are Kelly, a helpful and friendly AI assistant. You have a great sense of humor and love to help people.
+  Keep your responses concise and engaging. You can help with questions, have conversations, and provide assistance.
+  """)
+openai_model_input = Kino.Input.select("OpenAI Model", [
+  {"gpt-4o-mini", "GPT-4o Mini"},
+  {"gpt-4o", "GPT-4o"},
+  {"gpt-3.5-turbo", "GPT-3.5 Turbo"}
+], default: "gpt-4o-mini")
+openai_voice_input = Kino.Input.select("OpenAI Voice", [
+  {"alloy", "Alloy"},
+  {"echo", "Echo"},
+  {"fable", "Fable"},
+  {"onyx", "Onyx"},
+  {"nova", "Nova"},
+  {"shimmer", "Shimmer"}
+], default: "alloy")
+deepgram_model_input = Kino.Input.select("Deepgram Model", [
+  {"nova-2", "Nova 2"},
+  {"nova", "Nova"},
+  {"enhanced", "Enhanced"},
+  {"base", "Base"}
+], default: "nova-2")
+
+Kino.Layout.grid([
+  room_name_input,
+  agent_name_input,
+  agent_instructions_input,
+  openai_model_input,
+  openai_voice_input,
+  deepgram_model_input
+], columns: 2)
 ```
 
 ## 🎤 Voice Agent Setup
@@ -65,11 +184,66 @@ agent_config_form = Kino.Control.form(
 Let's create and start the voice agent with your configuration:
 
 ```elixir
-# Wait for configuration
-api_config = Kino.Control.read(api_keys_form)
-agent_config = Kino.Control.read(agent_config_form)
+# Store input references globally for access across cells
+:persistent_term.put(:livekit_url_input, livekit_url_input)
+:persistent_term.put(:livekit_api_key_input, livekit_api_key_input)
+:persistent_term.put(:livekit_api_secret_input, livekit_api_secret_input)
+:persistent_term.put(:deepgram_api_key_input, deepgram_api_key_input)
+:persistent_term.put(:openai_api_key_input, openai_api_key_input)
+:persistent_term.put(:room_name_input, room_name_input)
+:persistent_term.put(:agent_name_input, agent_name_input)
+:persistent_term.put(:agent_instructions_input, agent_instructions_input)
+:persistent_term.put(:openai_model_input, openai_model_input)
+:persistent_term.put(:openai_voice_input, openai_voice_input)
+:persistent_term.put(:deepgram_model_input, deepgram_model_input)
 
-# Validate configuration
+Kino.Markdown.new("✅ **Configuration inputs are ready**")
+```
+
+```elixir
+# Get the input references and read current values
+livekit_url_input = :persistent_term.get(:livekit_url_input)
+livekit_api_key_input = :persistent_term.get(:livekit_api_key_input)
+livekit_api_secret_input = :persistent_term.get(:livekit_api_secret_input)
+deepgram_api_key_input = :persistent_term.get(:deepgram_api_key_input)
+openai_api_key_input = :persistent_term.get(:openai_api_key_input)
+room_name_input = :persistent_term.get(:room_name_input)
+agent_name_input = :persistent_term.get(:agent_name_input)
+agent_instructions_input = :persistent_term.get(:agent_instructions_input)
+openai_model_input = :persistent_term.get(:openai_model_input)
+openai_voice_input = :persistent_term.get(:openai_voice_input)
+deepgram_model_input = :persistent_term.get(:deepgram_model_input)
+
+# Read current input values using Kino.Input.read/1
+api_config = %{
+  livekit_url: Kino.Input.read(livekit_url_input),
+  livekit_api_key: Kino.Input.read(livekit_api_key_input),
+  livekit_api_secret: Kino.Input.read(livekit_api_secret_input),
+  deepgram_api_key: Kino.Input.read(deepgram_api_key_input),
+  openai_api_key: Kino.Input.read(openai_api_key_input)
+}
+
+agent_config = %{
+  room_name: Kino.Input.read(room_name_input),
+  agent_name: Kino.Input.read(agent_name_input),
+  agent_instructions: Kino.Input.read(agent_instructions_input),
+  openai_model: Kino.Input.read(openai_model_input),
+  openai_voice: Kino.Input.read(openai_voice_input),
+  deepgram_model: Kino.Input.read(deepgram_model_input)
+}
+
+# Display current values for debugging
+IO.puts("API Config: #{inspect(api_config)}")
+IO.puts("Agent Config: #{inspect(agent_config)}")
+
+Kino.Markdown.new("✅ **Configuration values retrieved**")
+```
+
+```elixir
+# Get form values from the previous cell
+# (These should now be available from the cell above)
+
+# Validate required API keys
 if api_config.livekit_api_key == "" or api_config.livekit_api_secret == "" do
   Kino.interrupt!(:error, "Please provide LiveKit API credentials")
 end
@@ -78,10 +252,6 @@ if api_config.deepgram_api_key == "" or api_config.openai_api_key == "" do
   Kino.interrupt!(:error, "Please provide Deepgram and OpenAI API keys")
 end
 
-Kino.nothing()
-```
-
-```elixir
 # Start the LiveKit application
 Application.ensure_all_started(:livekit)
 
@@ -100,9 +270,12 @@ voice_agent_config = %Livekit.Agents.VoiceAgent.Config{
     language: "en-US",
     smart_format: true,
     punctuate: true,
+    diarize: false,
     interim_results: true,
     endpointing: true,
-    vad_events: true
+    vad_events: true,
+    sample_rate: 48_000,
+    encoding: "linear16"
   }},
 
   # Configure LLM (Large Language Model) with OpenAI
@@ -120,7 +293,9 @@ voice_agent_config = %Livekit.Agents.VoiceAgent.Config{
     voice: String.to_atom(agent_config.openai_voice),
     model: :tts_1,
     response_format: :pcm,
-    speed: 1.0
+    speed: 1.0,
+    sample_rate: 48_000,
+    streaming: false
   }}
 }
 
@@ -185,8 +360,8 @@ update_status = fn ->
         <h4 style="color: #333; margin: 0 0 10px 0;">Statistics</h4>
         <p><strong>Participants:</strong> #{status.participants_count}</p>
         <p><strong>Audio Tracks:</strong> #{status.audio_tracks_count}</p>
-        <p><strong>Messages Processed:</strong> #{status.metrics.messages_processed}</p>
-        <p><strong>Audio Frames:</strong> #{status.metrics.audio_frames_processed}</p>
+        <p><strong>Messages Processed:</strong> #{status.metrics[:messages_processed] || 0}</p>
+        <p><strong>Audio Frames:</strong> #{status.metrics[:audio_frames_processed] || 0}</p>
       </div>
     </div>
 
@@ -215,6 +390,8 @@ update_status.()
 
 status_frame
 ```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
 
 ```elixir
 # Auto-refresh status every 5 seconds
@@ -302,7 +479,7 @@ controls_form = Kino.Control.form(
 )
 ```
 
-```elixir
+````elixir
 # Handle control actions
 control_action = Kino.Control.read(controls_form)
 
@@ -344,7 +521,7 @@ case control_action.action do
   _ ->
     Kino.Markdown.new("⚠️ **Please select an action and provide required inputs**")
 end
-```
+````
 
 ## 🧪 Test Audio Processing
 
@@ -455,7 +632,7 @@ cleanup_form = Kino.Control.form(
 )
 ```
 
-```elixir
+````elixir
 cleanup_action = Kino.Control.read(cleanup_form)
 
 case cleanup_action.action do
@@ -491,20 +668,22 @@ case cleanup_action.action do
   _ ->
     Kino.Markdown.new("⚠️ **Please select an action**")
 end
-```
+````
 
 ## 🎯 Summary and Next Steps
 
 This Livebook provides a complete interactive environment for testing LiveKit voice agents. Here's what you can do:
 
 ### ✅ **What's Working:**
-- **Voice Agent Creation** with STT, LLM, and TTS
-- **Room Connection** and participant management
-- **Real-time Monitoring** of agent status and metrics
-- **Browser Integration** for voice conversations
-- **Interactive Controls** for testing and management
+
+* **Voice Agent Creation** with STT, LLM, and TTS
+* **Room Connection** and participant management
+* **Real-time Monitoring** of agent status and metrics
+* **Browser Integration** for voice conversations
+* **Interactive Controls** for testing and management
 
 ### 🚀 **How to Use:**
+
 1. **Fill in your API keys** in the configuration forms above
 2. **Run all cells** to start the voice agent
 3. **Join the room** using the browser link provided
@@ -512,15 +691,17 @@ This Livebook provides a complete interactive environment for testing LiveKit vo
 5. **Monitor performance** using the real-time dashboards
 
 ### 💡 **Tips for Best Experience:**
-- Use a good microphone and speakers/headphones
-- Ensure stable internet connection
-- Monitor the metrics to see agent activity
-- Try different voices and models to find your preference
+
+* Use a good microphone and speakers/headphones
+* Ensure stable internet connection
+* Monitor the metrics to see agent activity
+* Try different voices and models to find your preference
 
 ### 🔧 **Customization Options:**
-- Change agent personality by modifying instructions
-- Experiment with different OpenAI voices
-- Adjust Deepgram STT settings for your language/accent
-- Configure different LLM models for varying response styles
+
+* Change agent personality by modifying instructions
+* Experiment with different OpenAI voices
+* Adjust Deepgram STT settings for your language/accent
+* Configure different LLM models for varying response styles
 
 **🎉 Your voice agent is now ready for conversation!**

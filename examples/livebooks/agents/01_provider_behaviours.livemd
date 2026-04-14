@@ -1,5 +1,7 @@
 # Provider Behaviours: Implementing Custom STT, TTS, LLM, and VAD
 
+## Section
+
 The LiveKit Elixir Agents framework is built around four behaviour contracts that define
 the interface every provider must implement. This tutorial walks through each contract and
 shows you how to build your own conforming provider modules.
@@ -26,8 +28,8 @@ alias Livekit.Agents.AudioFrame
 
 The `Livekit.Agents.STT` behaviour contract requires two callbacks:
 
-- `transcribe/2` — batch transcription: receives audio bytes, returns a `SpeechEvent`
-- `capabilities/0` — declares what optional features the provider supports
+* `transcribe/2` — batch transcription: receives audio bytes, returns a `SpeechEvent`
+* `capabilities/0` — declares what optional features the provider supports
 
 The `stream/1` and `validate_config/1` callbacks are optional.
 
@@ -214,9 +216,9 @@ The `Livekit.Agents.LLM` behaviour requires `chat/2` and `capabilities/0`. The o
 
 ### LLMChunk types
 
-- `:text` — a fragment of the response text
-- `:tool_call` — a function call the model wants to make
-- `:done` — signals end of stream
+* `:text` — a fragment of the response text
+* `:tool_call` — a function call the model wants to make
+* `:done` — signals end of stream
 
 ```elixir
 defmodule MyLLM do
@@ -310,9 +312,9 @@ and sends back `{:vad_event, %VADEvent{}}` messages.
 
 ### VADEvent types
 
-- `:speech_start` — speech just detected
-- `:inference` — mid-utterance probability reading
-- `:speech_end` — silence detected; the frames field contains the full utterance
+* `:speech_start` — speech just detected
+* `:inference` — mid-utterance probability reading
+* `:speech_end` — silence detected; the frames field contains the full utterance
 
 ```elixir
 defmodule MyVAD do
@@ -427,12 +429,12 @@ end)
 
 You now know how to:
 
-- Implement a batch-only STT provider with `use Livekit.Agents.STT`
-- Implement a streaming STT provider that sends `{:speech_event, event}` messages
-- Implement a TTS provider that returns raw audio bytes
-- Implement a streaming LLM provider that sends `{:llm_chunk, chunk}` messages
-- Implement a VAD provider that processes audio frames and emits `{:vad_event, event}` messages
-- Query provider capabilities at runtime using `capabilities/0` and `function_exported?/3`
+* Implement a batch-only STT provider with `use Livekit.Agents.STT`
+* Implement a streaming STT provider that sends `{:speech_event, event}` messages
+* Implement a TTS provider that returns raw audio bytes
+* Implement a streaming LLM provider that sends `{:llm_chunk, chunk}` messages
+* Implement a VAD provider that processes audio frames and emits `{:vad_event, event}` messages
+* Query provider capabilities at runtime using `capabilities/0` and `function_exported?/3`
 
 Any module implementing these contracts can be passed to `Pipeline.Config` as a
 `{module, config_map}` tuple and plugged into the full voice pipeline.
