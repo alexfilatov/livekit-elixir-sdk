@@ -173,6 +173,25 @@ defmodule Livekit.Agents.Pipeline do
   def get_metrics(pid), do: GenServer.call(pid, :get_metrics, 5_000)
 
   @doc """
+  Returns the current `ChatContext` held by the pipeline.
+
+  Used by `Livekit.Agents.AgentHandoff` to transfer conversation history to a
+  new pipeline.
+  """
+  @spec get_chat_context(pid()) :: ChatContext.t()
+  def get_chat_context(pid), do: GenServer.call(pid, :get_chat_context, 5_000)
+
+  @doc """
+  Replaces the pipeline's `ChatContext` with the given one.
+
+  Used by `Livekit.Agents.AgentHandoff` to pre-load conversation history into a
+  freshly started pipeline.
+  """
+  @spec set_chat_context(pid(), ChatContext.t()) :: :ok
+  def set_chat_context(pid, %ChatContext{} = ctx),
+    do: GenServer.call(pid, {:set_chat_context, ctx}, 5_000)
+
+  @doc """
   Stops the pipeline GenServer.
   """
   @spec stop(pid()) :: :ok
@@ -374,6 +393,16 @@ defmodule Livekit.Agents.Pipeline do
   @impl true
   def handle_call(:get_metrics, _from, %State{} = state) do
     {:reply, state.metrics, state}
+  end
+
+  @impl true
+  def handle_call(:get_chat_context, _from, %State{} = state) do
+    {:reply, state.chat_context, state}
+  end
+
+  @impl true
+  def handle_call({:set_chat_context, %ChatContext{} = ctx}, _from, %State{} = state) do
+    {:reply, :ok, %{state | chat_context: ctx}}
   end
 
   # ISSUE-04/16: Shut down active task and turn detector on termination

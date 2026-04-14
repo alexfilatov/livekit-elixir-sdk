@@ -70,4 +70,26 @@ defmodule Livekit.Agents.Events do
           }
     defstruct [:metric, :value, :metadata, :timestamp]
   end
+
+  defmodule AgentHandoff do
+    @moduledoc """
+    Emitted when one agent hands off conversation context to another agent.
+
+    ## Fields
+
+    - `:from_agent` — identifier or PID of the agent initiating the handoff.
+    - `:to_agent` — identifier or PID of the agent receiving the handoff.
+    - `:mode` — `:warm` (seamless) or `:cold` (brief pause between agents).
+    - `:context_size` — number of conversation items transferred.
+    - `:timestamp` — UTC datetime of the handoff event.
+    """
+    @type t :: %__MODULE__{
+            from_agent: term(),
+            to_agent: term(),
+            mode: :warm | :cold,
+            context_size: non_neg_integer(),
+            timestamp: DateTime.t()
+          }
+    defstruct [:from_agent, :to_agent, :mode, :context_size, :timestamp]
+  end
 end
