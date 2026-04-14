@@ -50,12 +50,12 @@
 
 ### OpenAI TTS Provider
 
-- [ ] **OTTS-01**: Real HTTP POST to OpenAI `/v1/audio/speech`
-- [ ] **OTTS-02**: Support all voices (alloy, echo, fable, onyx, nova, shimmer)
-- [ ] **OTTS-03**: Support audio formats (PCM, MP3, Opus, AAC, FLAC)
-- [ ] **OTTS-04**: Response caching with TTL and size limits
-- [ ] **OTTS-05**: Implements `Livekit.Agents.TTS` behaviour
-- [ ] **OTTS-06**: Mock mode for testing without API key
+- [x] **OTTS-01**: Real HTTP POST to OpenAI `/v1/audio/speech`
+- [x] **OTTS-02**: Support all voices (alloy, echo, fable, onyx, nova, shimmer)
+- [x] **OTTS-03**: Support audio formats (PCM, MP3, Opus, AAC, FLAC)
+- [x] **OTTS-04**: Response caching with TTL and size limits
+- [x] **OTTS-05**: Implements `Livekit.Agents.TTS` behaviour
+- [x] **OTTS-06**: Mock mode for testing without API key
 
 ### Voice Pipeline
 
@@ -156,12 +156,12 @@
 | OLLM-04 | Phase 5 | Complete |
 | OLLM-05 | Phase 5 | Complete |
 | OLLM-06 | Phase 5 | Complete |
-| OTTS-01 | Phase 6 | Pending |
-| OTTS-02 | Phase 6 | Pending |
-| OTTS-03 | Phase 6 | Pending |
-| OTTS-04 | Phase 6 | Pending |
-| OTTS-05 | Phase 6 | Pending |
-| OTTS-06 | Phase 6 | Pending |
+| OTTS-01 | Phase 6 | Complete |
+| OTTS-02 | Phase 6 | Complete |
+| OTTS-03 | Phase 6 | Complete |
+| OTTS-04 | Phase 6 | Complete |
+| OTTS-05 | Phase 6 | Complete |
+| OTTS-06 | Phase 6 | Complete |
 | TEST-03 | Phase 4, 5, 6 | Complete |
 | PIPE-01 | Phase 7 | Pending |
 | PIPE-02 | Phase 7 | Pending |

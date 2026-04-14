@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.1.4
 milestone_name: milestone
-status: verifying
-stopped_at: Completed 05-openai-llm/05-01-PLAN.md
-last_updated: "2026-04-14T11:15:19.767Z"
+status: executing
+stopped_at: Completed 06-openai-tts-01-PLAN.md
+last_updated: "2026-04-14T11:34:00.631Z"
 last_activity: 2026-04-14
 progress:
   total_phases: 9
-  completed_phases: 4
-  total_plans: 12
-  completed_plans: 10
-  percent: 83
+  completed_phases: 5
+  total_plans: 14
+  completed_plans: 13
+  percent: 93
 ---
 
 # Project State
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-14)
 
 **Core value:** A developer can build and deploy a working voice AI agent using only Elixir — connecting to a LiveKit room, transcribing speech, generating responses via LLM, and speaking back — with real provider integrations, not mocks.
-**Current focus:** Phase 04 — deepgram-stt
+**Current focus:** Phase 06 — openai-tts
 
 ## Current Position
 
-Phase: 04 (deepgram-stt) — EXECUTING
-Plan: 3 of 3
-Status: Phase complete — ready for verification
+Phase: 06 (openai-tts) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
 Last activity: 2026-04-14
 
 Progress: [░░░░░░░░░░] 0%
@@ -63,6 +63,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 04-deepgram-stt P02 | 35 | 2 tasks | 2 files |
 | Phase 04-deepgram-stt P03 | 208 | 2 tasks | 5 files |
 | Phase 05-openai-llm P01 | 397 | 1 tasks | 9 files |
+| Phase 06-openai-tts P01 | 20 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -96,6 +97,7 @@ Recent decisions affecting current work:
 - [Phase 05-openai-llm]: SSE streaming via raw body split on newlines — no true chunked streaming without custom adapter
 - [Phase 05-openai-llm]: Token truncation uses item count (max_tokens as upper bound) rather than per-token counting
 - [Phase 05-openai-llm]: build_client/1 omits Tesla.Middleware.Logger to prevent Bearer token leakage in logs
+- [Phase 06-openai-tts]: Cache opt-in via pid kwarg avoids global supervision; Tesla.Middleware.JSON restricted to application/json decode to pass raw audio bytes; no Logger middleware to prevent Bearer token disclosure
 
 ### Pending Todos
 
@@ -107,6 +109,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-14T11:15:19.764Z
-Stopped at: Completed 05-openai-llm/05-01-PLAN.md
+Last session: 2026-04-14T11:34:00.628Z
+Stopped at: Completed 06-openai-tts-01-PLAN.md
 Resume file: None
