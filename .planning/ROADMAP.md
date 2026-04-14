@@ -142,7 +142,10 @@ Plans:
   3. All state transitions emit typed event structs that consumers can pattern-match on
   4. :telemetry measurements for TTFT, end-to-end latency, and token counts are emitted and capturable in tests
   5. A process can subscribe via Registry and receive all conversation events without polling
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 08-01-PLAN.md — Events structs + UserStateMachine + AgentStateMachine GenServers + EventBus (Registry pub/sub + :telemetry bridge)
+- [ ] 08-02-PLAN.md — Full ExUnit test suite for all EVNT-0x requirements and TEST-05; 100% coverage gate
 
 ### Phase 9: Worker Infrastructure
 **Goal**: WebSocket worker protocol, OTP supervision tree, full job lifecycle, graceful drain, and load reporting
@@ -171,5 +174,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 | 5. OpenAI LLM | 2/2 | Complete   | 2026-04-14 |
 | 6. OpenAI TTS | 2/2 | Complete   | 2026-04-14 |
 | 7. Voice Pipeline | 3/3 | Complete   | 2026-04-14 |
-| 8. State & Events | 0/? | Not started | - |
+| 8. State & Events | 0/2 | Not started | - |
 | 9. Worker Infrastructure | 0/? | Not started | - |
