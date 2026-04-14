@@ -1,28 +1,9 @@
 mod atoms;
 mod resources;
+mod room;
 pub mod runtime;
 
 use rustler::{Env, Term};
-
-// Stub NIF declarations — implementations added in Plans 02 and 03
-pub mod room {
-    use rustler::{LocalPid, ResourceArc};
-    use crate::resources::RoomResource;
-
-    #[rustler::nif(schedule = "DirtyIo")]
-    pub fn room_connect(
-        _url: String,
-        _token: String,
-        _listener_pid: LocalPid,
-    ) -> Result<ResourceArc<RoomResource>, rustler::Error> {
-        Err(rustler::Error::RaiseAtom("not_implemented"))
-    }
-
-    #[rustler::nif(schedule = "DirtyIo")]
-    pub fn room_disconnect(_room: ResourceArc<RoomResource>) -> rustler::Atom {
-        crate::atoms::not_loaded()
-    }
-}
 
 pub mod audio {
     use rustler::{LocalPid, ResourceArc};
@@ -54,13 +35,4 @@ fn load(env: Env, _: Term) -> bool {
         && env.register::<resources::AudioTrackResource>().is_ok()
 }
 
-rustler::init!(
-    "Elixir.Livekit.WebRTC.Native",
-    [
-        room::room_connect,
-        room::room_disconnect,
-        audio::audio_subscribe,
-        audio::audio_publish_frame,
-    ],
-    load = load
-);
+rustler::init!("Elixir.Livekit.WebRTC.Native", load = load);
