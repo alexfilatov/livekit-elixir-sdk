@@ -61,6 +61,7 @@ pub fn audio_subscribe(
     Ok(ResourceArc::new(AudioTrackResource {
         stream_task: stream_task.abort_handle(),
         track_sid,
+        listener_pid: subscriber_pid,
     }))
 }
 
