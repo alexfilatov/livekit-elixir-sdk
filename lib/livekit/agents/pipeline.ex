@@ -1,331 +1,369 @@
 defmodule Livekit.Agents.Pipeline do
   @moduledoc """
-  Voice processing pipeline that orchestrates STT, LLM, and TTS components.
+  GenServer that orchestrates the full STT -> LLM -> TTS voice pipeline.
 
-  The pipeline handles the flow of audio and text data through various
-  processing stages to create a complete voice AI experience.
+  `Pipeline` accepts raw audio frames via `push_frame/2` (non-blocking cast),
+  classifies each frame with `EnergyVAD`, forwards it to `TurnDetector`, and
+  reacts to `{:turn_end, frames}` events by running the full processing chain
+  asynchronously via `Task.async/1` so the GenServer loop is never blocked.
+
+  ## Processing Chain
+
+      push_frame/2  ->  EnergyVAD.classify/2  ->  TurnDetector.push_frame/2
+                                                           |
+                                         {:turn_end, frames} (from TurnDetector)
+                                                           |
+                                            Task.async: STT -> LLM -> TTS
+                                                           |
+                                         {:pipeline_audio, AudioFrame.t()} sent to subscriber
+
+  ## Interruption
+
+  If a new speech frame arrives while a `Task` is running (status `:processing`
+  or `:speaking`), the active task is shut down immediately and the
+  `TurnDetector` is reset, preventing stale `{:turn_end, _}` messages.
+
+  ## Provider Injection
+
+  Providers are configured as `{module, config_map}` tuples. Any module that
+  implements the `Livekit.Agents.STT`, `Livekit.Agents.LLM`, or
+  `Livekit.Agents.TTS` behaviour can be swapped in without changes to this
+  module.
+
+  ## Telemetry
+
+  Three `:telemetry` events are emitted during each successful turn:
+
+  - `[:livekit, :agents, :pipeline, :stt_complete]`
+  - `[:livekit, :agents, :pipeline, :llm_first_token]`
+  - `[:livekit, :agents, :pipeline, :tts_start]`
+
+  ## Usage
+
+      config = %Livekit.Agents.Pipeline.Config{
+        stt: {MySTT, %{api_key: "..."}},
+        llm: {MyLLM, %{api_key: "..."}},
+        tts: {MyTTS, %{api_key: "..."}}
+      }
+      {:ok, pid} = Livekit.Agents.Pipeline.start_link(config)
+      Livekit.Agents.Pipeline.push_frame(pid, audio_frame)
   """
 
+  use GenServer
   require Logger
-  alias Livekit.Agents.AudioFrame
 
-  defmodule Node do
+  alias Livekit.Agents.{AudioFrame, ChatContext}
+  alias Livekit.Agents.Pipeline.{EnergyVAD, TurnDetector}
+
+  # ---------------------------------------------------------------------------
+  # Config struct
+  # ---------------------------------------------------------------------------
+
+  defmodule Config do
     @moduledoc """
-    Represents a processing node in the pipeline.
+    Configuration for `Livekit.Agents.Pipeline`.
+
+    ## Fields
+
+    - `:stt` — `{module, config_map}` tuple for the STT provider (required).
+    - `:llm` — `{module, config_map}` tuple for the LLM provider (required).
+    - `:tts` — `{module, config_map}` tuple for the TTS provider (required).
+    - `:subscriber` — PID that receives `{:pipeline_audio, AudioFrame.t()}` output.
+      Defaults to `nil` (audio is discarded).
+    - `:vad_threshold` — RMS amplitude threshold for silence detection. Defaults to `0.01`.
+    - `:silence_ms` — Milliseconds of silence after which a turn ends. Defaults to `500`.
+    - `:stt_opts` — Extra keyword opts forwarded to the STT provider's `transcribe/2`.
+    - `:llm_opts` — Extra keyword opts forwarded to the LLM provider's `chat/2`.
+    - `:tts_opts` — Extra keyword opts forwarded to the TTS provider's `synthesize/2`.
     """
 
-    @type node_type :: :stt | :llm | :tts | :vad
+    @type provider :: {module(), map()}
 
     @type t :: %__MODULE__{
-      type: node_type(),
-      module: module(),
-      config: map(),
-      state: term(),
-      pid: pid() | nil
-    }
-
-    defstruct [:type, :module, :config, :state, :pid]
-  end
-
-  @type t :: %__MODULE__{
-    nodes: list(Node.t()),
-    state: :idle | :processing | :error,
-    buffer: list(),
-    metrics: map()
-  }
-
-  defstruct [
-    nodes: [],
-    state: :idle,
-    buffer: [],
-    metrics: %{
-      total_processed: 0,
-      processing_time_ms: 0,
-      errors: 0
-    }
-  ]
-
-  @doc """
-  Creates a new empty pipeline.
-  """
-  @spec new() :: t()
-  def new do
-    %__MODULE__{}
-  end
-
-  @doc """
-  Adds an STT (Speech-to-Text) node to the pipeline.
-  """
-  @spec add_stt_node(t(), module(), map()) :: t()
-  def add_stt_node(pipeline, stt_module, config) do
-    Logger.debug("Adding STT node: #{inspect(stt_module)}")
-
-    case initialize_node(:stt, stt_module, config) do
-      {:ok, node} ->
-        %{pipeline | nodes: [node | pipeline.nodes]}
-
-      {:error, reason} ->
-        Logger.error("Failed to initialize STT node: #{inspect(reason)}")
-        pipeline
-    end
-  end
-
-  @doc """
-  Adds an LLM (Large Language Model) node to the pipeline.
-  """
-  @spec add_llm_node(t(), module(), map()) :: t()
-  def add_llm_node(pipeline, llm_module, config) do
-    Logger.debug("Adding LLM node: #{inspect(llm_module)}")
-
-    case initialize_node(:llm, llm_module, config) do
-      {:ok, node} ->
-        %{pipeline | nodes: [node | pipeline.nodes]}
-
-      {:error, reason} ->
-        Logger.error("Failed to initialize LLM node: #{inspect(reason)}")
-        pipeline
-    end
-  end
-
-  @doc """
-  Adds a TTS (Text-to-Speech) node to the pipeline.
-  """
-  @spec add_tts_node(t(), module(), map()) :: t()
-  def add_tts_node(pipeline, tts_module, config) do
-    Logger.debug("Adding TTS node: #{inspect(tts_module)}")
-
-    case initialize_node(:tts, tts_module, config) do
-      {:ok, node} ->
-        %{pipeline | nodes: [node | pipeline.nodes]}
-
-      {:error, reason} ->
-        Logger.error("Failed to initialize TTS node: #{inspect(reason)}")
-        pipeline
-    end
-  end
-
-  @doc """
-  Processes audio data through the pipeline.
-  """
-  @spec process_audio(t(), AudioFrame.t()) :: {:ok, term()} | {:error, term()}
-  def process_audio(pipeline, audio_frame) do
-    start_time = System.monotonic_time(:millisecond)
-
-    try do
-      case find_node_by_type(pipeline, :stt) do
-        nil ->
-          {:error, :no_stt_node}
-
-        stt_node ->
-          case process_through_stt(stt_node, audio_frame) do
-            {:ok, {:text, text}} ->
-              # Continue through LLM if available
-              process_text_through_pipeline(pipeline, text, start_time)
-
-            {:ok, {:partial, _text}} ->
-              # Partial transcription, continue collecting
-              {:ok, :processing}
-
-            {:ok, :silence} ->
-              # No speech detected
-              {:ok, :silence}
-
-            {:error, reason} ->
-              {:error, reason}
-          end
-      end
-    rescue
-      error ->
-        Logger.error("Pipeline processing error: #{inspect(error)}")
-        {:error, error}
-    end
-  end
-
-  @doc """
-  Processes text through the LLM and TTS stages of the pipeline.
-  """
-  @spec process_text(t(), String.t()) :: {:ok, term()} | {:error, term()}
-  def process_text(pipeline, text) do
-    start_time = System.monotonic_time(:millisecond)
-    process_text_through_pipeline(pipeline, text, start_time)
-  end
-
-  @doc """
-  Cleans up pipeline resources.
-  """
-  @spec cleanup(t()) :: :ok
-  def cleanup(pipeline) do
-    Logger.debug("Cleaning up pipeline with #{length(pipeline.nodes)} nodes")
-
-    Enum.each(pipeline.nodes, fn node ->
-      if node.pid do
-        GenServer.stop(node.pid, :normal, 5000)
-      end
-    end)
-
-    :ok
-  end
-
-  @doc """
-  Gets pipeline statistics and metrics.
-  """
-  @spec get_metrics(t()) :: map()
-  def get_metrics(pipeline) do
-    node_status = Enum.map(pipeline.nodes, fn node ->
-      %{
-        type: node.type,
-        module: node.module,
-        status: if(node.pid && Process.alive?(node.pid), do: :alive, else: :dead)
-      }
-    end)
-
-    Map.merge(pipeline.metrics, %{
-      state: pipeline.state,
-      nodes: node_status,
-      buffer_size: length(pipeline.buffer)
-    })
-  end
-
-  # Private Functions
-
-  defp initialize_node(type, module, config) do
-    try do
-      case apply(module, :start_link, [config]) do
-        {:ok, pid} ->
-          node = %Node{
-            type: type,
-            module: module,
-            config: config,
-            pid: pid,
-            state: :ready
+            stt: provider(),
+            llm: provider(),
+            tts: provider(),
+            subscriber: pid() | nil,
+            vad_threshold: float(),
+            silence_ms: pos_integer(),
+            stt_opts: keyword(),
+            llm_opts: keyword(),
+            tts_opts: keyword()
           }
-          {:ok, node}
+
+    defstruct [
+      :stt,
+      :llm,
+      :tts,
+      subscriber: nil,
+      vad_threshold: 0.01,
+      silence_ms: 500,
+      stt_opts: [],
+      llm_opts: [],
+      tts_opts: []
+    ]
+  end
+
+  # ---------------------------------------------------------------------------
+  # State struct
+  # ---------------------------------------------------------------------------
+
+  defmodule State do
+    @moduledoc false
+
+    @type pipeline_status :: :idle | :processing | :speaking
+
+    @type t :: %__MODULE__{
+            config: Config.t(),
+            vad_config: term(),
+            turn_detector: pid(),
+            chat_context: ChatContext.t(),
+            active_task: Task.t() | nil,
+            status: pipeline_status(),
+            metrics: map()
+          }
+
+    defstruct [
+      :config,
+      :vad_config,
+      :turn_detector,
+      :chat_context,
+      active_task: nil,
+      status: :idle,
+      metrics: %{
+        turns_processed: 0,
+        audio_frames_processed: 0,
+        errors: 0,
+        last_activity: nil
+      }
+    ]
+  end
+
+  # ---------------------------------------------------------------------------
+  # Client API
+  # ---------------------------------------------------------------------------
+
+  @doc """
+  Starts a `Pipeline` GenServer linked to the calling process.
+
+  `config` must be a `%Pipeline.Config{}` struct with `:stt`, `:llm`, and
+  `:tts` populated.
+
+  Returns `{:ok, pid}` on success, or `{:error, :missing_providers}` if any
+  provider is absent.
+  """
+  @spec start_link(Config.t()) :: GenServer.on_start()
+  def start_link(%Config{} = config), do: GenServer.start_link(__MODULE__, config)
+
+  @doc """
+  Pushes an audio frame into the pipeline (non-blocking cast).
+
+  The frame is classified by `EnergyVAD` and forwarded to `TurnDetector`.
+  If the frame is classified as `:speech` and a processing task is active, the
+  task is cancelled (interruption) before the new frame is processed.
+  """
+  @spec push_frame(pid(), AudioFrame.t()) :: :ok
+  def push_frame(pid, %AudioFrame{} = frame), do: GenServer.cast(pid, {:push_frame, frame})
+
+  @doc """
+  Returns the current pipeline metrics map.
+  """
+  @spec get_metrics(pid()) :: map()
+  def get_metrics(pid), do: GenServer.call(pid, :get_metrics, 5_000)
+
+  @doc """
+  Stops the pipeline GenServer.
+  """
+  @spec stop(pid()) :: :ok
+  def stop(pid), do: GenServer.stop(pid, :normal, 5_000)
+
+  # ---------------------------------------------------------------------------
+  # GenServer callbacks
+  # ---------------------------------------------------------------------------
+
+  @impl true
+  def init(%Config{stt: stt, llm: llm, tts: tts})
+      when stt == nil or llm == nil or tts == nil do
+    Logger.error("Pipeline init failed: stt, llm, and tts providers are all required")
+    {:stop, :missing_providers}
+  end
+
+  @impl true
+  def init(%Config{} = config) do
+    vad_config = EnergyVAD.new(%{threshold: config.vad_threshold})
+
+    case TurnDetector.start_link(silence_ms: config.silence_ms, subscriber: self()) do
+      {:ok, turn_detector_pid} ->
+        state = %State{
+          config: config,
+          vad_config: vad_config,
+          turn_detector: turn_detector_pid,
+          chat_context: ChatContext.new()
+        }
+
+        {:ok, state}
+
+      {:error, reason} ->
+        Logger.error("Pipeline failed to start TurnDetector: #{inspect(reason)}")
+        {:stop, reason}
+    end
+  end
+
+  @impl true
+  def handle_cast({:push_frame, %AudioFrame{} = frame}, %State{} = state) do
+    classification = EnergyVAD.classify(frame, state.vad_config)
+    TurnDetector.push_frame(state.turn_detector, {classification, frame})
+
+    state =
+      if classification == :speech and state.active_task != nil do
+        Logger.debug("Pipeline: interruption detected — cancelling active task")
+        Task.shutdown(state.active_task, :brutal_kill)
+        TurnDetector.reset(state.turn_detector)
+        %{state | active_task: nil, status: :idle}
+      else
+        state
+      end
+
+    updated_metrics =
+      state.metrics
+      |> Map.update!(:audio_frames_processed, &(&1 + 1))
+      |> Map.put(:last_activity, DateTime.utc_now())
+
+    {:noreply, %{state | metrics: updated_metrics}}
+  end
+
+  @impl true
+  def handle_info({:turn_start, _timestamp_us}, %State{} = state) do
+    updated_metrics = Map.put(state.metrics, :last_activity, DateTime.utc_now())
+    {:noreply, %{state | metrics: updated_metrics}}
+  end
+
+  @impl true
+  def handle_info({:turn_end, frames}, %State{} = state) do
+    config = state.config
+    chat_context = state.chat_context
+
+    task =
+      Task.async(fn ->
+        with {:ok, speech_event} <- do_stt(frames, config, config.stt_opts),
+             :ok <- emit_telemetry(:stt_complete, %{text: speech_event.text}),
+             {:ok, llm_response} <-
+               do_llm(
+                 ChatContext.add(
+                   chat_context,
+                   ChatContext.new_message(:user, [speech_event.text])
+                 ),
+                 config,
+                 config.llm_opts
+               ),
+             :ok <- emit_telemetry(:llm_first_token, %{role: llm_response.role}),
+             {:ok, audio_binary} <- do_tts(llm_response.content, config, config.tts_opts),
+             :ok <- emit_telemetry(:tts_start, %{bytes: byte_size(audio_binary)}) do
+          {:ok, speech_event.text, llm_response, audio_binary}
+        end
+      end)
+
+    {:noreply, %{state | active_task: task, status: :processing}}
+  end
+
+  @impl true
+  def handle_info({ref, result}, %State{active_task: %Task{ref: task_ref}} = state)
+      when ref == task_ref do
+    Process.demonitor(ref, [:flush])
+
+    state =
+      case result do
+        {:ok, user_text, llm_response, audio_binary} ->
+          Logger.debug(
+            "Pipeline turn complete — user: #{inspect(user_text)}, assistant: #{inspect(llm_response.content)}"
+          )
+
+          updated_ctx =
+            ChatContext.add(
+              state.chat_context,
+              ChatContext.new_message(:assistant, [llm_response.content])
+            )
+
+          if state.config.subscriber do
+            audio_frame = %AudioFrame{data: audio_binary}
+            send(state.config.subscriber, {:pipeline_audio, audio_frame})
+          end
+
+          updated_metrics = Map.update!(state.metrics, :turns_processed, &(&1 + 1))
+
+          %{
+            state
+            | chat_context: updated_ctx,
+              metrics: updated_metrics,
+              active_task: nil,
+              status: :idle
+          }
 
         {:error, reason} ->
-          {:error, reason}
+          Logger.error("Pipeline processing error: #{inspect(reason)}")
+          updated_metrics = Map.update!(state.metrics, :errors, &(&1 + 1))
+          %{state | metrics: updated_metrics, active_task: nil, status: :idle}
       end
-    rescue
-      error ->
-        Logger.error("Node initialization error: #{inspect(error)}")
-        # For now, create a mock node to allow development to continue
-        node = %Node{
-          type: type,
-          module: module,
-          config: config,
-          pid: nil,
-          state: :mock
-        }
-        {:ok, node}
-    end
+
+    {:noreply, state}
   end
 
-  defp find_node_by_type(pipeline, type) do
-    Enum.find(pipeline.nodes, fn node -> node.type == type end)
+  @impl true
+  def handle_info({ref, _result}, %State{} = state) when is_reference(ref) do
+    # Stale task result — task was already cancelled (interruption). Flush monitor.
+    Process.demonitor(ref, [:flush])
+    {:noreply, state}
   end
 
-  defp process_through_stt(stt_node, audio_frame) do
-    if stt_node.pid && Process.alive?(stt_node.pid) do
-      try do
-        GenServer.call(stt_node.pid, {:process_audio, audio_frame}, 5000)
-      catch
-        :exit, {:timeout, _} ->
-          {:error, :stt_timeout}
-        :exit, reason ->
-          {:error, {:stt_process_error, reason}}
-      end
-    else
-      # Mock STT for development
-      mock_stt_process(audio_frame)
-    end
+  @impl true
+  def handle_info({:DOWN, _ref, :process, _pid, :normal}, %State{} = state) do
+    # Normal task exit (already handled via the ref message above).
+    {:noreply, state}
   end
 
-  defp process_text_through_pipeline(pipeline, text, start_time) do
-    with {:ok, llm_response} <- process_through_llm(pipeline, text),
-         {:ok, audio_data} <- process_through_tts(pipeline, llm_response) do
-
-      end_time = System.monotonic_time(:millisecond)
-      processing_time = end_time - start_time
-
-      Logger.debug("Pipeline processing completed in #{processing_time}ms")
-
-      {:ok, {:complete, %{
-        original_text: text,
-        llm_response: llm_response,
-        audio_data: audio_data,
-        processing_time_ms: processing_time
-      }}}
-    else
-      {:error, reason} ->
-        {:error, reason}
-    end
+  @impl true
+  def handle_info({:DOWN, _ref, :process, _pid, reason}, %State{} = state) do
+    Logger.warning("Pipeline: active task exited abnormally — #{inspect(reason)}")
+    updated_metrics = Map.update!(state.metrics, :errors, &(&1 + 1))
+    {:noreply, %{state | metrics: updated_metrics, active_task: nil, status: :idle}}
   end
 
-  defp process_through_llm(pipeline, text) do
-    case find_node_by_type(pipeline, :llm) do
-      nil ->
-        Logger.warning("No LLM node available, skipping LLM processing")
-        {:ok, text}
-
-      llm_node ->
-        if llm_node.pid && Process.alive?(llm_node.pid) do
-          try do
-            GenServer.call(llm_node.pid, {:process_text, text}, 10000)
-          catch
-            :exit, {:timeout, _} ->
-              {:error, :llm_timeout}
-            :exit, reason ->
-              {:error, {:llm_process_error, reason}}
-          end
-        else
-          # Mock LLM for development
-          mock_llm_process(text)
-        end
-    end
+  @impl true
+  def handle_call(:get_metrics, _from, %State{} = state) do
+    {:reply, state.metrics, state}
   end
 
-  defp process_through_tts(pipeline, text) do
-    case find_node_by_type(pipeline, :tts) do
-      nil ->
-        Logger.warning("No TTS node available, skipping TTS processing")
-        {:ok, nil}
+  # ---------------------------------------------------------------------------
+  # Private Helpers
+  # ---------------------------------------------------------------------------
 
-      tts_node ->
-        if tts_node.pid && Process.alive?(tts_node.pid) do
-          try do
-            GenServer.call(tts_node.pid, {:synthesize_text, text}, 10000)
-          catch
-            :exit, {:timeout, _} ->
-              {:error, :tts_timeout}
-            :exit, reason ->
-              {:error, {:tts_process_error, reason}}
-          end
-        else
-          # Mock TTS for development
-          mock_tts_process(text)
-        end
-    end
+  @spec do_stt([AudioFrame.t()], Config.t(), keyword()) ::
+          {:ok, Livekit.Agents.STT.SpeechEvent.t()} | {:error, term()}
+  defp do_stt(frames, config, opts) do
+    {stt_module, _stt_config} = config.stt
+    audio_binary = frames |> Enum.map(& &1.data) |> IO.iodata_to_binary()
+    stt_module.transcribe(audio_binary, opts)
   end
 
-  # Mock implementations for development
-  defp mock_stt_process(audio_frame) do
-    # Simulate STT processing
-    if byte_size(audio_frame.data) > 1000 do
-      {:ok, {:text, "Hello, this is a mock transcription of the audio input."}}
-    else
-      {:ok, :silence}
-    end
+  @spec do_llm(ChatContext.t(), Config.t(), keyword()) ::
+          {:ok, map()} | {:error, term()}
+  defp do_llm(chat_context, config, opts) do
+    {llm_module, _llm_config} = config.llm
+    llm_module.chat(chat_context, opts)
   end
 
-  defp mock_llm_process(text) do
-    # Simulate LLM processing
-    response = "I understand you said: '#{text}'. How can I help you further?"
-    {:ok, response}
+  @spec do_tts(String.t(), Config.t(), keyword()) ::
+          {:ok, binary()} | {:error, term()}
+  defp do_tts(text, config, opts) do
+    {tts_module, _tts_config} = config.tts
+    tts_module.synthesize(text, opts)
   end
 
-  defp mock_tts_process(text) do
-    # Simulate TTS processing - return mock audio data
-    audio_size = String.length(text) * 100  # Rough estimation
-    mock_audio = :crypto.strong_rand_bytes(audio_size)
-    {:ok, mock_audio}
+  @spec emit_telemetry(atom(), map()) :: :ok
+  defp emit_telemetry(event, measurements) do
+    event_name = [:livekit, :agents, :pipeline, event]
+    metadata = %{monotonic_time: System.monotonic_time()}
+    :telemetry.execute(event_name, measurements, metadata)
+    :ok
   end
 end
