@@ -59,8 +59,8 @@ defmodule Livekit.MixProject do
       # Test dependencies
       {:bypass, "~> 2.1", only: :test},
       {:mock, "~> 0.3.0", only: :test},
-      # NIF dependencies
-      {:rustler, "~> 0.37", runtime: false}
+      # NIF dependencies (optional — only needed when compiling the Rust WebRTC client)
+      {:rustler, "~> 0.37", runtime: false, optional: true}
     ]
   end
 
