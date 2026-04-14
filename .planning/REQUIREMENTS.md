@@ -33,8 +33,8 @@
 ### Deepgram STT Provider
 
 - [x] **DSTT-01**: Real HTTP POST to Deepgram `/v1/listen` for batch transcription
-- [ ] **DSTT-02**: Real WebSocket connection to Deepgram for streaming transcription
-- [ ] **DSTT-03**: Support interim results and final transcripts in streaming mode
+- [x] **DSTT-02**: Real WebSocket connection to Deepgram for streaming transcription
+- [x] **DSTT-03**: Support interim results and final transcripts in streaming mode
 - [x] **DSTT-04**: Audio buffering with configurable minimum duration before send
 - [x] **DSTT-05**: Implements `Livekit.Agents.STT` behaviour
 - [x] **DSTT-06**: Mock mode for testing without API key
@@ -145,8 +145,8 @@
 | TOOL-04 | Phase 3 | Complete |
 | TOOL-05 | Phase 3 | Complete |
 | DSTT-01 | Phase 4 | Complete |
-| DSTT-02 | Phase 4 | Pending |
-| DSTT-03 | Phase 4 | Pending |
+| DSTT-02 | Phase 4 | Complete |
+| DSTT-03 | Phase 4 | Complete |
 | DSTT-04 | Phase 4 | Complete |
 | DSTT-05 | Phase 4 | Complete |
 | DSTT-06 | Phase 4 | Complete |

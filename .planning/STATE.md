@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.1.4
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-deepgram-stt-01-PLAN.md
-last_updated: "2026-04-14T10:48:14.395Z"
+stopped_at: Completed 04-deepgram-stt-02-PLAN.md
+last_updated: "2026-04-14T10:54:56.563Z"
 last_activity: 2026-04-14
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 10
-  completed_plans: 8
-  percent: 80
+  completed_plans: 9
+  percent: 90
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-14)
 ## Current Position
 
 Phase: 04 (deepgram-stt) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-04-14
 
@@ -60,6 +60,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 03-tool-system P01 | 2 | 2 tasks | 1 files |
 | Phase 03-tool-system P02 | 9 | 2 tasks | 1 files |
 | Phase 04-deepgram-stt P01 | 3 | 2 tasks | 3 files |
+| Phase 04-deepgram-stt P02 | 35 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -87,6 +88,8 @@ Recent decisions affecting current work:
 - [Phase 03-tool-system]: Process dictionary queue pattern for MockLLM — per-test isolation with async: true, no shared state
 - [Phase 03-tool-system]: MockLLMPreAppend module covers provider pre-append code path in maybe_add_response/2, achieving 100% line coverage
 - [Phase 04-deepgram-stt]: Deepgram: pure functional module (no GenServer); Tesla client built inline per-call; mock on config.mock or nil api_key; AudioBuffer assumes 16-bit mono PCM
+- [Phase 04-deepgram-stt]: Mock streaming mode implemented as live GenServer with :mock_done cast, ensuring stream/1 always returns {:ok, pid}
+- [Phase 04-deepgram-stt]: DeepgramStream uses async :connect init pattern to avoid blocking GenServer start
 
 ### Pending Todos
 
@@ -98,6 +101,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-14T10:48:14.392Z
-Stopped at: Completed 04-deepgram-stt-01-PLAN.md
+Last session: 2026-04-14T10:54:56.560Z
+Stopped at: Completed 04-deepgram-stt-02-PLAN.md
 Resume file: None
