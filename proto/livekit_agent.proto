@@ -1,0 +1,141 @@
+syntax = "proto3";
+
+package livekit;
+
+import "livekit_models.proto";
+
+// from Worker to Server
+message WorkerMessage {
+  oneof message {
+    RegisterWorkerRequest register = 1;
+    AvailabilityResponse availability = 2;
+    UpdateWorkerStatus update_worker = 3;
+    UpdateJobStatus update_job = 4;
+    WorkerPing ping = 5;
+    SimulateJobRequest simulate_job = 6;
+    MigrateJobRequest migrate_job = 7;
+  }
+}
+
+// from Server to Worker
+message ServerMessage {
+  oneof message {
+    RegisterWorkerResponse register = 1;
+    AvailabilityRequest availability = 2;
+    JobAssignment assignment = 3;
+    WorkerPong pong = 4;
+    JobTermination termination = 5;
+  }
+}
+
+enum JobType {
+  JT_ROOM = 0;
+  JT_PUBLISHER = 1;
+  JT_PARTICIPANT = 2;
+}
+
+enum WorkerStatus {
+  WS_AVAILABLE = 0;
+  WS_FULL = 1;
+}
+
+enum JobStatus {
+  JS_PENDING = 0;
+  JS_RUNNING = 1;
+  JS_SUCCESS = 2;
+  JS_FAILED = 3;
+}
+
+message Job {
+  string id = 1;
+  string dispatch_id = 9;
+  JobType type = 2;
+  Room room = 3;
+  optional ParticipantInfo participant = 4;
+  string metadata = 6;
+  string agent_name = 7;
+  JobState state = 8;
+  bool enable_recording = 10;
+}
+
+message JobState {
+  JobStatus status = 1;
+  string error = 2;
+  int64 started_at = 3;
+  int64 ended_at = 4;
+  int64 updated_at = 5;
+  string participant_identity = 6;
+  string worker_id = 7;
+  string agent_id = 8;
+}
+
+message SimulateJobRequest {
+  JobType type = 1;
+  Room room = 2;
+  ParticipantInfo participant = 3;
+}
+
+message WorkerPing {
+  int64 timestamp = 1;
+}
+
+message WorkerPong {
+  int64 last_timestamp = 1;
+  int64 timestamp = 2;
+}
+
+message RegisterWorkerRequest {
+  JobType type = 1;
+  string agent_name = 8;
+  string version = 3;
+  uint32 ping_interval = 5;
+  optional string namespace = 6;
+  ParticipantPermission allowed_permissions = 7;
+}
+
+message RegisterWorkerResponse {
+  string worker_id = 1;
+  ServerInfo server_info = 3;
+}
+
+message MigrateJobRequest {
+  repeated string job_ids = 2;
+}
+
+message AvailabilityRequest {
+  Job job = 1;
+  bool resuming = 2;
+}
+
+message AvailabilityResponse {
+  string job_id = 1;
+  bool available = 2;
+  bool supports_resume = 3;
+  bool terminate = 8;
+  string participant_name = 4;
+  string participant_identity = 5;
+  string participant_metadata = 6;
+  map<string, string> participant_attributes = 7;
+}
+
+message UpdateJobStatus {
+  string job_id = 1;
+  JobStatus status = 2;
+  string error = 3;
+}
+
+message UpdateWorkerStatus {
+  optional WorkerStatus status = 1;
+  float load = 3;
+  uint32 job_count = 4;
+}
+
+message JobAssignment {
+  Job job = 1;
+  optional string url = 2;
+  string token = 3;
+}
+
+message JobTermination {
+  string job_id = 1;
+}

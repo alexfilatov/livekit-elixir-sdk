@@ -5,15 +5,25 @@ defmodule Livekit.Agents.Worker do
 
   Responsibilities:
   - Opens a Gun WebSocket connection to the LiveKit server and completes the
-    register handshake.
-  - Sends periodic heartbeats (KeepAlive) carrying current load information.
-  - Responds to `availability_request` messages by accepting or rejecting new
+    register handshake using the real LiveKit protobuf wire protocol.
+  - Sends periodic ping/status updates carrying current load information.
+  - Responds to `AvailabilityRequest` messages by accepting or rejecting new
     jobs based on capacity and drain state.
-  - On job assignment, spawns an `AgentSession` under `JobSupervisor` and
-    monitors it for lifecycle management.
+  - On job assignment (`JobAssignment`), spawns an `AgentSession` under
+    `JobSupervisor` and monitors it for lifecycle management.
   - Implements graceful drain: stops accepting new jobs and waits (up to
     `drain_timeout` ms) for in-flight sessions to finish.
-  - Reports load as `active_jobs / max_concurrent_jobs` in every heartbeat.
+  - Reports load as `active_jobs / max_concurrent_jobs` in every status update.
+
+  ## Wire Protocol
+
+  The LiveKit agent worker protocol uses protobuf binary frames over WebSocket.
+
+  Worker -> Server: `Livekit.WorkerMessage` (oneof: register, availability,
+  update_worker, update_job, ping)
+
+  Server -> Worker: `Livekit.ServerMessage` (oneof: register, availability,
+  assignment, pong, termination)
 
   ## Mock mode
 
@@ -38,6 +48,24 @@ defmodule Livekit.Agents.Worker do
 
   alias Livekit.Agents.{AgentSession, JobSupervisor}
 
+  alias Livekit.{
+    WorkerMessage,
+    ServerMessage,
+    RegisterWorkerRequest,
+    UpdateWorkerStatus,
+    AvailabilityResponse,
+    UpdateJobStatus,
+    WorkerPing,
+    JobType,
+    WorkerStatus
+  }
+
+  # SDK version reported during registration
+  @sdk_version "0.1.4"
+
+  # Heartbeat ping interval sent to the server (ms)
+  @ping_interval_ms 5_000
+
   # ---------------------------------------------------------------------------
   # Config
   # ---------------------------------------------------------------------------
@@ -57,10 +85,12 @@ defmodule Livekit.Agents.Worker do
       (required)
     - `max_concurrent_jobs` — maximum number of simultaneous job sessions
       (default `10`)
-    - `heartbeat_interval` — milliseconds between heartbeat messages
-      (default `30_000`)
+    - `heartbeat_interval` — milliseconds between heartbeat/status-update
+      messages (default `30_000`)
     - `namespace` — agent namespace used during registration (default
       `"default"`)
+    - `agent_name` — human-readable name for this worker (default
+      `"elixir-agent"`)
     - `drain_timeout` — milliseconds to wait for in-flight jobs during drain
       before giving up (default `60_000`)
     - `worker_metadata` — arbitrary metadata map included in registration
@@ -77,6 +107,7 @@ defmodule Livekit.Agents.Worker do
             max_concurrent_jobs: pos_integer(),
             heartbeat_interval: pos_integer(),
             namespace: String.t(),
+            agent_name: String.t(),
             drain_timeout: pos_integer(),
             worker_metadata: map()
           }
@@ -90,6 +121,7 @@ defmodule Livekit.Agents.Worker do
       max_concurrent_jobs: 10,
       heartbeat_interval: 30_000,
       namespace: "default",
+      agent_name: "elixir-agent",
       drain_timeout: 60_000,
       worker_metadata: %{}
     ]
@@ -108,6 +140,7 @@ defmodule Livekit.Agents.Worker do
             gun_monitor: reference() | nil,
             ws_stream: reference() | nil,
             registered: boolean(),
+            server_worker_id: String.t() | nil,
             active_jobs: map(),
             health_status: :healthy | :degraded | :unhealthy,
             last_heartbeat: DateTime.t() | nil,
@@ -123,6 +156,7 @@ defmodule Livekit.Agents.Worker do
       :gun_monitor,
       :ws_stream,
       :drain_from,
+      :server_worker_id,
       registered: false,
       active_jobs: %{},
       health_status: :healthy,
@@ -225,7 +259,7 @@ defmodule Livekit.Agents.Worker do
     new_state = %{state | draining: true, drain_from: from}
 
     if state.registered and not mock_mode?(state.config) do
-      send_ws_message(state, %{type: "deregister"})
+      send_update_worker_status(state, :WS_FULL)
     end
 
     if map_size(state.active_jobs) == 0 do
@@ -245,6 +279,7 @@ defmodule Livekit.Agents.Worker do
 
     status = %{
       worker_id: state.config.worker_id,
+      server_worker_id: state.server_worker_id,
       registered: state.registered,
       health_status: state.health_status,
       active_jobs: active,
@@ -300,8 +335,11 @@ defmodule Livekit.Agents.Worker do
   def handle_info({:gun_up, gun_pid, :http}, %State{gun_pid: gun_pid} = state) do
     Logger.debug("Gun HTTP connection up, upgrading to WebSocket")
 
+    token = build_auth_token(state.config)
+
     stream =
       :gun.ws_upgrade(gun_pid, "/agent", [
+        {"authorization", "Bearer #{token}"},
         {"x-livekit-worker-id", state.config.worker_id}
       ])
 
@@ -310,37 +348,42 @@ defmodule Livekit.Agents.Worker do
 
   @impl true
   def handle_info({:gun_upgrade, _gun_pid, _stream, ["websocket"], _headers}, state) do
-    Logger.info("Worker WebSocket upgraded, sending register")
+    Logger.info("Worker WebSocket upgraded, sending RegisterWorkerRequest")
 
-    msg = %{
-      type: "register",
-      worker_id: state.config.worker_id,
-      max_concurrent_jobs: state.config.max_concurrent_jobs,
-      load: 0.0,
+    ping_interval_s = div(@ping_interval_ms, 1_000)
+
+    register_req = %RegisterWorkerRequest{
+      type: JobType.value(:JT_ROOM),
+      agent_name: state.config.agent_name,
+      version: @sdk_version,
+      ping_interval: ping_interval_s,
       namespace: state.config.namespace
     }
 
-    send_ws_message(state, msg)
+    send_worker_message(state, {:register, register_req})
     new_state = %{state | registered: true, backoff_ms: 1_000}
     schedule_heartbeat(new_state)
     {:noreply, new_state}
   end
 
   @impl true
-  def handle_info({:gun_ws, _gun_pid, _stream, {:text, data}}, state) do
-    case Jason.decode(data) do
-      {:ok, %{"type" => msg_type} = payload} ->
-        new_state = dispatch_server_message(msg_type, payload, state)
+  def handle_info({:gun_ws, _gun_pid, _stream, {:binary, data}}, state) do
+    case decode_server_message(data) do
+      {:ok, {type, payload}} ->
+        new_state = dispatch_server_message(type, payload, state)
         {:noreply, new_state}
 
-      {:ok, _payload} ->
-        Logger.debug("Received server message without type field")
-        {:noreply, state}
-
       {:error, reason} ->
-        Logger.warning("Failed to decode server message: #{inspect(reason)}")
+        Logger.warning("Failed to decode server protobuf message: #{inspect(reason)}")
         {:noreply, state}
     end
+  end
+
+  # Legacy text-frame handler kept for compatibility during transition
+  @impl true
+  def handle_info({:gun_ws, _gun_pid, _stream, {:text, _data}}, state) do
+    Logger.debug("Received unexpected text frame from server (expected binary protobuf)")
+    {:noreply, state}
   end
 
   @impl true
@@ -364,6 +407,12 @@ defmodule Livekit.Agents.Worker do
     case find_job_by_monitor(state.active_jobs, ref) do
       {job_id, _info} ->
         Logger.info("Job session #{job_id} (pid=#{inspect(pid)}) ended: #{inspect(reason)}")
+
+        if state.gun_pid do
+          status = if reason == :normal, do: :JS_SUCCESS, else: :JS_FAILED
+          send_job_status_update(state, job_id, status)
+        end
+
         new_active = Map.delete(state.active_jobs, job_id)
         new_metrics = Map.update!(state.metrics, :jobs_processed, &(&1 + 1))
         new_state = %{state | active_jobs: new_active, metrics: new_metrics}
@@ -372,6 +421,7 @@ defmodule Livekit.Agents.Worker do
           GenServer.reply(state.drain_from, :ok)
           {:stop, :normal, %{new_state | drain_from: nil}}
         else
+          send_worker_load_update(new_state)
           {:noreply, new_state}
         end
 
@@ -392,7 +442,8 @@ defmodule Livekit.Agents.Worker do
     if mock_mode?(state.config) do
       Logger.debug("Worker heartbeat (mock): load=#{Float.round(load, 2)}, jobs=#{active}/#{max}")
     else
-      send_ws_message(state, %{type: "keepalive", load: load})
+      send_ping(state)
+      send_worker_load_update(state)
     end
 
     new_state = %{state | last_heartbeat: DateTime.utc_now(), health_status: compute_health(load)}
@@ -492,7 +543,8 @@ defmodule Livekit.Agents.Worker do
       gun_pid: nil,
       gun_monitor: nil,
       ws_stream: nil,
-      registered: false
+      registered: false,
+      server_worker_id: nil
     }
   end
 
@@ -504,10 +556,61 @@ defmodule Livekit.Agents.Worker do
     Process.send_after(self(), :heartbeat, state.config.heartbeat_interval)
   end
 
-  defp send_ws_message(state, msg) do
+  # Encode a WorkerMessage oneof and send as a binary WebSocket frame
+  defp send_worker_message(state, {field, payload}) do
     if state.gun_pid && state.ws_stream do
-      :gun.ws_send(state.gun_pid, state.ws_stream, {:text, Jason.encode!(msg)})
+      msg = %WorkerMessage{message: {field, payload}}
+      binary = Protobuf.encode(msg)
+      :gun.ws_send(state.gun_pid, state.ws_stream, {:binary, binary})
     end
+  end
+
+  defp send_ping(state) do
+    ts = System.system_time(:millisecond)
+    send_worker_message(state, {:ping, %WorkerPing{timestamp: ts}})
+  end
+
+  defp send_worker_load_update(state) do
+    active = map_size(state.active_jobs)
+    max = state.config.max_concurrent_jobs
+    load = if max > 0, do: active / max, else: 0.0
+    worker_status = if state.draining, do: WorkerStatus.value(:WS_FULL), else: WorkerStatus.value(:WS_AVAILABLE)
+
+    update = %UpdateWorkerStatus{
+      status: worker_status,
+      load: load,
+      job_count: active
+    }
+
+    send_worker_message(state, {:update_worker, update})
+  end
+
+  defp send_update_worker_status(state, status_atom) do
+    worker_status = WorkerStatus.value(status_atom)
+
+    update = %UpdateWorkerStatus{
+      status: worker_status,
+      load: 0.0,
+      job_count: 0
+    }
+
+    send_worker_message(state, {:update_worker, update})
+  end
+
+  defp send_job_status_update(state, job_id, status_atom) do
+    status_val =
+      case status_atom do
+        :JS_SUCCESS -> 2
+        :JS_FAILED -> 3
+        _ -> 1
+      end
+
+    update = %UpdateJobStatus{
+      job_id: job_id,
+      status: status_val
+    }
+
+    send_worker_message(state, {:update_job, update})
   end
 
   defp compute_health(load) do
@@ -518,52 +621,120 @@ defmodule Livekit.Agents.Worker do
     end
   end
 
-  # --- Server message dispatch -----------------------------------------------
+  defp build_auth_token(config) do
+    alias Livekit.AccessToken
+    alias Livekit.Grants
 
-  defp dispatch_server_message("register_response", payload, state) do
-    server_version = Map.get(payload, "server_version", "unknown")
-    Logger.info("Worker registered with server (version: #{server_version})")
-    state
+    grants = %Grants{room_join: true, room_admin: true}
+
+    AccessToken.new(config.api_key, config.api_secret)
+    |> AccessToken.with_identity(config.worker_id)
+    |> AccessToken.with_grants(grants)
+    |> AccessToken.to_jwt()
   end
 
-  defp dispatch_server_message("availability_request", payload, state) do
+  # Safely decode a ServerMessage from binary protobuf data
+  defp decode_server_message(data) do
+    msg = Protobuf.decode(data, ServerMessage)
+
+    case msg.message do
+      {_type, _payload} = result -> {:ok, result}
+      nil -> {:error, :empty_message}
+    end
+  rescue
+    error -> {:error, error}
+  end
+
+  # --- Server message dispatch -----------------------------------------------
+
+  defp dispatch_server_message(:register, payload, state) do
+    server_worker_id = payload.worker_id
+    server_version = if payload.server_info, do: payload.server_info.version, else: "unknown"
+    Logger.info("Worker registered with server: worker_id=#{server_worker_id}, server_version=#{server_version}")
+
+    new_state = %{state | server_worker_id: server_worker_id}
+    send_worker_load_update(new_state)
+    new_state
+  end
+
+  defp dispatch_server_message(:availability, payload, state) do
     handle_availability_request(payload, state)
   end
 
-  defp dispatch_server_message("job_assignment", payload, state) do
+  defp dispatch_server_message(:assignment, payload, state) do
     handle_job_assignment(payload, state)
   end
 
+  defp dispatch_server_message(:pong, payload, state) do
+    rtt_ms = System.system_time(:millisecond) - payload.last_timestamp
+    Logger.debug("Worker received pong: rtt=#{rtt_ms}ms")
+    state
+  end
+
+  defp dispatch_server_message(:termination, payload, state) do
+    Logger.info("Server requested job termination: job_id=#{payload.job_id}")
+
+    case Map.get(state.active_jobs, payload.job_id) do
+      %{session_pid: pid} ->
+        Process.exit(pid, :server_termination)
+
+      nil ->
+        Logger.debug("Termination request for unknown job: #{payload.job_id}")
+    end
+
+    state
+  end
+
   defp dispatch_server_message(type, _payload, state) do
-    Logger.debug("Worker received unhandled server message type: #{type}")
+    Logger.debug("Worker received unhandled server message type: #{inspect(type)}")
     state
   end
 
   # --- Availability ----------------------------------------------------------
 
-  defp handle_availability_request(payload, state) do
-    job_id = Map.get(payload, "job_id", "")
+  defp handle_availability_request(availability_request, state) do
+    job = availability_request.job
+    job_id = if job, do: job.id, else: ""
     active = map_size(state.active_jobs)
     at_capacity = active >= state.config.max_concurrent_jobs
     available = not state.draining and not at_capacity
 
-    response = %{type: "availability_response", job_id: job_id, available: available}
-    send_ws_message(state, response)
+    response = %AvailabilityResponse{
+      job_id: job_id,
+      available: available,
+      supports_resume: false,
+      participant_identity: state.config.worker_id
+    }
 
-    Logger.debug("Availability request for job=#{job_id}: available=#{available} (draining=#{state.draining}, active=#{active}/#{state.config.max_concurrent_jobs})")
+    send_worker_message(state, {:availability, response})
+
+    Logger.debug(
+      "Availability request for job=#{job_id}: available=#{available}" <>
+        " (draining=#{state.draining}, active=#{active}/#{state.config.max_concurrent_jobs})"
+    )
+
     state
   end
 
   # --- Job assignment --------------------------------------------------------
 
-  defp handle_job_assignment(payload, state) do
-    with {:ok, job_id} <- require_string_field(payload, "job_id"),
-         {:ok, room_name} <- require_string_field(payload, "room_name"),
-         {:ok, participant_identity} <- require_string_field(payload, "participant_identity") do
+  defp handle_job_assignment(assignment, state) do
+    job = assignment.job
+
+    if is_nil(job) or job.id == "" do
+      Logger.warning("Received job assignment with nil or empty job")
+      state
+    else
+      room = job.room
+      participant = job.participant
+
+      room_name = if room, do: room.name, else: ""
+      participant_identity = if participant, do: participant.identity, else: ""
+
       session_config = %AgentSession.Config{
         room_name: room_name,
         participant_identity: participant_identity,
-        server_url: state.config.server_url,
+        server_url: assignment.url || state.config.server_url,
         api_key: state.config.api_key,
         api_secret: state.config.api_secret
       }
@@ -580,26 +751,19 @@ defmodule Livekit.Agents.Worker do
             started_at: DateTime.utc_now()
           }
 
-          Logger.info("Job assigned: id=#{job_id}, room=#{room_name}, participant=#{participant_identity}")
-          %{state | active_jobs: Map.put(state.active_jobs, job_id, job_info)}
+          Logger.info(
+            "Job assigned: id=#{job.id}, room=#{room_name}, participant=#{participant_identity}"
+          )
+
+          new_state = %{state | active_jobs: Map.put(state.active_jobs, job.id, job_info)}
+          send_worker_load_update(new_state)
+          new_state
 
         {:error, reason} ->
-          Logger.error("Failed to start job session for job=#{job_id}: #{inspect(reason)}")
+          Logger.error("Failed to start job session for job=#{job.id}: #{inspect(reason)}")
+          send_job_status_update(state, job.id, :JS_FAILED)
           %{state | metrics: Map.update!(state.metrics, :jobs_failed, &(&1 + 1))}
       end
-    else
-      {:error, reason} ->
-        Logger.warning("Rejecting malformed job_assignment payload: #{inspect(reason)}")
-        state
-    end
-  end
-
-  defp require_string_field(map, field) do
-    case Map.get(map, field) do
-      value when is_binary(value) and byte_size(value) > 0 -> {:ok, value}
-      nil -> {:error, {:missing_field, field}}
-      "" -> {:error, {:empty_field, field}}
-      other -> {:error, {:invalid_field, field, other}}
     end
   end
 
