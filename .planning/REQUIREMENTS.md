@@ -131,12 +131,14 @@
 | BEHV-03 | Phase 1 | Pending |
 | BEHV-04 | Phase 1 | Pending |
 | BEHV-05 | Phase 1 | Pending |
+| TEST-01 | Phase 1 | Pending |
 | CHAT-01 | Phase 2 | Pending |
 | CHAT-02 | Phase 2 | Pending |
 | CHAT-03 | Phase 2 | Pending |
 | CHAT-04 | Phase 2 | Pending |
 | CHAT-05 | Phase 2 | Pending |
 | CHAT-06 | Phase 2 | Pending |
+| TEST-02 | Phase 2 | Pending |
 | TOOL-01 | Phase 3 | Pending |
 | TOOL-02 | Phase 3 | Pending |
 | TOOL-03 | Phase 3 | Pending |
@@ -160,30 +162,28 @@
 | OTTS-04 | Phase 6 | Pending |
 | OTTS-05 | Phase 6 | Pending |
 | OTTS-06 | Phase 6 | Pending |
+| TEST-03 | Phase 4, 5, 6 | Pending |
 | PIPE-01 | Phase 7 | Pending |
 | PIPE-02 | Phase 7 | Pending |
 | PIPE-03 | Phase 7 | Pending |
 | PIPE-04 | Phase 7 | Pending |
 | PIPE-05 | Phase 7 | Pending |
 | PIPE-06 | Phase 7 | Pending |
+| TEST-04 | Phase 7 | Pending |
+| TEST-07 | Phase 7 | Pending |
 | EVNT-01 | Phase 8 | Pending |
 | EVNT-02 | Phase 8 | Pending |
 | EVNT-03 | Phase 8 | Pending |
 | EVNT-04 | Phase 8 | Pending |
 | EVNT-05 | Phase 8 | Pending |
+| TEST-05 | Phase 8 | Pending |
 | WRKR-01 | Phase 9 | Pending |
 | WRKR-02 | Phase 9 | Pending |
 | WRKR-03 | Phase 9 | Pending |
 | WRKR-04 | Phase 9 | Pending |
 | WRKR-05 | Phase 9 | Pending |
 | WRKR-06 | Phase 9 | Pending |
-| TEST-01 | Phase 1 | Pending |
-| TEST-02 | Phase 2 | Pending |
-| TEST-03 | Phase 4-6 | Pending |
-| TEST-04 | Phase 7 | Pending |
-| TEST-05 | Phase 8 | Pending |
 | TEST-06 | Phase 9 | Pending |
-| TEST-07 | Phase 10 | Pending |
 
 **Coverage:**
 - v1 requirements: 49 total
@@ -192,4 +192,4 @@
 
 ---
 *Requirements defined: 2026-04-14*
-*Last updated: 2026-04-14 after initial definition*
+*Last updated: 2026-04-14 — traceability updated after roadmap creation*
