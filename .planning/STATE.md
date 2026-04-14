@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.1.4
 milestone_name: milestone
-status: executing
-stopped_at: Completed 08-state-events-01-PLAN.md
-last_updated: "2026-04-14T12:16:31.616Z"
+status: verifying
+stopped_at: Completed 08-state-events-02-PLAN.md
+last_updated: "2026-04-14T12:22:51.639Z"
 last_activity: 2026-04-14
 progress:
   total_phases: 9
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 19
-  completed_plans: 18
-  percent: 95
+  completed_plans: 19
+  percent: 100
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-14)
 
 Phase: 08 (state-events) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-14
 
 Progress: [░░░░░░░░░░] 0%
@@ -69,6 +69,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 07-voice-pipeline P02 | 15 | 2 tasks | 1 files |
 | Phase 07-voice-pipeline P03 | 10 | 2 tasks | 1 files |
 | Phase 08-state-events P01 | 135 | 3 tasks | 4 files |
+| Phase 08-state-events P02 | 280 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -111,6 +112,8 @@ Recent decisions affecting current work:
 - [Phase 07-voice-pipeline]: ETS :ordered_set with monotonic_time used for deterministic telemetry event order verification
 - [Phase 08-state-events]: Used session_id String.t() instead of event_bus pid() for EventBus API — aligns with Registry key pattern
 - [Phase 08-state-events]: maybe_publish/2 no-ops when session_id is nil — allows testing state machines without a running Registry
+- [Phase 08-state-events]: async: false for EventBus tests — globally named Registry causes races with async: true
+- [Phase 08-state-events]: Process.unlink Registry pid in test setup to prevent Registry dying between tests
 
 ### Pending Todos
 
@@ -122,6 +125,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-14T12:16:31.613Z
-Stopped at: Completed 08-state-events-01-PLAN.md
+Last session: 2026-04-14T12:22:51.635Z
+Stopped at: Completed 08-state-events-02-PLAN.md
 Resume file: None

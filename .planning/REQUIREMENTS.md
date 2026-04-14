@@ -89,7 +89,7 @@
 - [x] **TEST-02**: 100% test coverage for ChatContext and tool system
 - [x] **TEST-03**: 100% test coverage for all provider implementations (using mock mode)
 - [x] **TEST-04**: 100% test coverage for pipeline, VAD, turn detection
-- [ ] **TEST-05**: 100% test coverage for state machines and events
+- [x] **TEST-05**: 100% test coverage for state machines and events
 - [ ] **TEST-06**: 100% test coverage for worker infrastructure
 - [x] **TEST-07**: Integration tests for full STT -> LLM -> TTS flow (mock providers)
 
@@ -176,7 +176,7 @@
 | EVNT-03 | Phase 8 | Complete |
 | EVNT-04 | Phase 8 | Complete |
 | EVNT-05 | Phase 8 | Complete |
-| TEST-05 | Phase 8 | Pending |
+| TEST-05 | Phase 8 | Complete |
 | WRKR-01 | Phase 9 | Pending |
 | WRKR-02 | Phase 9 | Pending |
 | WRKR-03 | Phase 9 | Pending |

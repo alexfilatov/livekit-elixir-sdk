@@ -19,7 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: OpenAI LLM** - Real OpenAI provider: chat completions with SSE streaming and tool calling (completed 2026-04-14)
 - [x] **Phase 6: OpenAI TTS** - Real OpenAI provider: audio synthesis with voice/format options and response caching (completed 2026-04-14)
 - [x] **Phase 7: Voice Pipeline** - Streaming STT -> LLM -> TTS pipeline with VAD, turn detection, and interruption handling (completed 2026-04-14)
-- [ ] **Phase 8: State & Events** - User and agent state machines, typed events, :telemetry integration, and Registry pub/sub
+- [x] **Phase 8: State & Events** - User and agent state machines, typed events, :telemetry integration, and Registry pub/sub (completed 2026-04-14)
 - [ ] **Phase 9: Worker Infrastructure** - WebSocket worker protocol, OTP supervision tree, job lifecycle, and graceful shutdown
 
 ## Phase Details
@@ -145,7 +145,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [x] 08-01-PLAN.md — Events structs + UserStateMachine + AgentStateMachine GenServers + EventBus (Registry pub/sub + :telemetry bridge)
-- [ ] 08-02-PLAN.md — Full ExUnit test suite for all EVNT-0x requirements and TEST-05; 100% coverage gate
+- [x] 08-02-PLAN.md — Full ExUnit test suite for all EVNT-0x requirements and TEST-05; 100% coverage gate
 
 ### Phase 9: Worker Infrastructure
 **Goal**: WebSocket worker protocol, OTP supervision tree, full job lifecycle, graceful drain, and load reporting
@@ -174,5 +174,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 | 5. OpenAI LLM | 2/2 | Complete   | 2026-04-14 |
 | 6. OpenAI TTS | 2/2 | Complete   | 2026-04-14 |
 | 7. Voice Pipeline | 3/3 | Complete   | 2026-04-14 |
-| 8. State & Events | 1/2 | In Progress|  |
+| 8. State & Events | 2/2 | Complete   | 2026-04-14 |
 | 9. Worker Infrastructure | 0/? | Not started | - |
