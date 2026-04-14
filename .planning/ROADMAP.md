@@ -179,3 +179,13 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 | 7. Voice Pipeline | 3/3 | Complete   | 2026-04-14 |
 | 8. State & Events | 2/2 | Complete   | 2026-04-14 |
 | 9. Worker Infrastructure | 1/2 | In Progress|  |
+
+### Phase 10: Livebook Showcases
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 9
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 10 to break down)
