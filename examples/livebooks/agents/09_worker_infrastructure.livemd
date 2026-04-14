@@ -1,0 +1,318 @@
+# Worker Infrastructure: OTP Supervision, Job Lifecycle, and Graceful Drain
+
+The `Livekit.Agents.WorkerSupervisor` is the top-level OTP supervisor that connects an
+Elixir agent process to a LiveKit server. It manages:
+
+- `JobSupervisor` — a `DynamicSupervisor` that spawns one `AgentSession` per job
+- `Worker` — the GenServer handling WebSocket connection, heartbeats, job dispatch, and drain
+
+This livebook uses **mock mode** (no server_url) — no LiveKit server or API keys required.
+
+## Setup
+
+```elixir
+Mix.install([
+  {:livekit, path: Path.join(__DIR__, "../../..")},
+  {:kino, "~> 0.14"}
+])
+
+alias Livekit.Agents.Worker
+alias Livekit.Agents.Worker.Config, as: WorkerConfig
+alias Livekit.Agents.WorkerSupervisor
+alias Livekit.Agents.JobSupervisor
+```
+
+## The Supervision Tree
+
+The OTP supervision tree looks like this:
+
+```
+WorkerSupervisor (one_for_one)
+├── JobSupervisor (DynamicSupervisor)
+│   ├── AgentSession for job-1
+│   ├── AgentSession for job-2
+│   └── ... (one per assigned job)
+└── Worker (GenServer)
+    ├── Maintains WebSocket to LiveKit server
+    ├── Sends periodic heartbeats
+    ├── Accepts job assignments
+    └── Monitors AgentSession processes
+```
+
+The `JobSupervisor` is started first, so it is fully available before the `Worker`
+begins accepting jobs. If the `Worker` crashes, the `JobSupervisor` and all running
+jobs continue unaffected (one_for_one strategy).
+
+## The Entrypoint Function
+
+Every `Worker.Config` requires an `:entrypoint` function. The worker calls this function
+with a `JobContext` map when a new job is assigned. Your agent logic lives here.
+
+```elixir
+my_entrypoint = fn job_context ->
+  IO.puts("[agent] Job started!")
+  IO.puts("[agent] Room:        #{Map.get(job_context, :room_name, "unknown")}")
+  IO.puts("[agent] Participant: #{Map.get(job_context, :participant_identity, "unknown")}")
+
+  # In a real agent you would start a Pipeline and interact with the room here.
+  # For this demo, we just sleep briefly to simulate work.
+  Process.sleep(200)
+
+  IO.puts("[agent] Job complete!")
+  :ok
+end
+
+IO.puts("Entrypoint function defined")
+```
+
+## Starting the Worker in Mock Mode
+
+Set `server_url: nil` (or `"mock://..."`) to run without a LiveKit server. The worker
+skips all Gun WebSocket calls, immediately marks itself as registered, and logs heartbeats
+to the console instead of sending them over the wire.
+
+```elixir
+worker_config = %WorkerConfig{
+  api_key: "my-api-key",
+  api_secret: "my-api-secret",
+  entrypoint: my_entrypoint,
+  server_url: nil,                  # mock mode — no real server needed
+  max_concurrent_jobs: 5,
+  heartbeat_interval: 2_000,        # 2 seconds for demo (default is 30s)
+  namespace: "demo",
+  drain_timeout: 10_000
+}
+
+IO.puts("Starting WorkerSupervisor in mock mode...")
+{:ok, sup_pid} = WorkerSupervisor.start_link(worker_config, name: nil)
+
+# Give the worker a moment to initialize and send its first heartbeat
+Process.sleep(100)
+
+IO.puts("WorkerSupervisor started: #{inspect(sup_pid)}")
+```
+
+## Querying Worker Status
+
+`Worker.get_status/1` returns a comprehensive status map including load, drain state,
+and cumulative metrics.
+
+```elixir
+# Find the Worker process (it registers under a known name or we use the supervisor's child)
+worker_pid = WorkerSupervisor
+  |> Supervisor.which_children()
+  |> Enum.find_value(fn
+    {Worker, pid, :worker, _} -> pid
+    {Livekit.Agents.Worker, pid, :worker, _} -> pid
+    _ -> nil
+  end)
+
+IO.puts("Worker PID: #{inspect(worker_pid)}")
+
+if worker_pid do
+  status = Worker.get_status(worker_pid)
+  IO.puts("\nWorker status:")
+  IO.puts("  worker_id:          #{status.worker_id}")
+  IO.puts("  registered:         #{status.registered}")
+  IO.puts("  health_status:      #{status.health_status}")
+  IO.puts("  active_jobs:        #{status.active_jobs}")
+  IO.puts("  max_concurrent_jobs: #{status.max_concurrent_jobs}")
+  IO.puts("  load:               #{Float.round(status.load, 3)}")
+  IO.puts("  draining:           #{status.draining}")
+  IO.puts("  namespace:          #{status.namespace}")
+else
+  IO.puts("Worker not found in supervisor children")
+end
+```
+
+## Inspecting the Supervision Tree
+
+```elixir
+children = Supervisor.which_children(sup_pid)
+IO.puts("Supervision tree (#{length(children)} children):")
+Enum.each(children, fn {id, pid, type, modules} ->
+  IO.puts("  id=#{inspect(id)}, pid=#{inspect(pid)}, type=#{type}, modules=#{inspect(modules)}")
+end)
+```
+
+## Observing Heartbeats
+
+In mock mode the Worker logs heartbeats at `heartbeat_interval` ms. Watch the Livebook
+terminal output to see:
+
+```
+[info] Worker heartbeat (mock): load=0.0, jobs=0/5
+```
+
+Wait a few seconds to observe multiple heartbeat cycles.
+
+```elixir
+IO.puts("Waiting 4.5 seconds to observe 2 heartbeats (interval=2s)...")
+Process.sleep(4_500)
+
+if worker_pid do
+  status = Worker.get_status(worker_pid)
+  IO.puts("Status after heartbeats:")
+  IO.puts("  last_heartbeat: #{inspect(status.last_heartbeat)}")
+  IO.puts("  health_status:  #{status.health_status}")
+end
+```
+
+## Load Reporting
+
+The Worker reports load as `active_jobs / max_concurrent_jobs`. The health status is
+derived from load:
+
+| Load | Health |
+|------|--------|
+| < 0.7 | `:healthy` |
+| 0.7 - 0.9 | `:degraded` |
+| >= 0.9 | `:unhealthy` |
+
+```elixir
+if worker_pid do
+  status = Worker.get_status(worker_pid)
+  active = status.active_jobs
+  max = status.max_concurrent_jobs
+  load = if max > 0, do: active / max, else: 0.0
+
+  IO.puts("Load computation:")
+  IO.puts("  active_jobs / max_concurrent_jobs = #{active} / #{max} = #{Float.round(load, 3)}")
+
+  health = cond do
+    load < 0.7 -> :healthy
+    load < 0.9 -> :degraded
+    true -> :unhealthy
+  end
+
+  IO.puts("  computed health: #{health}")
+  IO.puts("  reported health: #{status.health_status}")
+end
+```
+
+## Graceful Drain
+
+`Worker.drain/1` initiates graceful shutdown:
+
+1. The Worker stops accepting new jobs (`draining: true`)
+2. If connected to a server, sends a deregister message
+3. Waits for all in-flight `AgentSession` processes to finish
+4. Returns `:ok` when all jobs complete, or `{:error, :timeout}` if `drain_timeout` elapses
+
+In mock mode with no active jobs, drain completes immediately.
+
+```elixir
+if worker_pid do
+  IO.puts("Initiating drain...")
+  start = System.monotonic_time(:millisecond)
+
+  result = Worker.drain(worker_pid)
+
+  elapsed = System.monotonic_time(:millisecond) - start
+  IO.puts("Drain result: #{inspect(result)} (#{elapsed} ms)")
+
+  # After drain, the worker process exits normally
+  Process.sleep(100)
+  alive = Process.alive?(worker_pid)
+  IO.puts("Worker alive after drain: #{alive}")
+  IO.puts("(Worker exits normally after all jobs complete and drain is acknowledged)")
+end
+```
+
+## Starting a Fresh Worker (No Supervisor)
+
+For simpler use cases, start `Worker` directly without the full supervision tree:
+
+```elixir
+standalone_config = %WorkerConfig{
+  api_key: "key",
+  api_secret: "secret",
+  entrypoint: fn _ctx -> :ok end,
+  server_url: nil,
+  max_concurrent_jobs: 3,
+  heartbeat_interval: 60_000,  # infrequent heartbeat — not observable in demo
+  namespace: "standalone"
+}
+
+{:ok, standalone_pid} = Worker.start_link(standalone_config)
+Process.sleep(50)
+
+IO.puts("Standalone worker:")
+IO.inspect(Worker.get_status(standalone_pid), pretty: true)
+
+IO.puts("\nActive jobs: #{inspect(Worker.list_active_jobs(standalone_pid))}")
+Worker.drain(standalone_pid)
+IO.puts("Standalone worker drained")
+```
+
+## Mock Mode URL Variants
+
+Any `server_url` starting with `"mock://"` also triggers mock mode. This is useful when
+you want to keep `server_url` set but skip the real connection:
+
+```elixir
+mock_url_config = %WorkerConfig{
+  api_key: "key",
+  api_secret: "secret",
+  entrypoint: fn _ctx -> :ok end,
+  server_url: "mock://livekit.example.com",  # mock:// prefix = no real connection
+  max_concurrent_jobs: 2
+}
+
+{:ok, url_mock_pid} = Worker.start_link(mock_url_config)
+Process.sleep(50)
+
+status = Worker.get_status(url_mock_pid)
+IO.puts("Worker with mock:// URL:")
+IO.puts("  registered: #{status.registered}")
+IO.puts("  worker_id:  #{status.worker_id}")
+
+Worker.drain(url_mock_pid)
+IO.puts("Done")
+```
+
+## Production Deployment Pattern
+
+When deploying a real agent, add `WorkerSupervisor` to your application's supervision
+tree in `application.ex`:
+
+```elixir
+# In lib/my_app/application.ex (illustrative — not executed)
+production_snippet = """
+def start(_type, _args) do
+  worker_config = %Livekit.Agents.Worker.Config{
+    api_key: System.fetch_env!("LIVEKIT_API_KEY"),
+    api_secret: System.fetch_env!("LIVEKIT_API_SECRET"),
+    server_url: System.fetch_env!("LIVEKIT_URL"),
+    entrypoint: &MyApp.Agent.run/1,
+    max_concurrent_jobs: 10,
+    namespace: "production"
+  }
+
+  children = [
+    # ... other supervisors ...
+    {Livekit.Agents.WorkerSupervisor, {worker_config, [name: MyApp.WorkerSupervisor]}}
+  ]
+
+  Supervisor.start_link(children, strategy: :one_for_one, name: MyApp.Supervisor)
+end
+"""
+
+IO.puts("Production deployment snippet:\n#{production_snippet}")
+```
+
+## Summary
+
+You now know how to:
+
+- Understand the `WorkerSupervisor -> Worker -> JobSupervisor -> AgentSession` OTP tree
+- Start the worker in mock mode (no LiveKit server required) with `server_url: nil`
+- Implement an `:entrypoint` function that receives job context and runs agent logic
+- Query worker status with `get_status/1` (load, health, drain state, metrics)
+- Observe heartbeat logging and understand load/health thresholds
+- Initiate graceful drain with `Worker.drain/1` and wait for in-flight jobs
+- Deploy in production by adding `WorkerSupervisor` to your application supervision tree
+
+You have now completed all nine LiveKit Agents framework livebooks. Together they cover
+every layer: provider contracts, conversation context, tool calling, real AI providers,
+the voice pipeline, state machines and events, and the worker infrastructure.
