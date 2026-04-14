@@ -538,13 +538,9 @@ defmodule Mix.Tasks.Livekit.Agents.Test do
           voice: :alloy
         }
 
-        case OpenAITTS.start_link(tts_config) do
-          {:ok, pid} ->
-            GenServer.stop(pid)
-            :ok
-
-          error ->
-            error
+        case OpenAITTS.validate_config(tts_config) do
+          :ok -> :ok
+          error -> error
         end
     end
   end
