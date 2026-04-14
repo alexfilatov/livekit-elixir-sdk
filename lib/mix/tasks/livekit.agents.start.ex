@@ -289,39 +289,8 @@ defmodule Mix.Tasks.Livekit.Agents.Start do
       }
     end
 
-    # Start supervisor
-    case Supervisor.start_link(worker_specs, strategy: :one_for_one, name: :agent_supervisor) do
-      {:ok, supervisor_pid} ->
-        # Register all workers
-        register_workers(config.workers)
-        {:ok, supervisor_pid}
-
-      error ->
-        error
-    end
-  end
-
-  defp register_workers(worker_count) do
-    spawn_link(fn ->
-      Process.sleep(1000)  # Allow workers to start
-
-      for i <- 1..worker_count do
-        worker_name = :"worker_#{i}"
-        case Process.whereis(worker_name) do
-          nil ->
-            Mix.shell().error("❌ Worker #{i} not found")
-
-          worker_pid ->
-            case Worker.register_worker(worker_pid) do
-              :ok ->
-                Mix.shell().info("✅ Worker #{i} registered")
-
-              {:error, reason} ->
-                Mix.shell().error("❌ Worker #{i} registration failed: #{inspect(reason)}")
-            end
-        end
-      end
-    end)
+    # Start supervisor (workers self-register on WebSocket upgrade)
+    Supervisor.start_link(worker_specs, strategy: :one_for_one, name: :agent_supervisor)
   end
 
   defp production_agent_entrypoint(job_context, config) do

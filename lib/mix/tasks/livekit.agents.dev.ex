@@ -143,18 +143,9 @@ defmodule Mix.Tasks.Livekit.Agents.Dev do
 
     case Worker.start_link(worker_config, name: :dev_worker) do
       {:ok, worker_pid} ->
-        Mix.shell().info("✅ Agent worker started")
-
-        case Worker.register_worker(worker_pid) do
-          :ok ->
-            Mix.shell().info("✅ Worker registered with LiveKit server")
-            dev_loop(config, worker_pid)
-
-          {:error, reason} ->
-            Mix.shell().error("❌ Failed to register worker: #{inspect(reason)}")
-            Mix.shell().info("Worker started but not registered - check your credentials")
-            dev_loop(config, worker_pid)
-        end
+        # Worker self-registers on WebSocket upgrade
+        Mix.shell().info("✅ Agent worker started (will register with server on connect)")
+        dev_loop(config, worker_pid)
 
       {:error, reason} ->
         Mix.shell().error("❌ Failed to start worker: #{inspect(reason)}")
