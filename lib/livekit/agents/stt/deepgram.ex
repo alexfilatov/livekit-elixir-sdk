@@ -56,6 +56,8 @@ defmodule Livekit.Agents.STT.Deepgram do
     - `:min_buffer_duration_ms` — minimum audio duration to accumulate before sending
       a batch request; shorter audio is buffered (default: `100`)
     - `:mock` — return synthetic results without calling the API (default: `false`)
+    - `:base_url` — override the Deepgram API base URL (default: `"https://api.deepgram.com"`);
+      useful in tests to point at a Bypass server
     """
 
     @type t :: %__MODULE__{
@@ -71,7 +73,8 @@ defmodule Livekit.Agents.STT.Deepgram do
             sample_rate: pos_integer(),
             encoding: String.t(),
             min_buffer_duration_ms: non_neg_integer(),
-            mock: boolean()
+            mock: boolean(),
+            base_url: String.t()
           }
 
     defstruct api_key: nil,
@@ -86,7 +89,8 @@ defmodule Livekit.Agents.STT.Deepgram do
               sample_rate: 48_000,
               encoding: "linear16",
               min_buffer_duration_ms: 100,
-              mock: false
+              mock: false,
+              base_url: "https://api.deepgram.com"
   end
 
   # --- STT behaviour callbacks ---
@@ -187,7 +191,7 @@ defmodule Livekit.Agents.STT.Deepgram do
   @spec build_http_client(Config.t()) :: Tesla.Client.t()
   defp build_http_client(config) do
     middleware = [
-      {Tesla.Middleware.BaseUrl, "https://api.deepgram.com"},
+      {Tesla.Middleware.BaseUrl, config.base_url},
       {Tesla.Middleware.Headers,
        [
          {"Authorization", "Token #{config.api_key}"},

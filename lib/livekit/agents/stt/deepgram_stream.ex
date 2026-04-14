@@ -164,6 +164,11 @@ defmodule Livekit.Agents.STT.DeepgramStream do
   end
 
   @impl true
+  def handle_cast({:send_audio, _audio}, %State{buffer: nil} = state) do
+    # Mock mode — no buffer; audio is discarded
+    {:noreply, state}
+  end
+
   def handle_cast({:send_audio, audio}, %State{connected: false} = state) do
     # Not yet connected — buffer and wait
     new_buffer = AudioBuffer.push(state.buffer, audio, state.config.sample_rate)
