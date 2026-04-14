@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.1.4
 milestone_name: milestone
-status: verifying
-stopped_at: Completed 07-voice-pipeline-07-03-PLAN.md
-last_updated: "2026-04-14T12:03:28.037Z"
+status: executing
+stopped_at: Completed 08-state-events-01-PLAN.md
+last_updated: "2026-04-14T12:16:31.616Z"
 last_activity: 2026-04-14
 progress:
   total_phases: 9
   completed_phases: 7
-  total_plans: 17
-  completed_plans: 17
-  percent: 100
+  total_plans: 19
+  completed_plans: 18
+  percent: 95
 ---
 
 # Project State
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-14)
 
 **Core value:** A developer can build and deploy a working voice AI agent using only Elixir — connecting to a LiveKit room, transcribing speech, generating responses via LLM, and speaking back — with real provider integrations, not mocks.
-**Current focus:** Phase 07 — voice-pipeline
+**Current focus:** Phase 08 — state-events
 
 ## Current Position
 
-Phase: 07 (voice-pipeline) — EXECUTING
-Plan: 3 of 3
-Status: Phase complete — ready for verification
+Phase: 08 (state-events) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
 Last activity: 2026-04-14
 
 Progress: [░░░░░░░░░░] 0%
@@ -68,6 +68,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 07-voice-pipeline P01 | 234 | 2 tasks | 4 files |
 | Phase 07-voice-pipeline P02 | 15 | 2 tasks | 1 files |
 | Phase 07-voice-pipeline P03 | 10 | 2 tasks | 1 files |
+| Phase 08-state-events P01 | 135 | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -108,6 +109,8 @@ Recent decisions affecting current work:
 - [Phase 07-voice-pipeline]: Task.async for STT->LLM->TTS keeps GenServer loop responsive; Task.shutdown(:brutal_kill) handles interruption cleanly
 - [Phase 07-voice-pipeline]: Process.flag(:trap_exit) in start_link error tests prevents linked EXIT from crashing test process
 - [Phase 07-voice-pipeline]: ETS :ordered_set with monotonic_time used for deterministic telemetry event order verification
+- [Phase 08-state-events]: Used session_id String.t() instead of event_bus pid() for EventBus API — aligns with Registry key pattern
+- [Phase 08-state-events]: maybe_publish/2 no-ops when session_id is nil — allows testing state machines without a running Registry
 
 ### Pending Todos
 
@@ -119,6 +122,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-14T12:03:28.034Z
-Stopped at: Completed 07-voice-pipeline-07-03-PLAN.md
+Last session: 2026-04-14T12:16:31.613Z
+Stopped at: Completed 08-state-events-01-PLAN.md
 Resume file: None

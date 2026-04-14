@@ -68,11 +68,11 @@
 
 ### State & Events
 
-- [ ] **EVNT-01**: User state machine: listening -> speaking -> away (with configurable timeout)
-- [ ] **EVNT-02**: Agent state machine: initializing -> listening -> thinking -> speaking
-- [ ] **EVNT-03**: Typed event structs for all state changes and conversation events
-- [ ] **EVNT-04**: :telemetry integration for metrics (TTFT, processing latency, token usage)
-- [ ] **EVNT-05**: Event pub/sub via Registry for in-process consumers
+- [x] **EVNT-01**: User state machine: listening -> speaking -> away (with configurable timeout)
+- [x] **EVNT-02**: Agent state machine: initializing -> listening -> thinking -> speaking
+- [x] **EVNT-03**: Typed event structs for all state changes and conversation events
+- [x] **EVNT-04**: :telemetry integration for metrics (TTFT, processing latency, token usage)
+- [x] **EVNT-05**: Event pub/sub via Registry for in-process consumers
 
 ### Worker Infrastructure
 
@@ -171,11 +171,11 @@
 | PIPE-06 | Phase 7 | Complete |
 | TEST-04 | Phase 7 | Complete |
 | TEST-07 | Phase 7 | Complete |
-| EVNT-01 | Phase 8 | Pending |
-| EVNT-02 | Phase 8 | Pending |
-| EVNT-03 | Phase 8 | Pending |
-| EVNT-04 | Phase 8 | Pending |
-| EVNT-05 | Phase 8 | Pending |
+| EVNT-01 | Phase 8 | Complete |
+| EVNT-02 | Phase 8 | Complete |
+| EVNT-03 | Phase 8 | Complete |
+| EVNT-04 | Phase 8 | Complete |
+| EVNT-05 | Phase 8 | Complete |
 | TEST-05 | Phase 8 | Pending |
 | WRKR-01 | Phase 9 | Pending |
 | WRKR-02 | Phase 9 | Pending |

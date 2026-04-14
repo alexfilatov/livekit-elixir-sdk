@@ -144,7 +144,7 @@ Plans:
   5. A process can subscribe via Registry and receive all conversation events without polling
 **Plans**: 2 plans
 Plans:
-- [ ] 08-01-PLAN.md — Events structs + UserStateMachine + AgentStateMachine GenServers + EventBus (Registry pub/sub + :telemetry bridge)
+- [x] 08-01-PLAN.md — Events structs + UserStateMachine + AgentStateMachine GenServers + EventBus (Registry pub/sub + :telemetry bridge)
 - [ ] 08-02-PLAN.md — Full ExUnit test suite for all EVNT-0x requirements and TEST-05; 100% coverage gate
 
 ### Phase 9: Worker Infrastructure
@@ -174,5 +174,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 | 5. OpenAI LLM | 2/2 | Complete   | 2026-04-14 |
 | 6. OpenAI TTS | 2/2 | Complete   | 2026-04-14 |
 | 7. Voice Pipeline | 3/3 | Complete   | 2026-04-14 |
-| 8. State & Events | 0/2 | Not started | - |
+| 8. State & Events | 1/2 | In Progress|  |
 | 9. Worker Infrastructure | 0/? | Not started | - |
