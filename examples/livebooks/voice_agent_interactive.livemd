@@ -128,8 +128,8 @@ First, let's set up all the necessary API keys and configuration:
 livekit_url_input = Kino.Input.text("LiveKit Server URL", default: "ws://localhost:7880")
 livekit_api_key_input = Kino.Input.text("LiveKit API Key", default: "devkey")
 livekit_api_secret_input = Kino.Input.text("LiveKit API Secret", default: "devsecret")
-deepgram_api_key_input = Kino.Input.text("Deepgram API Key (for STT)", default: "YOUR_DEEPGRAM_API_KEY")
-openai_api_key_input = Kino.Input.text("OpenAI API Key (for LLM and TTS)", default: "YOUR_OPENAI_API_KEY")
+deepgram_api_key_input = Kino.Input.text("Deepgram API Key (for STT)", default: "")
+openai_api_key_input = Kino.Input.text("OpenAI API Key (for LLM and TTS)", default: "")
 
 Kino.Layout.grid([
   livekit_url_input,
