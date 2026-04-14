@@ -41,12 +41,12 @@
 
 ### OpenAI LLM Provider
 
-- [ ] **OLLM-01**: Real HTTP POST to OpenAI `/v1/chat/completions`
-- [ ] **OLLM-02**: SSE streaming response parsing for real-time text generation
-- [ ] **OLLM-03**: Function/tool calling support with schema translation
-- [ ] **OLLM-04**: Conversation history management with token-aware truncation
-- [ ] **OLLM-05**: Implements `Livekit.Agents.LLM` behaviour
-- [ ] **OLLM-06**: Mock mode for testing without API key
+- [x] **OLLM-01**: Real HTTP POST to OpenAI `/v1/chat/completions`
+- [x] **OLLM-02**: SSE streaming response parsing for real-time text generation
+- [x] **OLLM-03**: Function/tool calling support with schema translation
+- [x] **OLLM-04**: Conversation history management with token-aware truncation
+- [x] **OLLM-05**: Implements `Livekit.Agents.LLM` behaviour
+- [x] **OLLM-06**: Mock mode for testing without API key
 
 ### OpenAI TTS Provider
 
@@ -150,12 +150,12 @@
 | DSTT-04 | Phase 4 | Complete |
 | DSTT-05 | Phase 4 | Complete |
 | DSTT-06 | Phase 4 | Complete |
-| OLLM-01 | Phase 5 | Pending |
-| OLLM-02 | Phase 5 | Pending |
-| OLLM-03 | Phase 5 | Pending |
-| OLLM-04 | Phase 5 | Pending |
-| OLLM-05 | Phase 5 | Pending |
-| OLLM-06 | Phase 5 | Pending |
+| OLLM-01 | Phase 5 | Complete |
+| OLLM-02 | Phase 5 | Complete |
+| OLLM-03 | Phase 5 | Complete |
+| OLLM-04 | Phase 5 | Complete |
+| OLLM-05 | Phase 5 | Complete |
+| OLLM-06 | Phase 5 | Complete |
 | OTTS-01 | Phase 6 | Pending |
 | OTTS-02 | Phase 6 | Pending |
 | OTTS-03 | Phase 6 | Pending |

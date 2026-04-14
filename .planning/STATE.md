@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.1.4
 milestone_name: milestone
 status: verifying
-stopped_at: Completed 04-deepgram-stt-03-PLAN.md
-last_updated: "2026-04-14T11:00:10.183Z"
+stopped_at: Completed 05-openai-llm/05-01-PLAN.md
+last_updated: "2026-04-14T11:15:19.767Z"
 last_activity: 2026-04-14
 progress:
   total_phases: 9
   completed_phases: 4
-  total_plans: 10
+  total_plans: 12
   completed_plans: 10
-  percent: 100
+  percent: 83
 ---
 
 # Project State
@@ -62,6 +62,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 04-deepgram-stt P01 | 3 | 2 tasks | 3 files |
 | Phase 04-deepgram-stt P02 | 35 | 2 tasks | 2 files |
 | Phase 04-deepgram-stt P03 | 208 | 2 tasks | 5 files |
+| Phase 05-openai-llm P01 | 397 | 1 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -92,6 +93,9 @@ Recent decisions affecting current work:
 - [Phase 04-deepgram-stt]: Mock streaming mode implemented as live GenServer with :mock_done cast, ensuring stream/1 always returns {:ok, pid}
 - [Phase 04-deepgram-stt]: DeepgramStream uses async :connect init pattern to avoid blocking GenServer start
 - [Phase 04-deepgram-stt]: Added base_url to Deepgram.Config to enable Bypass-based HTTP testing without env vars
+- [Phase 05-openai-llm]: SSE streaming via raw body split on newlines — no true chunked streaming without custom adapter
+- [Phase 05-openai-llm]: Token truncation uses item count (max_tokens as upper bound) rather than per-token counting
+- [Phase 05-openai-llm]: build_client/1 omits Tesla.Middleware.Logger to prevent Bearer token leakage in logs
 
 ### Pending Todos
 
@@ -103,6 +107,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-14T11:00:10.180Z
-Stopped at: Completed 04-deepgram-stt-03-PLAN.md
+Last session: 2026-04-14T11:15:19.764Z
+Stopped at: Completed 05-openai-llm/05-01-PLAN.md
 Resume file: None
