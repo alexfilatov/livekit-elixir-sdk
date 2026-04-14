@@ -31,6 +31,7 @@ defmodule Livekit.Agents.STT.Deepgram do
 
   require Logger
 
+  alias Livekit.Agents.STT.DeepgramStream
   alias Livekit.Agents.STT.SpeechEvent
 
   # --- Config struct ---
@@ -129,6 +130,37 @@ defmodule Livekit.Agents.STT.Deepgram do
       true ->
         do_transcribe(audio, config)
     end
+  end
+
+  @doc """
+  Starts a streaming transcription session.
+
+  Returns `{:ok, stream_pid}` where `stream_pid` is a `DeepgramStream` process
+  that sends `{:speech_event, %SpeechEvent{}}` messages to the calling process.
+
+  In mock mode (config.mock: true or no api_key), returns a synthetic stream
+  that emits start → interim → final → end events with a small delay.
+
+  ## Usage
+
+      config = %Livekit.Agents.STT.Deepgram.Config{api_key: "...", mock: false}
+      {:ok, stream_pid} = Livekit.Agents.STT.Deepgram.stream(config)
+
+      # Send audio
+      Livekit.Agents.STT.DeepgramStream.send_audio(stream_pid, audio_binary)
+
+      # Receive events
+      receive do
+        {:speech_event, event} -> IO.inspect(event)
+      end
+
+      # Close when done
+      Livekit.Agents.STT.DeepgramStream.finish(stream_pid)
+  """
+  @impl Livekit.Agents.STT
+  @spec stream(Config.t()) :: {:ok, pid()} | {:error, term()}
+  def stream(%Config{} = config) do
+    DeepgramStream.start_link({config, self()})
   end
 
   # --- Private helpers ---
