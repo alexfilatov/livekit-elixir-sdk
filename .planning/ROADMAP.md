@@ -79,7 +79,11 @@ Plans:
   3. Audio shorter than the configured minimum duration is buffered before sending to avoid empty-result responses
   4. All Deepgram calls pass `mix test` without a real API key when configured in mock mode
   5. The Deepgram module passes `Livekit.Agents.STT` behaviour verification at compile time
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [x] 04-01-PLAN.md — Refactor deepgram.ex to implement @behaviour STT; real Tesla HTTP batch transcription; AudioBuffer helper; mock mode
+- [ ] 04-02-PLAN.md — DeepgramStream GenServer (Gun WebSocket); interim/final results; stream/1 callback on Deepgram module
+- [ ] 04-03-PLAN.md — Full ExUnit test suite: AudioBuffer unit tests, Deepgram HTTP tests (Bypass), DeepgramStream mock streaming tests
 
 ### Phase 5: OpenAI LLM
 **Goal**: Real OpenAI LLM provider with SSE streaming, tool calling support, and token-aware conversation truncation
@@ -154,7 +158,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 | 1. Provider Behaviours | 3/3 | Complete   | 2026-04-14 |
 | 2. Chat Context | 2/2 | Complete   | 2026-04-14 |
 | 3. Tool System | 2/2 | Complete   | 2026-04-14 |
-| 4. Deepgram STT | 0/? | Not started | - |
+| 4. Deepgram STT | 1/3 | In Progress|  |
 | 5. OpenAI LLM | 0/? | Not started | - |
 | 6. OpenAI TTS | 0/? | Not started | - |
 | 7. Voice Pipeline | 0/? | Not started | - |

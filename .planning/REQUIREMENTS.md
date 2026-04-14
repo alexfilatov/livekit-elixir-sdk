@@ -32,12 +32,12 @@
 
 ### Deepgram STT Provider
 
-- [ ] **DSTT-01**: Real HTTP POST to Deepgram `/v1/listen` for batch transcription
+- [x] **DSTT-01**: Real HTTP POST to Deepgram `/v1/listen` for batch transcription
 - [ ] **DSTT-02**: Real WebSocket connection to Deepgram for streaming transcription
 - [ ] **DSTT-03**: Support interim results and final transcripts in streaming mode
-- [ ] **DSTT-04**: Audio buffering with configurable minimum duration before send
-- [ ] **DSTT-05**: Implements `Livekit.Agents.STT` behaviour
-- [ ] **DSTT-06**: Mock mode for testing without API key
+- [x] **DSTT-04**: Audio buffering with configurable minimum duration before send
+- [x] **DSTT-05**: Implements `Livekit.Agents.STT` behaviour
+- [x] **DSTT-06**: Mock mode for testing without API key
 
 ### OpenAI LLM Provider
 
@@ -144,12 +144,12 @@
 | TOOL-03 | Phase 3 | Complete |
 | TOOL-04 | Phase 3 | Complete |
 | TOOL-05 | Phase 3 | Complete |
-| DSTT-01 | Phase 4 | Pending |
+| DSTT-01 | Phase 4 | Complete |
 | DSTT-02 | Phase 4 | Pending |
 | DSTT-03 | Phase 4 | Pending |
-| DSTT-04 | Phase 4 | Pending |
-| DSTT-05 | Phase 4 | Pending |
-| DSTT-06 | Phase 4 | Pending |
+| DSTT-04 | Phase 4 | Complete |
+| DSTT-05 | Phase 4 | Complete |
+| DSTT-06 | Phase 4 | Complete |
 | OLLM-01 | Phase 5 | Pending |
 | OLLM-02 | Phase 5 | Pending |
 | OLLM-03 | Phase 5 | Pending |
