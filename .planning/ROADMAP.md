@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Chat Context** - Typed message structs and the ChatContext module for conversation history management (completed 2026-04-14)
 - [x] **Phase 3: Tool System** - Tool specification, JSON schema generation, and the LLM function-calling execution loop (completed 2026-04-14)
 - [x] **Phase 4: Deepgram STT** - Real Deepgram provider: batch HTTP and streaming WebSocket transcription (completed 2026-04-14)
-- [ ] **Phase 5: OpenAI LLM** - Real OpenAI provider: chat completions with SSE streaming and tool calling
+- [x] **Phase 5: OpenAI LLM** - Real OpenAI provider: chat completions with SSE streaming and tool calling (completed 2026-04-14)
 - [ ] **Phase 6: OpenAI TTS** - Real OpenAI provider: audio synthesis with voice/format options and response caching
 - [ ] **Phase 7: Voice Pipeline** - Streaming STT -> LLM -> TTS pipeline with VAD, turn detection, and interruption handling
 - [ ] **Phase 8: State & Events** - User and agent state machines, typed events, :telemetry integration, and Registry pub/sub
@@ -90,12 +90,15 @@ Plans:
 **Depends on**: Phase 1, Phase 2, Phase 3
 **Requirements**: OLLM-01, OLLM-02, OLLM-03, OLLM-04, OLLM-05, OLLM-06, TEST-03
 **Success Criteria** (what must be TRUE):
-  1. Calling `complete/2` sends a POST to `/v1/chat/completions` and returns a `ChatMessage` with the assistant reply
+  1. Calling `chat/2` sends a POST to `/v1/chat/completions` and returns a `ChatMessage` with the assistant reply
   2. Streaming mode delivers partial text tokens to the caller as they arrive via SSE
   3. When the model requests a tool call, the provider formats the call and returns it as a `FunctionCall` struct
   4. `ChatContext` passed to the provider is automatically truncated to fit within the model's token limit
   5. All OpenAI LLM calls pass `mix test` without a real API key when configured in mock mode
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [x] 05-01-PLAN.md — Refactor openai.ex to pure functional @behaviour LLM; chat/2 HTTP POST; stream/2 SSE; tool call parsing; token truncation; mock mode
+- [x] 05-02-PLAN.md — Full ExUnit test suite: mock mode tests, Bypass HTTP tests, SSE streaming tests, message serialization tests
 
 ### Phase 6: OpenAI TTS
 **Goal**: Real OpenAI TTS provider with configurable voices, audio format support, and response caching
@@ -159,7 +162,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 | 2. Chat Context | 2/2 | Complete   | 2026-04-14 |
 | 3. Tool System | 2/2 | Complete   | 2026-04-14 |
 | 4. Deepgram STT | 3/3 | Complete   | 2026-04-14 |
-| 5. OpenAI LLM | 0/? | Not started | - |
+| 5. OpenAI LLM | 2/2 | Complete   | 2026-04-14 |
 | 6. OpenAI TTS | 0/? | Not started | - |
 | 7. Voice Pipeline | 0/? | Not started | - |
 | 8. State & Events | 0/? | Not started | - |
