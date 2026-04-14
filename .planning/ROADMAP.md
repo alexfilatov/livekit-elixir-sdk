@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Provider Behaviours** - Define the STT, TTS, LLM, and VAD contracts that all providers must implement (completed 2026-04-14)
 - [x] **Phase 2: Chat Context** - Typed message structs and the ChatContext module for conversation history management (completed 2026-04-14)
-- [ ] **Phase 3: Tool System** - Tool specification, JSON schema generation, and the LLM function-calling execution loop
+- [x] **Phase 3: Tool System** - Tool specification, JSON schema generation, and the LLM function-calling execution loop (completed 2026-04-14)
 - [ ] **Phase 4: Deepgram STT** - Real Deepgram provider: batch HTTP and streaming WebSocket transcription
 - [ ] **Phase 5: OpenAI LLM** - Real OpenAI provider: chat completions with SSE streaming and tool calling
 - [ ] **Phase 6: OpenAI TTS** - Real OpenAI provider: audio synthesis with voice/format options and response caching
@@ -67,7 +67,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [x] 03-01-PLAN.md — ToolSpec + ToolContext + ToolError structs; Tool.run/3 execution loop with max_tool_steps cap and error isolation
-- [ ] 03-02-PLAN.md — Full ExUnit test suite for all TOOL-0x requirements; 100% coverage gate
+- [x] 03-02-PLAN.md — Full ExUnit test suite for all TOOL-0x requirements; 100% coverage gate
 
 ### Phase 4: Deepgram STT
 **Goal**: Real Deepgram provider that implements the STT behaviour for both batch HTTP and streaming WebSocket transcription
@@ -153,7 +153,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 |-------|----------------|--------|-----------|
 | 1. Provider Behaviours | 3/3 | Complete   | 2026-04-14 |
 | 2. Chat Context | 2/2 | Complete   | 2026-04-14 |
-| 3. Tool System | 0/2 | Not started | - |
+| 3. Tool System | 2/2 | Complete   | 2026-04-14 |
 | 4. Deepgram STT | 0/? | Not started | - |
 | 5. OpenAI LLM | 0/? | Not started | - |
 | 6. OpenAI TTS | 0/? | Not started | - |
