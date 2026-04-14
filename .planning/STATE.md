@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.1.4
 milestone_name: milestone
 status: executing
-stopped_at: Completed 09-worker-infrastructure-01-PLAN.md
-last_updated: "2026-04-14T12:35:08.684Z"
+stopped_at: Completed 10-livebook-showcases-02-PLAN.md
+last_updated: "2026-04-14T15:28:19.161Z"
 last_activity: 2026-04-14
 progress:
-  total_phases: 9
-  completed_phases: 8
-  total_plans: 21
-  completed_plans: 20
-  percent: 95
+  total_phases: 10
+  completed_phases: 9
+  total_plans: 24
+  completed_plans: 22
+  percent: 92
 ---
 
 # Project State
@@ -21,12 +21,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-14)
 
 **Core value:** A developer can build and deploy a working voice AI agent using only Elixir — connecting to a LiveKit room, transcribing speech, generating responses via LLM, and speaking back — with real provider integrations, not mocks.
-**Current focus:** Phase 09 — worker-infrastructure
+**Current focus:** Phase 10 — livebook-showcases
 
 ## Current Position
 
-Phase: 09 (worker-infrastructure) — EXECUTING
-Plan: 2 of 2
+Phase: 10 (livebook-showcases) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
 Last activity: 2026-04-14
 
@@ -71,6 +71,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 08-state-events P01 | 135 | 3 tasks | 4 files |
 | Phase 08-state-events P02 | 280 | 2 tasks | 4 files |
 | Phase 09-worker-infrastructure P01 | 3 | 2 tasks | 5 files |
+| Phase 10-livebook-showcases P02 | 160 | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -118,6 +119,7 @@ Recent decisions affecting current work:
 - [Phase 09-01]: JSON text frames over WebSocket (not binary protobuf) to enable mock inspection without full protobuf dependency
 - [Phase 09-01]: drain/1 uses deferred GenServer reply pattern: handle_call returns :noreply, reply sent from DOWN handler when all jobs finish
 - [Phase 09-01]: register_worker/1 public API removed; Worker self-registers on WebSocket upgrade
+- [Phase 10-livebook-showcases]: API keys use Kino.Input password fields; mock mode in every livebook
 
 ### Pending Todos
 
@@ -129,6 +131,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-14T12:35:08.681Z
-Stopped at: Completed 09-worker-infrastructure-01-PLAN.md
+Last session: 2026-04-14T15:28:19.158Z
+Stopped at: Completed 10-livebook-showcases-02-PLAN.md
 Resume file: None

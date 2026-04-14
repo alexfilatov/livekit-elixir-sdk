@@ -172,7 +172,7 @@ Plans:
 
 Plans:
 - [ ] 10-01-PLAN.md — Livebooks 01-03: provider behaviours, chat context, tool calling (no API keys)
-- [ ] 10-02-PLAN.md — Livebooks 04-06: Deepgram STT, OpenAI LLM, OpenAI TTS (API keys + mock mode)
+- [x] 10-02-PLAN.md — Livebooks 04-06: Deepgram STT, OpenAI LLM, OpenAI TTS (API keys + mock mode)
 - [ ] 10-03-PLAN.md — Livebooks 07-09: voice pipeline, state/events, worker infrastructure (no API keys)
 
 ## Progress
@@ -191,4 +191,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 7. Voice Pipeline | 3/3 | Complete   | 2026-04-14 |
 | 8. State & Events | 2/2 | Complete   | 2026-04-14 |
 | 9. Worker Infrastructure | 1/2 | In Progress|  |
-| 10. Livebook Showcases | 0/3 | Planned    |  |
+| 10. Livebook Showcases | 1/3 | In Progress|  |
