@@ -1,0 +1,309 @@
+# OpenAI TTS: Text-to-Speech with All Voices
+
+`Livekit.Agents.TTS.OpenAI` implements the `Livekit.Agents.TTS` behaviour using
+OpenAI's `/v1/audio/speech` endpoint. It supports six distinct voices, five audio formats,
+configurable speech speed, and an internal response cache to avoid re-synthesizing
+identical text.
+
+This livebook requires an **OpenAI API key**. A mock mode section at the bottom
+generates synthetic audio without any API calls.
+
+## Setup
+
+```elixir
+Mix.install([
+  {:livekit, path: Path.join(__DIR__, "../../..")},
+  {:kino, "~> 0.14"}
+])
+
+alias Livekit.Agents.TTS.OpenAI, as: OpenAITTS
+```
+
+## Configuration
+
+```elixir
+api_key_input = Kino.Input.text("OpenAI API Key", type: :password)
+voice_input = Kino.Input.select("Voice", [
+  {:alloy, "Alloy — neutral, versatile"},
+  {:echo, "Echo — male, balanced"},
+  {:fable, "Fable — British, narrative"},
+  {:onyx, "Onyx — male, deep"},
+  {:nova, "Nova — female, warm"},
+  {:shimmer, "Shimmer — female, clear"}
+], default: :alloy)
+```
+
+```elixir
+openai_key = Kino.Input.read(api_key_input)
+voice = Kino.Input.read(voice_input)
+
+if openai_key == "" do
+  IO.puts("No API key entered — live TTS cells will be skipped.")
+  IO.puts("Scroll to the Mock Mode section to run without a key.")
+end
+
+IO.puts("Voice selected: #{voice}")
+```
+
+## Inspecting Capabilities
+
+```elixir
+IO.inspect(OpenAITTS.capabilities(), label: "OpenAI TTS capabilities")
+```
+
+Expected output:
+- `voices: ["alloy", "echo", "fable", "onyx", "nova", "shimmer"]`
+- `audio_formats: [:pcm, :mp3, :opus, :aac, :flac]`
+- `streaming: false` — batch synthesis (streaming can be layered with stream/1)
+- `word_timing: false` — no per-word timestamps
+
+## Basic Synthesis
+
+`synthesize/2` sends text to OpenAI and returns raw audio bytes in the requested format.
+The default format is `:pcm` (raw linear-16, 24kHz, mono) — ready for direct playback
+or piping into a LiveKit room track.
+
+```elixir
+if openai_key != "" do
+  config = %{
+    api_key: openai_key,
+    voice: voice,
+    model: :tts_1,
+    response_format: :mp3,
+    speed: 1.0
+  }
+
+  text = "Hello! I am your LiveKit voice agent, ready to assist you."
+
+  IO.puts("Synthesizing with voice #{voice}...")
+  start = System.monotonic_time(:millisecond)
+
+  case OpenAITTS.synthesize(text, config: config) do
+    {:ok, audio_bytes} ->
+      elapsed = System.monotonic_time(:millisecond) - start
+      IO.puts("Audio produced: #{byte_size(audio_bytes)} bytes (#{elapsed} ms)")
+      IO.puts("Format: MP3")
+
+    {:error, reason} ->
+      IO.puts("Error: #{inspect(reason)}")
+  end
+else
+  IO.puts("(skipped — no API key)")
+end
+```
+
+## Comparing All Six Voices
+
+Run all six voices on the same sentence to hear the difference.
+This makes six API calls — be mindful of your usage quota.
+
+```elixir
+if openai_key != "" do
+  voices = [:alloy, :echo, :fable, :onyx, :nova, :shimmer]
+  sample_text = "The quick brown fox jumps over the lazy dog."
+
+  IO.puts("Synthesizing with all six voices:\n")
+
+  Enum.each(voices, fn v ->
+    config = %{api_key: openai_key, voice: v, model: :tts_1, response_format: :mp3}
+
+    case OpenAITTS.synthesize(sample_text, config: config) do
+      {:ok, audio} ->
+        IO.puts("  #{v}: #{byte_size(audio)} bytes")
+      {:error, reason} ->
+        IO.puts("  #{v}: error — #{inspect(reason)}")
+    end
+  end)
+else
+  IO.puts("(skipped — no API key)")
+end
+```
+
+## Audio Formats
+
+The TTS provider supports five output formats. Choose based on your use case:
+
+| Format | Use Case |
+|--------|----------|
+| `:pcm` | LiveKit room audio track, lowest latency (no decoding) |
+| `:mp3` | Web playback, smallest file size |
+| `:opus` | WebRTC streams, low-bandwidth |
+| `:aac` | iOS/macOS native playback |
+| `:flac` | Lossless archiving |
+
+```elixir
+if openai_key != "" do
+  formats = [:pcm, :mp3, :opus, :aac, :flac]
+  text = "Audio format comparison."
+
+  IO.puts("Format comparison (same text, different encoding):\n")
+
+  Enum.each(formats, fn fmt ->
+    config = %{api_key: openai_key, voice: :alloy, model: :tts_1, response_format: fmt}
+
+    case OpenAITTS.synthesize(text, config: config) do
+      {:ok, audio} -> IO.puts("  #{fmt}: #{byte_size(audio)} bytes")
+      {:error, r} -> IO.puts("  #{fmt}: error — #{inspect(r)}")
+    end
+  end)
+else
+  IO.puts("(skipped — no API key)")
+end
+```
+
+## Model Quality: tts_1 vs tts_1_hd
+
+OpenAI offers two quality tiers. `tts_1` is optimized for low latency. `tts_1_hd`
+produces higher-fidelity audio at roughly double the synthesis time.
+
+```elixir
+if openai_key != "" do
+  text = "This is a quality comparison between the standard and high-definition models."
+
+  Enum.each([:tts_1, :tts_1_hd], fn model ->
+    config = %{api_key: openai_key, voice: :nova, model: model, response_format: :mp3}
+    start = System.monotonic_time(:millisecond)
+
+    case OpenAITTS.synthesize(text, config: config) do
+      {:ok, audio} ->
+        elapsed = System.monotonic_time(:millisecond) - start
+        IO.puts("#{model}: #{byte_size(audio)} bytes in #{elapsed} ms")
+      {:error, r} ->
+        IO.puts("#{model}: error — #{inspect(r)}")
+    end
+  end)
+else
+  IO.puts("(skipped — no API key)")
+end
+```
+
+## Speech Speed
+
+The `speed` parameter accepts values from `0.25` (very slow) to `4.0` (very fast).
+Default is `1.0`.
+
+```elixir
+if openai_key != "" do
+  text = "This sentence is spoken at different speeds."
+  speeds = [0.75, 1.0, 1.25, 1.5]
+
+  IO.puts("Speed comparison:\n")
+
+  Enum.each(speeds, fn speed ->
+    config = %{api_key: openai_key, voice: :alloy, model: :tts_1, response_format: :mp3, speed: speed}
+
+    case OpenAITTS.synthesize(text, config: config) do
+      {:ok, audio} -> IO.puts("  speed #{speed}: #{byte_size(audio)} bytes")
+      {:error, r} -> IO.puts("  speed #{speed}: error — #{inspect(r)}")
+    end
+  end)
+else
+  IO.puts("(skipped — no API key)")
+end
+```
+
+## Response Caching
+
+The provider caches synthesized audio in an internal Agent keyed by `{text, voice, format,
+speed}`. The second call with the same parameters returns immediately from cache, saving
+both latency and API quota.
+
+The cache TTL defaults to 300 seconds (5 minutes). After TTL expiry the entry is evicted
+and a fresh API call is made.
+
+```elixir
+if openai_key != "" do
+  config = %{api_key: openai_key, voice: :alloy, model: :tts_1, response_format: :mp3}
+  text = "Caching this sentence."
+
+  # First call — hits the API
+  t0 = System.monotonic_time(:millisecond)
+  {:ok, audio1} = OpenAITTS.synthesize(text, config: config)
+  t1 = System.monotonic_time(:millisecond)
+  IO.puts("First call:  #{byte_size(audio1)} bytes in #{t1 - t0} ms (API call)")
+
+  # Second call — should return from cache
+  t2 = System.monotonic_time(:millisecond)
+  {:ok, audio2} = OpenAITTS.synthesize(text, config: config)
+  t3 = System.monotonic_time(:millisecond)
+  IO.puts("Second call: #{byte_size(audio2)} bytes in #{t3 - t2} ms (from cache)")
+
+  IO.puts("Results identical: #{audio1 == audio2}")
+else
+  IO.puts("(skipped — no API key)")
+end
+```
+
+## Mock Mode — No API Key Required
+
+Mock mode returns a sine-wave PCM audio snippet without any API calls. The generated
+audio is proportional to the text length and can be used for timing tests.
+
+```elixir
+mock_config = %{
+  api_key: "unused",
+  voice: :alloy,
+  model: :tts_1,
+  response_format: :pcm,
+  mock_mode: true
+}
+
+{:ok, mock_audio} = OpenAITTS.synthesize("Hello from mock mode!", config: mock_config)
+
+IO.puts("Mock audio: #{byte_size(mock_audio)} bytes (PCM)")
+IO.puts("Mock format: raw 16-bit PCM, 24kHz mono")
+IO.puts("Mock content: synthetic sine wave proportional to text length")
+
+# Different lengths produce different audio sizes
+texts = [
+  "Short.",
+  "A medium-length sentence for comparison.",
+  "A much longer sentence that should produce proportionally more synthetic audio bytes in mock mode."
+]
+
+Enum.each(texts, fn text ->
+  {:ok, audio} = OpenAITTS.synthesize(text, config: mock_config)
+  IO.puts("  #{String.length(text)} chars -> #{byte_size(audio)} bytes")
+end)
+```
+
+## Using TTS in the Voice Pipeline
+
+Plug the TTS provider into `Pipeline.Config` as the `:tts` provider:
+
+```elixir
+alias Livekit.Agents.Pipeline
+
+pipeline_snippet = """
+config = %Pipeline.Config{
+  stt: {Livekit.Agents.STT.Deepgram, %{api_key: "...", model: "nova-2"}},
+  llm: {Livekit.Agents.LLM.OpenAI, %{api_key: "...", model: "gpt-4o-mini"}},
+  tts: {Livekit.Agents.TTS.OpenAI, %{
+    api_key: "YOUR_OPENAI_KEY",
+    voice: :nova,
+    model: :tts_1,
+    response_format: :pcm,
+    speed: 1.0
+  }},
+  subscriber: self()  # receives {:pipeline_audio, %AudioFrame{}} messages
+}
+
+{:ok, pid} = Pipeline.start_link(config)
+"""
+
+IO.puts("Voice pipeline config snippet:\n#{pipeline_snippet}")
+```
+
+## Summary
+
+You now know how to:
+
+- Configure `Livekit.Agents.TTS.OpenAI` with voice, model, format, and speed settings
+- Use all six voices (alloy, echo, fable, onyx, nova, shimmer)
+- Select audio formats optimized for different use cases (PCM, MP3, Opus, AAC, FLAC)
+- Compare `tts_1` (low latency) vs `tts_1_hd` (high fidelity) quality tiers
+- Leverage the built-in response cache to avoid redundant API calls
+- Use mock mode for local development and tests without API calls
+- Plug OpenAI TTS into the voice pipeline
+
+Next: `07_voice_pipeline.livemd` — the full STT -> LLM -> TTS pipeline with mock providers.

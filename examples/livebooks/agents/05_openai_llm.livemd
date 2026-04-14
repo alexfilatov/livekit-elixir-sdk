@@ -1,0 +1,340 @@
+# OpenAI LLM: Chat Completions and Streaming
+
+`Livekit.Agents.LLM.OpenAI` implements the `Livekit.Agents.LLM` behaviour using
+OpenAI's chat completions API. It supports both batch and Server-Sent Events (SSE)
+streaming, handles tool calling, and automatically truncates `ChatContext` to stay
+within the model's token limit.
+
+This livebook requires an **OpenAI API key**. A mock mode section at the bottom
+runs without one.
+
+## Setup
+
+```elixir
+Mix.install([
+  {:livekit, path: Path.join(__DIR__, "../../..")},
+  {:kino, "~> 0.14"}
+])
+
+alias Livekit.Agents.LLM.OpenAI
+alias Livekit.Agents.LLM.LLMChunk
+alias Livekit.Agents.ChatContext
+alias Livekit.Agents.ChatContext.ChatMessage
+alias Livekit.Agents.Tool
+alias Livekit.Agents.Tool.{ToolSpec, ToolContext}
+```
+
+## Configuration
+
+```elixir
+api_key_input = Kino.Input.text("OpenAI API Key", type: :password)
+model_input = Kino.Input.select("Model", [
+  {"gpt-4o-mini", "GPT-4o Mini (fast, cheap — good for demos)"},
+  {"gpt-4o", "GPT-4o (best accuracy)"},
+  {"gpt-3.5-turbo", "GPT-3.5 Turbo (legacy)"}
+], default: "gpt-4o-mini")
+```
+
+```elixir
+openai_key = Kino.Input.read(api_key_input)
+model = Kino.Input.read(model_input)
+
+if openai_key == "" do
+  IO.puts("No API key entered — live LLM cells will be skipped.")
+  IO.puts("Scroll to the Mock Mode section to run without a key.")
+end
+
+IO.puts("Model selected: #{model}")
+IO.puts("Key configured: #{if openai_key != "", do: "yes", else: "no"}")
+```
+
+## Inspecting Capabilities
+
+```elixir
+IO.inspect(OpenAI.capabilities(), label: "OpenAI LLM capabilities")
+```
+
+Expected output:
+- `streaming: true` — supports SSE streaming via `stream/2`
+- `tool_calling: true` — supports OpenAI function calling
+- `vision: false` — image inputs not yet wired
+- `max_context_tokens: 128_000` — GPT-4o context window
+
+## Building a Conversation
+
+`chat/2` accepts a `ChatContext` and returns a `ChatMessage` with `role: :assistant`.
+
+```elixir
+base_config = %{
+  api_key: openai_key,
+  model: model,
+  temperature: 0.7,
+  max_tokens: 256
+}
+
+if openai_key != "" do
+  ctx =
+    ChatContext.new()
+    |> ChatContext.add(ChatContext.new_message(:system, [
+      "You are a helpful assistant. Keep responses to one sentence."
+    ]))
+    |> ChatContext.add(ChatContext.new_message(:user, [
+      "What is the capital of Japan?"
+    ]))
+
+  IO.puts("Sending to OpenAI (#{model})...")
+
+  case OpenAI.chat(ctx, config: base_config) do
+    {:ok, %ChatMessage{role: role, content: content}} ->
+      IO.puts("Role: #{role}")
+      IO.puts("Content: #{Enum.join(content, " ")}")
+    {:error, reason} ->
+      IO.puts("Error: #{inspect(reason)}")
+  end
+else
+  IO.puts("(skipped — no API key)")
+end
+```
+
+## Multi-Turn Conversation
+
+Append the assistant reply to the context and continue the dialogue. The LLM sees the
+full history on each call, enabling coherent multi-turn conversations.
+
+```elixir
+if openai_key != "" do
+  ctx =
+    ChatContext.new()
+    |> ChatContext.add(ChatContext.new_message(:system, [
+      "You are a geography tutor. Be concise."
+    ]))
+    |> ChatContext.add(ChatContext.new_message(:user, ["Name one country in Southeast Asia."]))
+
+  # First turn
+  {:ok, reply1} = OpenAI.chat(ctx, config: base_config)
+  ctx = ChatContext.add(ctx, reply1)
+  IO.puts("Turn 1 — Assistant: #{Enum.join(reply1.content, " ")}")
+
+  # Second turn: follow-up referencing the first answer
+  ctx = ChatContext.add(ctx, ChatContext.new_message(:user, ["What is its capital city?"]))
+  {:ok, reply2} = OpenAI.chat(ctx, config: base_config)
+  ctx = ChatContext.add(ctx, reply2)
+  IO.puts("Turn 2 — Assistant: #{Enum.join(reply2.content, " ")}")
+
+  # Third turn
+  ctx = ChatContext.add(ctx, ChatContext.new_message(:user, ["And what language is spoken there?"]))
+  {:ok, reply3} = OpenAI.chat(ctx, config: base_config)
+  IO.puts("Turn 3 — Assistant: #{Enum.join(reply3.content, " ")}")
+
+  IO.puts("\nTotal context items: #{length(ctx.items)}")
+else
+  IO.puts("(skipped — no API key)")
+end
+```
+
+## Streaming Responses
+
+`stream/2` delivers tokens as they arrive via SSE, sending `{:llm_chunk, %LLMChunk{}}`
+messages to the calling process. This eliminates the wait for full completion and enables
+progressive UI updates.
+
+```elixir
+if openai_key != "" do
+  stream_config = %{
+    api_key: openai_key,
+    model: model,
+    temperature: 0.5,
+    max_tokens: 100
+  }
+
+  ctx =
+    ChatContext.new()
+    |> ChatContext.add(ChatContext.new_message(:user, [
+      "Count from one to five, one number per word."
+    ]))
+
+  IO.puts("Streaming from OpenAI (tokens as they arrive):")
+  IO.write("  ")
+
+  {:ok, _stream_pid} = OpenAI.stream(ctx, config: stream_config)
+
+  # Collect chunks until :done
+  full_text =
+    Stream.repeatedly(fn ->
+      receive do
+        {:llm_chunk, %LLMChunk{type: :text, content: text}} ->
+          IO.write(text)
+          {:text, text}
+        {:llm_chunk, %LLMChunk{type: :done}} ->
+          nil
+        {:llm_chunk, other} ->
+          {:other, other}
+      after
+        10_000 -> nil
+      end
+    end)
+    |> Stream.take_while(&(&1 != nil))
+    |> Enum.reduce("", fn
+      {:text, t}, acc -> acc <> t
+      _, acc -> acc
+    end)
+
+  IO.puts("\n\nFull streamed response: #{inspect(full_text)}")
+else
+  IO.puts("(skipped — no API key)")
+end
+```
+
+## Tool Calling with OpenAI
+
+When OpenAI decides to call a tool, `chat/2` returns a `FunctionCall` struct instead of
+a `ChatMessage`. Use `Tool.run/3` to handle the complete multi-step loop automatically.
+
+```elixir
+if openai_key != "" do
+  time_tool = ToolSpec.new(
+    name: "get_current_time",
+    description: "Returns the current UTC time as an ISO 8601 string",
+    parameters: %{
+      "type" => "object",
+      "properties" => %{
+        "timezone" => %{
+          "type" => "string",
+          "description" => "Optional IANA timezone name, e.g. 'America/New_York'. Defaults to UTC."
+        }
+      },
+      "required" => []
+    },
+    handler: fn _args ->
+      time = DateTime.utc_now() |> DateTime.to_iso8601()
+      {:ok, "Current UTC time: #{time}"}
+    end
+  )
+
+  tool_ctx = ToolContext.new([time_tool])
+  tool_schemas = ToolContext.to_openai_tools(tool_ctx)
+
+  initial_ctx =
+    ChatContext.new()
+    |> ChatContext.add(ChatContext.new_message(:system, [
+      "You have access to a tool that returns the current time. Use it when asked."
+    ]))
+    |> ChatContext.add(ChatContext.new_message(:user, ["What time is it right now?"]))
+
+  tool_config = %{
+    api_key: openai_key,
+    model: model,
+    temperature: 0.0,
+    tools: tool_schemas
+  }
+
+  IO.puts("Running tool-calling loop with OpenAI...")
+
+  case Tool.run(OpenAI, initial_ctx, config: tool_config, tool_context: tool_ctx, max_tool_steps: 3) do
+    {:ok, final_ctx} ->
+      IO.puts("Final context (#{length(final_ctx.items)} items):")
+      Enum.each(final_ctx.items, fn item ->
+        case item do
+          %ChatMessage{role: r, content: c} -> IO.puts("  [#{r}] #{Enum.join(c, " ")}")
+          fc when is_struct(fc, Livekit.Agents.ChatContext.FunctionCall) ->
+            IO.puts("  [function_call] #{fc.name}")
+          fco when is_struct(fco, Livekit.Agents.ChatContext.FunctionCallOutput) ->
+            IO.puts("  [function_output] #{fco.output}")
+        end
+      end)
+    {:error, reason} ->
+      IO.puts("Error: #{inspect(reason)}")
+  end
+else
+  IO.puts("(skipped — no API key)")
+end
+```
+
+## Context Truncation
+
+The OpenAI provider automatically truncates the `ChatContext` when it approaches the
+model's token limit. System messages are always preserved. You can also call
+`ChatContext.truncate/2` manually before passing to the provider.
+
+```elixir
+if openai_key != "" do
+  # Build a very long context
+  long_ctx =
+    ChatContext.new()
+    |> ChatContext.add(ChatContext.new_message(:system, ["You are a concise assistant."]))
+
+  long_ctx =
+    Enum.reduce(1..50, long_ctx, fn i, acc ->
+      acc
+      |> ChatContext.add(ChatContext.new_message(:user, ["Turn #{i}: user question goes here"]))
+      |> ChatContext.add(ChatContext.new_message(:assistant, ["Turn #{i}: assistant answer goes here"]))
+    end)
+
+  IO.puts("Full context: #{length(long_ctx.items)} items")
+
+  # Manually truncate to last 10 non-system messages before calling the LLM
+  trimmed_ctx = ChatContext.truncate(long_ctx, 10)
+  IO.puts("After manual truncation: #{length(trimmed_ctx.items)} items")
+
+  trimmed_ctx = ChatContext.add(trimmed_ctx, ChatContext.new_message(:user, ["Continue!"]))
+
+  case OpenAI.chat(trimmed_ctx, config: base_config) do
+    {:ok, reply} -> IO.puts("Reply: #{Enum.join(reply.content, " ")}")
+    {:error, reason} -> IO.puts("Error: #{inspect(reason)}")
+  end
+else
+  IO.puts("(skipped — no API key)")
+end
+```
+
+## Mock Mode — No API Key Required
+
+```elixir
+mock_config = %{
+  api_key: "unused",
+  model: "mock-gpt",
+  mock_mode: true
+}
+
+ctx =
+  ChatContext.new()
+  |> ChatContext.add(ChatContext.new_message(:user, ["Hello!"]))
+
+{:ok, reply} = OpenAI.chat(ctx, config: mock_config)
+IO.puts("Mock reply: role=#{reply.role}, content=#{inspect(reply.content)}")
+```
+
+```elixir
+# Mock streaming
+mock_stream_config = %{api_key: "unused", model: "mock-gpt", mock_mode: true}
+ctx = ChatContext.new() |> ChatContext.add(ChatContext.new_message(:user, ["Test"]))
+
+{:ok, _} = OpenAI.stream(ctx, config: mock_stream_config)
+
+mock_chunks =
+  Stream.repeatedly(fn ->
+    receive do
+      {:llm_chunk, chunk} -> chunk
+    after
+      1000 -> nil
+    end
+  end)
+  |> Stream.take_while(&(&1 != nil))
+  |> Enum.to_list()
+
+IO.puts("Mock stream chunks: #{length(mock_chunks)}")
+Enum.each(mock_chunks, fn c -> IO.puts("  [#{c.type}] #{inspect(c.content)}") end)
+```
+
+## Summary
+
+You now know how to:
+
+- Configure `Livekit.Agents.LLM.OpenAI` with API key, model, and sampling parameters
+- Build multi-turn conversations with `ChatContext` and append replies to history
+- Use `stream/2` to receive tokens progressively as SSE chunks
+- Wire tool calling with `Tool.run/3` and `ToolContext`
+- Manage context size with `ChatContext.truncate/2`
+- Use mock mode for testing without API calls
+
+Next: `06_openai_tts.livemd` — text-to-speech with all six OpenAI voices.
