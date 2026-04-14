@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.1.4
 milestone_name: milestone
-status: executing
-stopped_at: Completed 02-chat-context-01-PLAN.md
-last_updated: "2026-04-14T10:05:08.623Z"
+status: verifying
+stopped_at: Completed 02-chat-context-02-PLAN.md
+last_updated: "2026-04-14T10:10:54.444Z"
 last_activity: 2026-04-14
 progress:
   total_phases: 9
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 5
-  completed_plans: 4
-  percent: 80
+  completed_plans: 5
+  percent: 100
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-14)
 
 Phase: 02 (chat-context) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-14
 
 Progress: [░░░░░░░░░░] 0%
@@ -56,6 +56,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01-provider-behaviours P02 | 15m | 2 tasks | 2 files |
 | Phase 01-provider-behaviours P03 | 239 | 2 tasks | 4 files |
 | Phase 02-chat-context P01 | 3 | 2 tasks | 1 files |
+| Phase 02-chat-context P02 | 3 | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -76,6 +77,8 @@ Recent decisions affecting current work:
 - [Phase 02-chat-context]: defimpl Jason.Encoder used (not @derive) for structs with DateTime.t() fields — @derive fails at encode time; DateTime.to_iso8601 required
 - [Phase 02-chat-context]: content is [String.t() | map()] list for multi-modal support — direct Jason round-trip without tagged tuples
 - [Phase 02-chat-context]: truncate/2 uses message-count (not token-count) — token-aware truncation deferred to Phase 5 OpenAI provider
+- [Phase 02-chat-context]: Jason encoding tests assert decoded map fields, not round-trip struct equality (string keys after decode)
+- [Phase 02-chat-context]: Used fixed DateTime sigil values in merge sort test to avoid ordering flakiness
 
 ### Pending Todos
 
@@ -87,6 +90,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-14T10:05:08.621Z
-Stopped at: Completed 02-chat-context-01-PLAN.md
+Last session: 2026-04-14T10:10:54.442Z
+Stopped at: Completed 02-chat-context-02-PLAN.md
 Resume file: None

@@ -13,7 +13,7 @@ Starting from the existing LiveKit Elixir SDK (v0.1.4, mock agent implementation
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Provider Behaviours** - Define the STT, TTS, LLM, and VAD contracts that all providers must implement (completed 2026-04-14)
-- [ ] **Phase 2: Chat Context** - Typed message structs and the ChatContext module for conversation history management
+- [x] **Phase 2: Chat Context** - Typed message structs and the ChatContext module for conversation history management (completed 2026-04-14)
 - [ ] **Phase 3: Tool System** - Tool specification, JSON schema generation, and the LLM function-calling execution loop
 - [ ] **Phase 4: Deepgram STT** - Real Deepgram provider: batch HTTP and streaming WebSocket transcription
 - [ ] **Phase 5: OpenAI LLM** - Real OpenAI provider: chat completions with SSE streaming and tool calling
@@ -53,7 +53,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [x] 02-01-PLAN.md — ChatMessage, FunctionCall, FunctionCallOutput nested structs + ChatContext operations (add, truncate, merge, copy) with Jason.Encoder implementations
-- [ ] 02-02-PLAN.md — Full ExUnit test suite for all CHAT-0x requirements; 100% coverage gate
+- [x] 02-02-PLAN.md — Full ExUnit test suite for all CHAT-0x requirements; 100% coverage gate
 
 ### Phase 3: Tool System
 **Goal**: Tool definitions with JSON schema generation and an execution loop that feeds function call results back to the LLM
@@ -149,7 +149,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Provider Behaviours | 3/3 | Complete   | 2026-04-14 |
-| 2. Chat Context | 1/2 | In Progress|  |
+| 2. Chat Context | 2/2 | Complete   | 2026-04-14 |
 | 3. Tool System | 0/? | Not started | - |
 | 4. Deepgram STT | 0/? | Not started | - |
 | 5. OpenAI LLM | 0/? | Not started | - |

@@ -86,7 +86,7 @@
 ### Testing
 
 - [x] **TEST-01**: 100% test coverage for all new behaviour modules
-- [ ] **TEST-02**: 100% test coverage for ChatContext and tool system
+- [x] **TEST-02**: 100% test coverage for ChatContext and tool system
 - [ ] **TEST-03**: 100% test coverage for all provider implementations (using mock mode)
 - [ ] **TEST-04**: 100% test coverage for pipeline, VAD, turn detection
 - [ ] **TEST-05**: 100% test coverage for state machines and events
@@ -138,7 +138,7 @@
 | CHAT-04 | Phase 2 | Complete |
 | CHAT-05 | Phase 2 | Complete |
 | CHAT-06 | Phase 2 | Complete |
-| TEST-02 | Phase 2 | Pending |
+| TEST-02 | Phase 2 | Complete |
 | TOOL-01 | Phase 3 | Pending |
 | TOOL-02 | Phase 3 | Pending |
 | TOOL-03 | Phase 3 | Pending |
