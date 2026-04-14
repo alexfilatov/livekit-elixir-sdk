@@ -33,15 +33,21 @@ jobs:
 
     - name: Install dependencies
       run: mix deps.get
+      env:
+        LIVEKIT_SKIP_NATIVE: "1"
 
     - name: Check formatting
       run: mix format --check-formatted
 
     - name: Run tests
-      run: mix test
+      run: mix test --exclude integration
+      env:
+        LIVEKIT_SKIP_NATIVE: "1"
 
     - name: Run Credo
       run: mix credo --strict
+      env:
+        LIVEKIT_SKIP_NATIVE: "1"
 
     - name: Check for unused dependencies
       run: mix deps.unlock --check-unused

@@ -2,15 +2,24 @@ defmodule Livekit.WebRTC.Native do
   @moduledoc """
   NIF bindings to the LiveKit WebRTC Rust client SDK.
 
-  This module is loaded automatically via `@on_load` when the application
-  starts. All functions raise `ErlangError` if the NIF is not loaded —
-  this should never happen in normal operation.
+  The NIF is compiled from `native/livekit_webrtc/` via Rustler.
+  If the Rust toolchain is not available (e.g. CI), the module still
+  compiles but all functions raise `:nif_not_loaded` at runtime.
+
+  Set `LIVEKIT_SKIP_NATIVE=1` to skip NIF compilation.
 
   Do not call these functions directly from application code; use
   `Livekit.WebRTC.Room` and `Livekit.WebRTC.AudioTrack` instead.
   """
 
-  use Rustler, otp_app: :livekit, crate: :livekit_webrtc
+  @skip_native System.get_env("LIVEKIT_SKIP_NATIVE") == "1"
+
+  if @skip_native do
+    @doc false
+    def __init__, do: :ok
+  else
+    use Rustler, otp_app: :livekit, crate: :livekit_webrtc
+  end
 
   # Room NIFs
   @doc "Connect to a LiveKit room. Returns an opaque room resource reference."
