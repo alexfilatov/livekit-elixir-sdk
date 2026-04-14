@@ -114,6 +114,27 @@ defmodule Livekit.Agents.Tool do
         }
       }
     end
+
+    @doc """
+    Converts the `ToolSpec` to an Anthropic tool schema map.
+
+    Output format:
+    ```json
+    {
+      "name": "get_weather",
+      "description": "Returns current weather for a city",
+      "input_schema": { ... }
+    }
+    ```
+    """
+    @spec to_anthropic_schema(t()) :: map()
+    def to_anthropic_schema(%__MODULE__{} = spec) do
+      %{
+        "name" => spec.name,
+        "description" => spec.description,
+        "input_schema" => spec.parameters
+      }
+    end
   end
 
   defmodule ToolContext do
@@ -168,6 +189,18 @@ defmodule Livekit.Agents.Tool do
       tools
       |> Map.values()
       |> Enum.map(&ToolSpec.to_openai_schema/1)
+    end
+
+    @doc """
+    Returns all tools as a list of Anthropic tool schema maps.
+
+    Pass the result directly to an Anthropic `tools:` parameter.
+    """
+    @spec to_anthropic_tools(t()) :: [map()]
+    def to_anthropic_tools(%__MODULE__{tools: tools}) do
+      tools
+      |> Map.values()
+      |> Enum.map(&ToolSpec.to_anthropic_schema/1)
     end
   end
 

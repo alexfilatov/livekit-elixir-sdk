@@ -284,7 +284,8 @@ defmodule Livekit.Agents.LLM.Anthropic do
   # Relevant types: "content_block_delta" (text tokens), "message_stop" (terminal)
   defp parse_sse_line("data: " <> json_str) do
     case Jason.decode(json_str) do
-      {:ok, %{"type" => "content_block_delta", "delta" => %{"type" => "text_delta", "text" => text}}}
+      {:ok,
+       %{"type" => "content_block_delta", "delta" => %{"type" => "text_delta", "text" => text}}}
       when is_binary(text) and text != "" ->
         {:text, text}
 
@@ -393,7 +394,11 @@ defmodule Livekit.Agents.LLM.Anthropic do
     }
   end
 
-  defp item_to_anthropic_message(%FunctionCallOutput{call_id: id, output: out, is_error: is_error}) do
+  defp item_to_anthropic_message(%FunctionCallOutput{
+         call_id: id,
+         output: out,
+         is_error: is_error
+       }) do
     content_block =
       if is_error do
         %{"type" => "tool_result", "tool_use_id" => id, "content" => out, "is_error" => true}
@@ -410,21 +415,18 @@ defmodule Livekit.Agents.LLM.Anthropic do
 
   defp merge_consecutive_same_role(messages) do
     messages
-    |> Enum.reduce([], fn msg, acc ->
-      case acc do
-        [] ->
-          [msg]
-
-        [prev | rest] ->
-          if prev["role"] == msg["role"] do
-            merged = merge_messages(prev, msg)
-            [merged | rest]
-          else
-            [msg | acc]
-          end
-      end
-    end)
+    |> Enum.reduce([], &merge_or_prepend/2)
     |> Enum.reverse()
+  end
+
+  defp merge_or_prepend(msg, []), do: [msg]
+
+  defp merge_or_prepend(msg, [prev | rest]) do
+    if prev["role"] == msg["role"] do
+      [merge_messages(prev, msg) | rest]
+    else
+      [msg | [prev | rest]]
+    end
   end
 
   defp merge_messages(%{"role" => role, "content" => prev_content}, %{"content" => new_content}) do
