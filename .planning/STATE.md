@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.1.4
 milestone_name: milestone
 status: executing
-stopped_at: Completed 07-voice-pipeline-01-PLAN.md
-last_updated: "2026-04-14T11:53:48.424Z"
+stopped_at: Completed 07-02-PLAN.md
+last_updated: "2026-04-14T11:57:40.612Z"
 last_activity: 2026-04-14
 progress:
   total_phases: 9
   completed_phases: 6
   total_plans: 17
-  completed_plans: 15
-  percent: 88
+  completed_plans: 16
+  percent: 94
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-14)
 ## Current Position
 
 Phase: 07 (voice-pipeline) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-04-14
 
@@ -66,6 +66,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 06-openai-tts P01 | 20 | 2 tasks | 3 files |
 | Phase 06-openai-tts P02 | 15 | 2 tasks | 2 files |
 | Phase 07-voice-pipeline P01 | 234 | 2 tasks | 4 files |
+| Phase 07-voice-pipeline P02 | 15 | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -103,6 +104,7 @@ Recent decisions affecting current work:
 - [Phase 06-openai-tts]: Used async: true for TTS tests — Bypass unique ports and per-test Cache pids provide full isolation
 - [Phase 06-openai-tts]: Added boundary speed and tts-1-hd model serialization tests beyond plan spec for complete coverage
 - [Phase 07-voice-pipeline]: TurnDetector accepts pre-classified tuples — EnergyVAD alias removed to avoid dead code warning
+- [Phase 07-voice-pipeline]: Task.async for STT->LLM->TTS keeps GenServer loop responsive; Task.shutdown(:brutal_kill) handles interruption cleanly
 
 ### Pending Todos
 
@@ -114,6 +116,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-14T11:53:48.421Z
-Stopped at: Completed 07-voice-pipeline-01-PLAN.md
+Last session: 2026-04-14T11:57:40.609Z
+Stopped at: Completed 07-02-PLAN.md
 Resume file: None

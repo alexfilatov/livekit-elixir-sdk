@@ -59,12 +59,12 @@
 
 ### Voice Pipeline
 
-- [ ] **PIPE-01**: Streaming STT -> LLM -> TTS pipeline with backpressure handling
+- [x] **PIPE-01**: Streaming STT -> LLM -> TTS pipeline with backpressure handling
 - [x] **PIPE-02**: Energy-based VAD implementation for speech/silence detection
 - [x] **PIPE-03**: Turn detection with configurable fixed endpointing (min/max silence duration)
-- [ ] **PIPE-04**: Basic interruption handling (cancel current TTS on new user speech)
-- [ ] **PIPE-05**: Pipeline uses provider behaviours (any conforming module works)
-- [ ] **PIPE-06**: Pipeline emits :telemetry events for each processing stage
+- [x] **PIPE-04**: Basic interruption handling (cancel current TTS on new user speech)
+- [x] **PIPE-05**: Pipeline uses provider behaviours (any conforming module works)
+- [x] **PIPE-06**: Pipeline emits :telemetry events for each processing stage
 
 ### State & Events
 
@@ -163,12 +163,12 @@
 | OTTS-05 | Phase 6 | Complete |
 | OTTS-06 | Phase 6 | Complete |
 | TEST-03 | Phase 4, 5, 6 | Complete |
-| PIPE-01 | Phase 7 | Pending |
+| PIPE-01 | Phase 7 | Complete |
 | PIPE-02 | Phase 7 | Complete |
 | PIPE-03 | Phase 7 | Complete |
-| PIPE-04 | Phase 7 | Pending |
-| PIPE-05 | Phase 7 | Pending |
-| PIPE-06 | Phase 7 | Pending |
+| PIPE-04 | Phase 7 | Complete |
+| PIPE-05 | Phase 7 | Complete |
+| PIPE-06 | Phase 7 | Complete |
 | TEST-04 | Phase 7 | Pending |
 | TEST-07 | Phase 7 | Pending |
 | EVNT-01 | Phase 8 | Pending |
