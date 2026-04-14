@@ -18,11 +18,12 @@ defmodule Livekit.Agents.AudioFrameTest do
     test "creates frame with custom parameters" do
       audio_data = <<1, 2, 3, 4, 5, 6, 7, 8>>
 
-      frame = AudioFrame.new(audio_data,
-        sample_rate: 16_000,
-        channels: 2,
-        format: :pcm_24
-      )
+      frame =
+        AudioFrame.new(audio_data,
+          sample_rate: 16_000,
+          channels: 2,
+          format: :pcm_24
+        )
 
       assert frame.sample_rate == 16_000
       assert frame.channels == 2
@@ -34,7 +35,8 @@ defmodule Livekit.Agents.AudioFrameTest do
       audio_data = :crypto.strong_rand_bytes(4800)
       frame = AudioFrame.new(audio_data, sample_rate: 48_000)
 
-      assert frame.duration_us == 50_000  # 50ms in microseconds
+      # 50ms in microseconds
+      assert frame.duration_us == 50_000
       assert AudioFrame.duration_ms(frame) == 50.0
     end
   end
@@ -55,7 +57,8 @@ defmodule Livekit.Agents.AudioFrameTest do
 
       converted = AudioFrame.convert_format(frame, :float32)
       assert converted.format == :float32
-      assert byte_size(converted.data) == byte_size(frame.data) * 2  # float32 is 4 bytes vs 2 for pcm_16
+      # float32 is 4 bytes vs 2 for pcm_16
+      assert byte_size(converted.data) == byte_size(frame.data) * 2
     end
 
     test "detects silence" do
@@ -74,7 +77,8 @@ defmodule Livekit.Agents.AudioFrameTest do
 
     test "splits stereo channels" do
       # Create stereo PCM16 data (left=100, right=200 repeated)
-      stereo_data = for _i <- 1..100, into: <<>>, do: <<100::little-signed-16, 200::little-signed-16>>
+      stereo_data =
+        for _i <- 1..100, into: <<>>, do: <<100::little-signed-16, 200::little-signed-16>>
 
       frame = AudioFrame.new(stereo_data, channels: 2, layout: :stereo)
 

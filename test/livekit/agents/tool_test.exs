@@ -148,7 +148,12 @@ defmodule Livekit.Agents.ToolTest do
       }
 
       spec =
-        ToolSpec.new(name: "x", description: "y", parameters: params, handler: fn _ -> {:ok, "z"} end)
+        ToolSpec.new(
+          name: "x",
+          description: "y",
+          parameters: params,
+          handler: fn _ -> {:ok, "z"} end
+        )
 
       schema = ToolSpec.to_openai_schema(spec)
       assert schema["function"]["parameters"] == params
@@ -209,7 +214,8 @@ defmodule Livekit.Agents.ToolTest do
   describe "ToolError (TOOL-04)" do
     test "exception/1 creates a ToolError with expected fields" do
       err =
-        %ToolError{} = ToolError.exception(call_id: "cid-1", tool_name: "echo", reason: :not_found)
+        %ToolError{} =
+        ToolError.exception(call_id: "cid-1", tool_name: "echo", reason: :not_found)
 
       assert err.call_id == "cid-1"
       assert err.tool_name == "echo"

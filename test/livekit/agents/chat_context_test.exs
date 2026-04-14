@@ -145,7 +145,10 @@ defmodule Livekit.Agents.ChatContextTest do
       msg = ChatContext.new_message(:user, ["hi"])
       fc = ChatContext.new_function_call("cid", "fn", "{}")
       fco = ChatContext.new_function_call_output("cid", "fn", "result")
-      ctx = ChatContext.new() |> ChatContext.add(msg) |> ChatContext.add(fc) |> ChatContext.add(fco)
+
+      ctx =
+        ChatContext.new() |> ChatContext.add(msg) |> ChatContext.add(fc) |> ChatContext.add(fco)
+
       assert ChatContext.messages(ctx) == [msg]
     end
 
@@ -177,7 +180,10 @@ defmodule Livekit.Agents.ChatContextTest do
     test "preserves leading system message even when truncating (CHAT-05)" do
       sys = ChatContext.new_message(:system, ["You are helpful."])
       user_msgs = for i <- 1..5, do: ChatContext.new_message(:user, ["msg #{i}"])
-      ctx = Enum.reduce(user_msgs, ChatContext.add(ChatContext.new(), sys), &ChatContext.add(&2, &1))
+
+      ctx =
+        Enum.reduce(user_msgs, ChatContext.add(ChatContext.new(), sys), &ChatContext.add(&2, &1))
+
       truncated = ChatContext.truncate(ctx, 2)
       assert hd(truncated.items) == sys
       # 1 system + 2 non-system = 3 total
@@ -206,7 +212,9 @@ defmodule Livekit.Agents.ChatContextTest do
       user = ChatContext.new_message(:user, ["hello"])
       # items: [fc, fco, user] — truncate to 2 keeps [fco, user]
       # but fco is orphaned (fc was dropped), so it should be dropped too
-      ctx = ChatContext.new() |> ChatContext.add(fc) |> ChatContext.add(fco) |> ChatContext.add(user)
+      ctx =
+        ChatContext.new() |> ChatContext.add(fc) |> ChatContext.add(fco) |> ChatContext.add(user)
+
       truncated = ChatContext.truncate(ctx, 2)
       # fco is orphaned at the boundary; only user should remain (plus no system msgs)
       refute Enum.any?(truncated.items, &match?(%FunctionCallOutput{}, &1))
@@ -268,9 +276,31 @@ defmodule Livekit.Agents.ChatContextTest do
       t1 = ~U[2026-01-01 10:00:00Z]
       t2 = ~U[2026-01-01 10:00:01Z]
       t3 = ~U[2026-01-01 10:00:02Z]
-      msg1 = %ChatMessage{id: "a", role: :user, content: ["first"], interrupted: false, created_at: t1}
-      msg3 = %ChatMessage{id: "c", role: :user, content: ["third"], interrupted: false, created_at: t3}
-      msg2 = %ChatMessage{id: "b", role: :assistant, content: ["second"], interrupted: false, created_at: t2}
+
+      msg1 = %ChatMessage{
+        id: "a",
+        role: :user,
+        content: ["first"],
+        interrupted: false,
+        created_at: t1
+      }
+
+      msg3 = %ChatMessage{
+        id: "c",
+        role: :user,
+        content: ["third"],
+        interrupted: false,
+        created_at: t3
+      }
+
+      msg2 = %ChatMessage{
+        id: "b",
+        role: :assistant,
+        content: ["second"],
+        interrupted: false,
+        created_at: t2
+      }
+
       ctx1 = ChatContext.add(ChatContext.new(), msg1) |> ChatContext.add(msg3)
       ctx2 = ChatContext.add(ChatContext.new(), msg2)
       merged = ChatContext.merge(ctx1, ctx2)
@@ -336,7 +366,12 @@ defmodule Livekit.Agents.ChatContextTest do
     end
 
     test "all four roles encode as their string equivalent" do
-      for {role, expected} <- [system: "system", user: "user", assistant: "assistant", tool: "tool"] do
+      for {role, expected} <- [
+            system: "system",
+            user: "user",
+            assistant: "assistant",
+            tool: "tool"
+          ] do
         msg = ChatContext.new_message(role, [])
         decoded = Jason.decode!(Jason.encode!(msg))
 

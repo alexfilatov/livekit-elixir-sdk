@@ -374,7 +374,10 @@ defmodule Livekit.Agents.AsyncRobustnessTest do
       Bypass.expect_once(bypass, "POST", "/v1/chat/completions", fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
-        |> Plug.Conn.resp(500, Jason.encode!(%{"error" => %{"message" => "Internal Server Error"}}))
+        |> Plug.Conn.resp(
+          500,
+          Jason.encode!(%{"error" => %{"message" => "Internal Server Error"}})
+        )
       end)
 
       ctx = ChatContext.new() |> ChatContext.add(ChatContext.new_message(:user, ["Hi"]))
@@ -421,6 +424,7 @@ defmodule Livekit.Agents.AsyncRobustnessTest do
       end)
 
       ctx = ChatContext.new() |> ChatContext.add(ChatContext.new_message(:user, ["Hi"]))
+
       assert {:ok, %ChatContext.ChatMessage{content: ["I was cut off mid"]}} =
                OpenAI.chat(ctx, config: llm_config(bypass))
     end

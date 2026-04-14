@@ -80,19 +80,20 @@ defmodule Mix.Tasks.Livekit.Agents.Start do
   end
 
   defp parse_args(args) do
-    {parsed, _, _} = OptionParser.parse(args,
-      strict: [
-        config_file: :string,
-        workers: :integer,
-        server_url: :string,
-        api_key: :string,
-        api_secret: :string,
-        log_level: :string,
-        metrics_port: :integer,
-        health_port: :integer,
-        help: :boolean
-      ]
-    )
+    {parsed, _, _} =
+      OptionParser.parse(args,
+        strict: [
+          config_file: :string,
+          workers: :integer,
+          server_url: :string,
+          api_key: :string,
+          api_secret: :string,
+          log_level: :string,
+          metrics_port: :integer,
+          health_port: :integer,
+          help: :boolean
+        ]
+      )
 
     if parsed[:help] do
       {:error, :help}
@@ -104,20 +105,22 @@ defmodule Mix.Tasks.Livekit.Agents.Start do
 
   defp build_production_config(parsed) do
     # Load configuration file
-    base_config = case parsed[:config_file] do
-      nil ->
-        Mix.shell().error("Production mode requires a configuration file")
-        %{}
+    base_config =
+      case parsed[:config_file] do
+        nil ->
+          Mix.shell().error("Production mode requires a configuration file")
+          %{}
 
-      file ->
-        load_production_config_file(file)
-    end
+        file ->
+          load_production_config_file(file)
+      end
 
     # Override with command line args
     %{
       server_url: parsed[:server_url] || base_config[:server_url] || get_env_var("LIVEKIT_URL"),
       api_key: parsed[:api_key] || base_config[:api_key] || get_env_var("LIVEKIT_API_KEY"),
-      api_secret: parsed[:api_secret] || base_config[:api_secret] || get_env_var("LIVEKIT_API_SECRET"),
+      api_secret:
+        parsed[:api_secret] || base_config[:api_secret] || get_env_var("LIVEKIT_API_SECRET"),
       workers: parsed[:workers] || base_config[:workers] || 1,
       log_level: String.to_atom(parsed[:log_level] || base_config[:log_level] || "info"),
       metrics_port: parsed[:metrics_port] || base_config[:metrics_port] || 9090,
@@ -212,7 +215,6 @@ defmodule Mix.Tasks.Livekit.Agents.Start do
 
       :shutdown ->
         Mix.shell().info("🏥 Health server shutting down")
-
     after
       5000 ->
         # Periodic health logging
@@ -245,7 +247,6 @@ defmodule Mix.Tasks.Livekit.Agents.Start do
 
       :shutdown ->
         Mix.shell().info("📊 Metrics server shutting down")
-
     after
       10_000 ->
         # Periodic metrics collection
@@ -266,28 +267,29 @@ defmodule Mix.Tasks.Livekit.Agents.Start do
 
   defp start_worker_supervisor(config) do
     # Create worker specifications
-    worker_specs = for i <- 1..config.workers do
-      worker_config = %Worker.Config{
-        worker_id: "prod-worker-#{i}",
-        server_url: config.server_url,
-        api_key: config.api_key,
-        api_secret: config.api_secret,
-        entrypoint: &production_agent_entrypoint(&1, config),
-        max_concurrent_jobs: 10,
-        worker_metadata: %{
-          mode: :production,
-          worker_index: i,
-          total_workers: config.workers
+    worker_specs =
+      for i <- 1..config.workers do
+        worker_config = %Worker.Config{
+          worker_id: "prod-worker-#{i}",
+          server_url: config.server_url,
+          api_key: config.api_key,
+          api_secret: config.api_secret,
+          entrypoint: &production_agent_entrypoint(&1, config),
+          max_concurrent_jobs: 10,
+          worker_metadata: %{
+            mode: :production,
+            worker_index: i,
+            total_workers: config.workers
+          }
         }
-      }
 
-      %{
-        id: "worker_#{i}",
-        start: {Worker, :start_link, [worker_config, [name: :"worker_#{i}"]]},
-        restart: :permanent,
-        type: :worker
-      }
-    end
+        %{
+          id: "worker_#{i}",
+          start: {Worker, :start_link, [worker_config, [name: :"worker_#{i}"]]},
+          restart: :permanent,
+          type: :worker
+        }
+      end
 
     # Start supervisor (workers self-register on WebSocket upgrade)
     Supervisor.start_link(worker_specs, strategy: :one_for_one, name: :agent_supervisor)
@@ -345,14 +347,16 @@ defmodule Mix.Tasks.Livekit.Agents.Start do
   end
 
   defp build_stt_config(nil), do: nil
+
   defp build_stt_config(stt_config) do
     case stt_config[:provider] do
       "deepgram" ->
-        {Livekit.Agents.STT.Deepgram, %{
-          api_key: stt_config[:api_key],
-          model: stt_config[:model] || "nova-2",
-          language: stt_config[:language] || "en-US"
-        }}
+        {Livekit.Agents.STT.Deepgram,
+         %{
+           api_key: stt_config[:api_key],
+           model: stt_config[:model] || "nova-2",
+           language: stt_config[:language] || "en-US"
+         }}
 
       _ ->
         nil
@@ -360,14 +364,16 @@ defmodule Mix.Tasks.Livekit.Agents.Start do
   end
 
   defp build_llm_config(nil), do: nil
+
   defp build_llm_config(llm_config) do
     case llm_config[:provider] do
       "openai" ->
-        {Livekit.Agents.LLM.OpenAI, %{
-          api_key: llm_config[:api_key],
-          model: llm_config[:model] || "gpt-4o-mini",
-          temperature: llm_config[:temperature] || 0.7
-        }}
+        {Livekit.Agents.LLM.OpenAI,
+         %{
+           api_key: llm_config[:api_key],
+           model: llm_config[:model] || "gpt-4o-mini",
+           temperature: llm_config[:temperature] || 0.7
+         }}
 
       _ ->
         nil
@@ -375,24 +381,27 @@ defmodule Mix.Tasks.Livekit.Agents.Start do
   end
 
   defp build_tts_config(nil), do: nil
+
   defp build_tts_config(tts_config) do
     case tts_config[:provider] do
       "openai" ->
-        voice = case tts_config[:voice] do
-          "alloy" -> :alloy
-          "echo" -> :echo
-          "fable" -> :fable
-          "onyx" -> :onyx
-          "nova" -> :nova
-          "shimmer" -> :shimmer
-          _ -> :alloy
-        end
+        voice =
+          case tts_config[:voice] do
+            "alloy" -> :alloy
+            "echo" -> :echo
+            "fable" -> :fable
+            "onyx" -> :onyx
+            "nova" -> :nova
+            "shimmer" -> :shimmer
+            _ -> :alloy
+          end
 
-        {Livekit.Agents.TTS.OpenAI, %{
-          api_key: tts_config[:api_key],
-          voice: voice,
-          model: :tts_1
-        }}
+        {Livekit.Agents.TTS.OpenAI,
+         %{
+           api_key: tts_config[:api_key],
+           voice: voice,
+           model: :tts_1
+         }}
 
       _ ->
         nil
@@ -421,6 +430,7 @@ defmodule Mix.Tasks.Livekit.Agents.Start do
         if Process.alive?(session_pid) do
           Logger.debug("Session healthy for #{job_context.room_name}")
         end
+
         monitor_production_session(session_pid, job_context)
     end
 
@@ -440,7 +450,6 @@ defmodule Mix.Tasks.Livekit.Agents.Start do
       {:EXIT, _pid, reason} ->
         Logger.warning("Received exit signal: #{inspect(reason)}")
         graceful_shutdown(supervisor_pid)
-
     after
       1000 ->
         signal_handler_loop(supervisor_pid)
@@ -472,14 +481,15 @@ defmodule Mix.Tasks.Livekit.Agents.Start do
     receive do
       :shutdown ->
         graceful_shutdown(supervisor_pid)
-
     after
       30_000 ->
         # Periodic status check
         children = Supervisor.which_children(supervisor_pid)
-        active_workers = Enum.count(children, fn {_id, pid, _type, _modules} ->
-          is_pid(pid) and Process.alive?(pid)
-        end)
+
+        active_workers =
+          Enum.count(children, fn {_id, pid, _type, _modules} ->
+            is_pid(pid) and Process.alive?(pid)
+          end)
 
         if active_workers != config.workers do
           Logger.warning("Worker count mismatch: #{active_workers}/#{config.workers} active")

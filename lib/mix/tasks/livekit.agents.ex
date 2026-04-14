@@ -115,17 +115,18 @@ defmodule Mix.Tasks.Livekit.Agents.Console do
   end
 
   defp parse_args(args) do
-    {parsed, _, _} = OptionParser.parse(args,
-      strict: [
-        room: :string,
-        identity: :string,
-        server_url: :string,
-        api_key: :string,
-        api_secret: :string,
-        config_file: :string,
-        help: :boolean
-      ]
-    )
+    {parsed, _, _} =
+      OptionParser.parse(args,
+        strict: [
+          room: :string,
+          identity: :string,
+          server_url: :string,
+          api_key: :string,
+          api_secret: :string,
+          config_file: :string,
+          help: :boolean
+        ]
+      )
 
     if parsed[:help] do
       {:error, :help}
@@ -137,18 +138,21 @@ defmodule Mix.Tasks.Livekit.Agents.Console do
 
   defp build_config(parsed) do
     # Load from config file if specified
-    base_config = case parsed[:config_file] do
-      nil -> %{}
-      file -> load_config_file(file)
-    end
+    base_config =
+      case parsed[:config_file] do
+        nil -> %{}
+        file -> load_config_file(file)
+      end
 
     # Override with command line args
     %{
       room_name: parsed[:room] || base_config[:room_name] || "test-room",
-      participant_identity: parsed[:identity] || base_config[:participant_identity] || "console-agent",
+      participant_identity:
+        parsed[:identity] || base_config[:participant_identity] || "console-agent",
       server_url: parsed[:server_url] || base_config[:server_url] || get_env_var("LIVEKIT_URL"),
       api_key: parsed[:api_key] || base_config[:api_key] || get_env_var("LIVEKIT_API_KEY"),
-      api_secret: parsed[:api_secret] || base_config[:api_secret] || get_env_var("LIVEKIT_API_SECRET")
+      api_secret:
+        parsed[:api_secret] || base_config[:api_secret] || get_env_var("LIVEKIT_API_SECRET")
     }
   end
 
@@ -161,7 +165,8 @@ defmodule Mix.Tasks.Livekit.Agents.Console do
         {:error, "Missing API key. Set LIVEKIT_API_KEY environment variable or use --api-key"}
 
       is_nil(config.api_secret) ->
-        {:error, "Missing API secret. Set LIVEKIT_API_SECRET environment variable or use --api-secret"}
+        {:error,
+         "Missing API secret. Set LIVEKIT_API_SECRET environment variable or use --api-secret"}
 
       true ->
         {:ok, config}
@@ -261,6 +266,7 @@ defmodule Mix.Tasks.Livekit.Agents.Console do
   defp handle_console_command(session_pid, "status") do
     status = AgentSession.get_status(session_pid)
     Mix.shell().info("Agent Status:")
+
     Enum.each(status, fn {key, value} ->
       Mix.shell().info("  #{key}: #{inspect(value)}")
     end)
@@ -344,13 +350,14 @@ defmodule Mix.Tasks.Livekit.Agents.Create do
   end
 
   defp parse_args([agent_name | args]) when is_binary(agent_name) do
-    {parsed, _, _} = OptionParser.parse(args,
-      strict: [
-        path: :string,
-        template: :string,
-        help: :boolean
-      ]
-    )
+    {parsed, _, _} =
+      OptionParser.parse(args,
+        strict: [
+          path: :string,
+          template: :string,
+          help: :boolean
+        ]
+      )
 
     if parsed[:help] do
       {:error, :help}
@@ -359,6 +366,7 @@ defmodule Mix.Tasks.Livekit.Agents.Create do
         path: parsed[:path] || ".",
         template: String.to_atom(parsed[:template] || "basic")
       }
+
       {:ok, agent_name, config}
     end
   end
@@ -386,9 +394,15 @@ defmodule Mix.Tasks.Livekit.Agents.Create do
     File.mkdir_p!(agent_dir)
 
     case config.template do
-      :basic -> create_basic_template(agent_dir, agent_name)
-      :voice -> create_voice_template(agent_dir, agent_name)
-      :advanced -> create_advanced_template(agent_dir, agent_name)
+      :basic ->
+        create_basic_template(agent_dir, agent_name)
+
+      :voice ->
+        create_voice_template(agent_dir, agent_name)
+
+      :advanced ->
+        create_advanced_template(agent_dir, agent_name)
+
       _ ->
         Mix.shell().error("Unknown template: #{config.template}")
         System.halt(1)

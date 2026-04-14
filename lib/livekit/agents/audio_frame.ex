@@ -11,15 +11,15 @@ defmodule Livekit.Agents.AudioFrame do
   @type layout :: :mono | :stereo | :multi_channel
 
   @type t :: %__MODULE__{
-    data: binary(),
-    sample_rate: pos_integer(),
-    channels: pos_integer(),
-    format: format(),
-    layout: layout(),
-    samples_per_channel: pos_integer(),
-    timestamp_us: non_neg_integer(),
-    duration_us: non_neg_integer()
-  }
+          data: binary(),
+          sample_rate: pos_integer(),
+          channels: pos_integer(),
+          format: format(),
+          layout: layout(),
+          samples_per_channel: pos_integer(),
+          timestamp_us: non_neg_integer(),
+          duration_us: non_neg_integer()
+        }
 
   defstruct [
     :data,
@@ -73,11 +73,13 @@ defmodule Livekit.Agents.AudioFrame do
   def from_wav(wav_data) do
     case parse_wav_header(wav_data) do
       {:ok, header, audio_data} ->
-        frame = new(audio_data,
-          sample_rate: header.sample_rate,
-          channels: header.channels,
-          format: wav_format_to_atom(header.format)
-        )
+        frame =
+          new(audio_data,
+            sample_rate: header.sample_rate,
+            channels: header.channels,
+            format: wav_format_to_atom(header.format)
+          )
+
         {:ok, frame}
 
       {:error, reason} ->
@@ -210,27 +212,32 @@ defmodule Livekit.Agents.AudioFrame do
   end
 
   defp parse_wav_header(<<
-    "RIFF", _file_size::little-32,
-    "WAVE",
-    "fmt ", format_chunk_size::little-32,
-    format_tag::little-16,
-    channels::little-16,
-    sample_rate::little-32,
-    _byte_rate::little-32,
-    _block_align::little-16,
-    bits_per_sample::little-16,
-    rest::binary
-  >>) do
+         "RIFF",
+         _file_size::little-32,
+         "WAVE",
+         "fmt ",
+         format_chunk_size::little-32,
+         format_tag::little-16,
+         channels::little-16,
+         sample_rate::little-32,
+         _byte_rate::little-32,
+         _block_align::little-16,
+         bits_per_sample::little-16,
+         rest::binary
+       >>) do
     # Skip any extra format chunk data
     extra_size = format_chunk_size - 16
+
     case rest do
-      <<_extra::binary-size(extra_size), "data", data_size::little-32, audio_data::binary-size(data_size), _::binary>> ->
+      <<_extra::binary-size(extra_size), "data", data_size::little-32,
+        audio_data::binary-size(data_size), _::binary>> ->
         header = %{
           format: format_tag,
           channels: channels,
           sample_rate: sample_rate,
           bits_per_sample: bits_per_sample
         }
+
         {:ok, header, audio_data}
 
       _ ->
@@ -240,9 +247,12 @@ defmodule Livekit.Agents.AudioFrame do
 
   defp parse_wav_header(_), do: {:error, :invalid_wav_header}
 
-  defp wav_format_to_atom(1), do: :pcm_16  # PCM
-  defp wav_format_to_atom(3), do: :float32 # IEEE Float
-  defp wav_format_to_atom(_), do: :pcm_16  # Default
+  # PCM
+  defp wav_format_to_atom(1), do: :pcm_16
+  # IEEE Float
+  defp wav_format_to_atom(3), do: :float32
+  # Default
+  defp wav_format_to_atom(_), do: :pcm_16
 
   defp simple_resample(data, format, ratio) do
     # This is a very basic resampling implementation
@@ -252,14 +262,16 @@ defmodule Livekit.Agents.AudioFrame do
       sample_count = div(byte_size(data), sample_size)
       new_sample_count = round(sample_count * ratio)
 
-      resampled = for i <- 0..(new_sample_count - 1) do
-        source_index = round(i / ratio) * sample_size
-        if source_index + sample_size <= byte_size(data) do
-          binary_part(data, source_index, sample_size)
-        else
-          <<0::size(sample_size * 8)>>
+      resampled =
+        for i <- 0..(new_sample_count - 1) do
+          source_index = round(i / ratio) * sample_size
+
+          if source_index + sample_size <= byte_size(data) do
+            binary_part(data, source_index, sample_size)
+          else
+            <<0::size(sample_size * 8)>>
+          end
         end
-      end
 
       {:ok, IO.iodata_to_binary(resampled)}
     rescue
@@ -270,11 +282,14 @@ defmodule Livekit.Agents.AudioFrame do
   defp convert_audio_format(data, from_format, to_format) do
     # Basic format conversion - in production use a proper audio library
     try do
-      converted = case {from_format, to_format} do
-        {:pcm_16, :float32} -> pcm16_to_float32(data)
-        {:float32, :pcm_16} -> float32_to_pcm16(data)
-        _ -> data  # No conversion needed or unsupported
-      end
+      converted =
+        case {from_format, to_format} do
+          {:pcm_16, :float32} -> pcm16_to_float32(data)
+          {:float32, :pcm_16} -> float32_to_pcm16(data)
+          # No conversion needed or unsupported
+          _ -> data
+        end
+
       {:ok, converted}
     rescue
       _ -> {:error, :conversion_failed}
@@ -298,10 +313,11 @@ defmodule Livekit.Agents.AudioFrame do
 
   defp frames_compatible?(frames) do
     first = hd(frames)
+
     Enum.all?(frames, fn frame ->
       frame.sample_rate == first.sample_rate and
-      frame.channels == first.channels and
-      frame.format == first.format
+        frame.channels == first.channels and
+        frame.format == first.format
     end)
   end
 
@@ -310,18 +326,20 @@ defmodule Livekit.Agents.AudioFrame do
     max_length = Enum.max(Enum.map(data_list, &byte_size/1))
 
     # Pad all data to same length
-    padded_data = Enum.map(data_list, fn data ->
-      padding_size = max_length - byte_size(data)
-      data <> <<0::size(padding_size * 8)>>
-    end)
+    padded_data =
+      Enum.map(data_list, fn data ->
+        padding_size = max_length - byte_size(data)
+        data <> <<0::size(padding_size * 8)>>
+      end)
 
     # Mix samples
     for i <- 0..(div(max_length, 2) - 1), into: <<>> do
-      mixed_sample = Enum.reduce(padded_data, 0, fn data, acc ->
-        offset = i * 2
-        <<_::binary-size(offset), sample::little-signed-16, _::binary>> = data
-        acc + sample
-      end)
+      mixed_sample =
+        Enum.reduce(padded_data, 0, fn data, acc ->
+          offset = i * 2
+          <<_::binary-size(offset), sample::little-signed-16, _::binary>> = data
+          acc + sample
+        end)
 
       # Prevent clipping
       mixed_sample = max(-32768, min(32767, mixed_sample))
@@ -341,8 +359,11 @@ defmodule Livekit.Agents.AudioFrame do
           {left_acc, right_acc} -> {[left | left_acc], [right | right_acc]}
         end
 
-      left_data = for sample <- Enum.reverse(left_samples), into: <<>>, do: <<sample::little-signed-16>>
-      right_data = for sample <- Enum.reverse(right_samples), into: <<>>, do: <<sample::little-signed-16>>
+      left_data =
+        for sample <- Enum.reverse(left_samples), into: <<>>, do: <<sample::little-signed-16>>
+
+      right_data =
+        for sample <- Enum.reverse(right_samples), into: <<>>, do: <<sample::little-signed-16>>
 
       {:ok, {left_data, right_data}}
     rescue
@@ -356,13 +377,16 @@ defmodule Livekit.Agents.AudioFrame do
 
   defp calculate_rms(data, :pcm_16) do
     samples = for <<sample::little-signed-16 <- data>>, do: sample
+
     if length(samples) == 0 do
       0.0
     else
-      sum_of_squares = Enum.reduce(samples, 0, fn sample, acc ->
-        normalized = sample / 32768.0
-        acc + normalized * normalized
-      end)
+      sum_of_squares =
+        Enum.reduce(samples, 0, fn sample, acc ->
+          normalized = sample / 32768.0
+          acc + normalized * normalized
+        end)
+
       :math.sqrt(sum_of_squares / length(samples))
     end
   end

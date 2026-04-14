@@ -35,17 +35,17 @@ defmodule Livekit.Agents.VoiceAgent do
     @type tts_provider :: {module(), map()}
 
     @type t :: %__MODULE__{
-      stt: stt_provider(),
-      llm: llm_provider(),
-      tts: tts_provider(),
-      instructions: String.t(),
-      name: String.t(),
-      vad_enabled: boolean(),
-      turn_detection: :multilingual | :simple,
-      preemptive_synthesis: boolean(),
-      tools: list(),
-      metadata: map()
-    }
+            stt: stt_provider(),
+            llm: llm_provider(),
+            tts: tts_provider(),
+            instructions: String.t(),
+            name: String.t(),
+            vad_enabled: boolean(),
+            turn_detection: :multilingual | :simple,
+            preemptive_synthesis: boolean(),
+            tools: list(),
+            metadata: map()
+          }
 
     defstruct [
       :stt,
@@ -65,14 +65,14 @@ defmodule Livekit.Agents.VoiceAgent do
     @moduledoc false
 
     @type t :: %__MODULE__{
-      config: VoiceAgent.Config.t(),
-      pipeline: Pipeline.t() | nil,
-      session: pid() | nil,
-      room: pid() | nil,
-      conversation_context: list(),
-      current_turn: map() | nil,
-      metrics: map()
-    }
+            config: VoiceAgent.Config.t(),
+            pipeline: Pipeline.t() | nil,
+            session: pid() | nil,
+            room: pid() | nil,
+            conversation_context: list(),
+            current_turn: map() | nil,
+            metrics: map()
+          }
 
     defstruct [
       :config,
@@ -159,6 +159,7 @@ defmodule Livekit.Agents.VoiceAgent do
             initialized_at: DateTime.utc_now()
           }
         }
+
         {:ok, state}
 
       {:error, reason} ->
@@ -244,29 +245,35 @@ defmodule Livekit.Agents.VoiceAgent do
       pipeline = Pipeline.new()
 
       # Initialize STT component
-      pipeline = case config.stt do
-        {stt_module, stt_config} ->
-          Pipeline.add_stt_node(pipeline, stt_module, stt_config)
-        nil ->
-          pipeline
-      end
+      pipeline =
+        case config.stt do
+          {stt_module, stt_config} ->
+            Pipeline.add_stt_node(pipeline, stt_module, stt_config)
+
+          nil ->
+            pipeline
+        end
 
       # Initialize LLM component
-      pipeline = case config.llm do
-        {llm_module, llm_config} ->
-          llm_config_with_instructions = Map.put(llm_config, :instructions, config.instructions)
-          Pipeline.add_llm_node(pipeline, llm_module, llm_config_with_instructions)
-        nil ->
-          pipeline
-      end
+      pipeline =
+        case config.llm do
+          {llm_module, llm_config} ->
+            llm_config_with_instructions = Map.put(llm_config, :instructions, config.instructions)
+            Pipeline.add_llm_node(pipeline, llm_module, llm_config_with_instructions)
+
+          nil ->
+            pipeline
+        end
 
       # Initialize TTS component
-      pipeline = case config.tts do
-        {tts_module, tts_config} ->
-          Pipeline.add_tts_node(pipeline, tts_module, tts_config)
-        nil ->
-          pipeline
-      end
+      pipeline =
+        case config.tts do
+          {tts_module, tts_config} ->
+            Pipeline.add_tts_node(pipeline, tts_module, tts_config)
+
+          nil ->
+            pipeline
+        end
 
       {:ok, pipeline}
     rescue
@@ -325,6 +332,7 @@ defmodule Livekit.Agents.VoiceAgent do
         if state.session do
           send_audio_to_session(state.session, audio_data)
         end
+
         state
 
       {:error, reason} ->
@@ -341,7 +349,9 @@ defmodule Livekit.Agents.VoiceAgent do
   defp send_audio_to_session(session_pid, audio_data) do
     # This will be implemented when we have the session module
     # For now, just log
-    Logger.debug("Would send #{byte_size(audio_data)} bytes of audio to session #{inspect(session_pid)}")
+    Logger.debug(
+      "Would send #{byte_size(audio_data)} bytes of audio to session #{inspect(session_pid)}"
+    )
   end
 
   defp update_agent_config(current_config, updates) do
@@ -366,12 +376,13 @@ defmodule Livekit.Agents.VoiceAgent do
 
   defp pipeline_config_changed?(old_config, new_config) do
     old_config.stt != new_config.stt or
-    old_config.llm != new_config.llm or
-    old_config.tts != new_config.tts or
-    old_config.instructions != new_config.instructions
+      old_config.llm != new_config.llm or
+      old_config.tts != new_config.tts or
+      old_config.instructions != new_config.instructions
   end
 
   defp cleanup_pipeline(nil), do: :ok
+
   defp cleanup_pipeline(pipeline) do
     # Clean up pipeline resources
     Pipeline.cleanup(pipeline)

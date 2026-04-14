@@ -324,7 +324,10 @@ defmodule Livekit.Agents.Worker do
           {:noreply, new_state}
 
         {:error, reason} ->
-          Logger.warning("Worker connection failed: #{inspect(reason)}, retrying in #{state.backoff_ms} ms")
+          Logger.warning(
+            "Worker connection failed: #{inspect(reason)}, retrying in #{state.backoff_ms} ms"
+          )
+
           Process.send_after(self(), :connect, state.backoff_ms)
           {:noreply, %{state | backoff_ms: next_backoff(state.backoff_ms)}}
       end
@@ -459,7 +462,9 @@ defmodule Livekit.Agents.Worker do
 
   @impl true
   def handle_info(:drain_timeout, %State{draining: true} = state) do
-    Logger.warning("Worker drain timed out with #{map_size(state.active_jobs)} jobs still running")
+    Logger.warning(
+      "Worker drain timed out with #{map_size(state.active_jobs)} jobs still running"
+    )
 
     if state.drain_from do
       GenServer.reply(state.drain_from, {:error, :timeout})
@@ -539,12 +544,13 @@ defmodule Livekit.Agents.Worker do
   defp clear_connection(state) do
     if state.gun_monitor, do: Process.demonitor(state.gun_monitor, [:flush])
 
-    %{state |
-      gun_pid: nil,
-      gun_monitor: nil,
-      ws_stream: nil,
-      registered: false,
-      server_worker_id: nil
+    %{
+      state
+      | gun_pid: nil,
+        gun_monitor: nil,
+        ws_stream: nil,
+        registered: false,
+        server_worker_id: nil
     }
   end
 
@@ -574,7 +580,9 @@ defmodule Livekit.Agents.Worker do
     active = map_size(state.active_jobs)
     max = state.config.max_concurrent_jobs
     load = if max > 0, do: active / max, else: 0.0
-    worker_status = if state.draining, do: WorkerStatus.value(:WS_FULL), else: WorkerStatus.value(:WS_AVAILABLE)
+
+    worker_status =
+      if state.draining, do: WorkerStatus.value(:WS_FULL), else: WorkerStatus.value(:WS_AVAILABLE)
 
     update = %UpdateWorkerStatus{
       status: worker_status,
@@ -650,7 +658,10 @@ defmodule Livekit.Agents.Worker do
   defp dispatch_server_message(:register, payload, state) do
     server_worker_id = payload.worker_id
     server_version = if payload.server_info, do: payload.server_info.version, else: "unknown"
-    Logger.info("Worker registered with server: worker_id=#{server_worker_id}, server_version=#{server_version}")
+
+    Logger.info(
+      "Worker registered with server: worker_id=#{server_worker_id}, server_version=#{server_version}"
+    )
 
     new_state = %{state | server_worker_id: server_worker_id}
     send_worker_load_update(new_state)

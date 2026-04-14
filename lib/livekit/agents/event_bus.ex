@@ -149,12 +149,15 @@ defmodule Livekit.Agents.EventBus do
     # ISSUE-20: stt_complete should emit :stt_latency_ms, not :ttft_ms
     value = Map.get(measurements, :monotonic_time, System.monotonic_time(:millisecond))
 
-    emit_to_session(%Events.TelemetryMeasurement{
-      metric: :stt_latency_ms,
-      value: System.convert_time_unit(value, :native, :millisecond),
-      metadata: metadata,
-      timestamp: DateTime.utc_now()
-    }, metadata)
+    emit_to_session(
+      %Events.TelemetryMeasurement{
+        metric: :stt_latency_ms,
+        value: System.convert_time_unit(value, :native, :millisecond),
+        metadata: metadata,
+        timestamp: DateTime.utc_now()
+      },
+      metadata
+    )
   end
 
   def handle_telemetry_event(
@@ -165,12 +168,15 @@ defmodule Livekit.Agents.EventBus do
       ) do
     value = Map.get(measurements, :monotonic_time, System.monotonic_time(:millisecond))
 
-    emit_to_session(%Events.TelemetryMeasurement{
-      metric: :ttft_ms,
-      value: System.convert_time_unit(value, :native, :millisecond),
-      metadata: metadata,
-      timestamp: DateTime.utc_now()
-    }, metadata)
+    emit_to_session(
+      %Events.TelemetryMeasurement{
+        metric: :ttft_ms,
+        value: System.convert_time_unit(value, :native, :millisecond),
+        metadata: metadata,
+        timestamp: DateTime.utc_now()
+      },
+      metadata
+    )
   end
 
   def handle_telemetry_event(
@@ -182,12 +188,15 @@ defmodule Livekit.Agents.EventBus do
     value = Map.get(measurements, :monotonic_time, System.monotonic_time(:millisecond))
     bytes = Map.get(measurements, :bytes, 0)
 
-    emit_to_session(%Events.TelemetryMeasurement{
-      metric: :end_to_end_latency_ms,
-      value: System.convert_time_unit(value, :native, :millisecond),
-      metadata: Map.put(metadata, :bytes, bytes),
-      timestamp: DateTime.utc_now()
-    }, metadata)
+    emit_to_session(
+      %Events.TelemetryMeasurement{
+        metric: :end_to_end_latency_ms,
+        value: System.convert_time_unit(value, :native, :millisecond),
+        metadata: Map.put(metadata, :bytes, bytes),
+        timestamp: DateTime.utc_now()
+      },
+      metadata
+    )
   end
 
   def handle_telemetry_event(_event_name, _measurements, _metadata, _config), do: :ok

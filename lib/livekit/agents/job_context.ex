@@ -12,15 +12,15 @@ defmodule Livekit.Agents.JobContext do
   require Logger
 
   @type t :: %__MODULE__{
-    job_id: String.t(),
-    room_name: String.t(),
-    participant_identity: String.t(),
-    server_url: String.t(),
-    api_key: String.t(),
-    api_secret: String.t(),
-    metadata: map(),
-    created_at: DateTime.t()
-  }
+          job_id: String.t(),
+          room_name: String.t(),
+          participant_identity: String.t(),
+          server_url: String.t(),
+          api_key: String.t(),
+          api_secret: String.t(),
+          metadata: map(),
+          created_at: DateTime.t()
+        }
 
   defstruct [
     :job_id,
@@ -131,12 +131,20 @@ defmodule Livekit.Agents.JobContext do
   """
   @spec validate(t()) :: :ok | {:error, term()}
   def validate(context) do
-    required_fields = [:job_id, :room_name, :participant_identity, :server_url, :api_key, :api_secret]
+    required_fields = [
+      :job_id,
+      :room_name,
+      :participant_identity,
+      :server_url,
+      :api_key,
+      :api_secret
+    ]
 
-    missing_fields = Enum.filter(required_fields, fn field ->
-      value = Map.get(context, field)
-      is_nil(value) || (is_binary(value) && String.trim(value) == "")
-    end)
+    missing_fields =
+      Enum.filter(required_fields, fn field ->
+        value = Map.get(context, field)
+        is_nil(value) || (is_binary(value) && String.trim(value) == "")
+      end)
 
     case missing_fields do
       [] -> :ok
@@ -164,11 +172,17 @@ defmodule Livekit.Agents.JobContext do
   # Private Functions
 
   defp mask_secret(nil), do: nil
+
   defp mask_secret(secret) when is_binary(secret) do
     case String.length(secret) do
-      len when len <= 4 -> String.duplicate("*", len)
-      len -> String.slice(secret, 0, 2) <> String.duplicate("*", len - 4) <> String.slice(secret, -2, 2)
+      len when len <= 4 ->
+        String.duplicate("*", len)
+
+      len ->
+        String.slice(secret, 0, 2) <>
+          String.duplicate("*", len - 4) <> String.slice(secret, -2, 2)
     end
   end
+
   defp mask_secret(_), do: "***"
 end

@@ -7,7 +7,13 @@ defmodule Livekit.Agents.Pipeline.TurnDetectorTest do
   # Helper: build a minimal PCM16 AudioFrame with the given timestamp
   defp make_frame(timestamp_us) do
     data = <<1000::little-signed-16>>
-    AudioFrame.new(data, sample_rate: 16_000, channels: 1, format: :pcm_16, timestamp_us: timestamp_us)
+
+    AudioFrame.new(data,
+      sample_rate: 16_000,
+      channels: 1,
+      format: :pcm_16,
+      timestamp_us: timestamp_us
+    )
   end
 
   # A frame whose RMS is clearly below 0.01 (near-silence)

@@ -50,19 +50,20 @@ defmodule Mix.Tasks.Livekit.Agents.Dev do
   end
 
   defp parse_args(args) do
-    {parsed, _, _} = OptionParser.parse(args,
-      strict: [
-        room: :string,
-        identity: :string,
-        server_url: :string,
-        api_key: :string,
-        api_secret: :string,
-        config_file: :string,
-        port: :integer,
-        verbose: :boolean,
-        help: :boolean
-      ]
-    )
+    {parsed, _, _} =
+      OptionParser.parse(args,
+        strict: [
+          room: :string,
+          identity: :string,
+          server_url: :string,
+          api_key: :string,
+          api_secret: :string,
+          config_file: :string,
+          port: :integer,
+          verbose: :boolean,
+          help: :boolean
+        ]
+      )
 
     if parsed[:help] do
       {:error, :help}
@@ -74,18 +75,21 @@ defmodule Mix.Tasks.Livekit.Agents.Dev do
 
   defp build_dev_config(parsed) do
     # Load from config file if specified
-    base_config = case parsed[:config_file] do
-      nil -> %{}
-      file -> load_config_file(file)
-    end
+    base_config =
+      case parsed[:config_file] do
+        nil -> %{}
+        file -> load_config_file(file)
+      end
 
     # Override with command line args
     %{
       room_name: parsed[:room] || base_config[:room_name] || "dev-room",
-      participant_identity: parsed[:identity] || base_config[:participant_identity] || "dev-agent",
+      participant_identity:
+        parsed[:identity] || base_config[:participant_identity] || "dev-agent",
       server_url: parsed[:server_url] || base_config[:server_url] || get_env_var("LIVEKIT_URL"),
       api_key: parsed[:api_key] || base_config[:api_key] || get_env_var("LIVEKIT_API_KEY"),
-      api_secret: parsed[:api_secret] || base_config[:api_secret] || get_env_var("LIVEKIT_API_SECRET"),
+      api_secret:
+        parsed[:api_secret] || base_config[:api_secret] || get_env_var("LIVEKIT_API_SECRET"),
       dev_port: parsed[:port] || base_config[:dev_port] || 4000,
       verbose: parsed[:verbose] || base_config[:verbose] || false
     }
@@ -100,7 +104,8 @@ defmodule Mix.Tasks.Livekit.Agents.Dev do
         {:error, "Missing API key. Set LIVEKIT_API_KEY environment variable or use --api-key"}
 
       is_nil(config.api_secret) ->
-        {:error, "Missing API secret. Set LIVEKIT_API_SECRET environment variable or use --api-secret"}
+        {:error,
+         "Missing API secret. Set LIVEKIT_API_SECRET environment variable or use --api-secret"}
 
       true ->
         {:ok, config}
@@ -159,7 +164,10 @@ defmodule Mix.Tasks.Livekit.Agents.Dev do
       try do
         # This would start a web interface for development
         # For now, just log that dev server is running
-        Mix.shell().info("📊 Development dashboard available at http://localhost:#{config.dev_port}")
+        Mix.shell().info(
+          "📊 Development dashboard available at http://localhost:#{config.dev_port}"
+        )
+
         Process.sleep(:infinity)
       rescue
         error ->
@@ -285,6 +293,7 @@ defmodule Mix.Tasks.Livekit.Agents.Dev do
   defp handle_dev_command(_config, worker_pid, "status") do
     status = Worker.get_status(worker_pid)
     Mix.shell().info("Worker Status:")
+
     Enum.each(status, fn {key, value} ->
       Mix.shell().info("  #{key}: #{inspect(value)}")
     end)
@@ -293,6 +302,7 @@ defmodule Mix.Tasks.Livekit.Agents.Dev do
   defp handle_dev_command(_config, worker_pid, "jobs") do
     jobs = Worker.list_active_jobs(worker_pid)
     Mix.shell().info("Active Jobs (#{length(jobs)}):")
+
     if length(jobs) == 0 do
       Mix.shell().info("  No active jobs")
     else
@@ -350,12 +360,13 @@ defmodule Mix.Tasks.Livekit.Agents.Dev do
         nil
 
       api_key ->
-        {Livekit.Agents.STT.Deepgram, %{
-          api_key: api_key,
-          model: "nova-2",
-          language: "en-US",
-          interim_results: true
-        }}
+        {Livekit.Agents.STT.Deepgram,
+         %{
+           api_key: api_key,
+           model: "nova-2",
+           language: "en-US",
+           interim_results: true
+         }}
     end
   end
 
@@ -366,12 +377,13 @@ defmodule Mix.Tasks.Livekit.Agents.Dev do
         nil
 
       api_key ->
-        {Livekit.Agents.LLM.OpenAI, %{
-          api_key: api_key,
-          model: "gpt-4o-mini",
-          temperature: 0.7,
-          instructions: "You are a helpful development assistant."
-        }}
+        {Livekit.Agents.LLM.OpenAI,
+         %{
+           api_key: api_key,
+           model: "gpt-4o-mini",
+           temperature: 0.7,
+           instructions: "You are a helpful development assistant."
+         }}
     end
   end
 
@@ -382,11 +394,12 @@ defmodule Mix.Tasks.Livekit.Agents.Dev do
         nil
 
       api_key ->
-        {Livekit.Agents.TTS.OpenAI, %{
-          api_key: api_key,
-          voice: :alloy,
-          model: :tts_1
-        }}
+        {Livekit.Agents.TTS.OpenAI,
+         %{
+           api_key: api_key,
+           voice: :alloy,
+           model: :tts_1
+         }}
     end
   end
 

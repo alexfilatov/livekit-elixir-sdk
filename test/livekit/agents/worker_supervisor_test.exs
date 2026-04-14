@@ -59,13 +59,17 @@ defmodule Livekit.Agents.WorkerSupervisorTest do
       on_exit(fn -> stop_supervisor(sup_pid) end)
 
       children = Supervisor.which_children(sup_pid)
-      {Worker, worker_pid, _type, _modules} = Enum.find(children, fn {id, _, _, _} -> id == Worker end)
+
+      {Worker, worker_pid, _type, _modules} =
+        Enum.find(children, fn {id, _, _, _} -> id == Worker end)
 
       Process.exit(worker_pid, :kill)
       Process.sleep(200)
 
       new_children = Supervisor.which_children(sup_pid)
-      {Worker, new_worker_pid, _type, _modules} = Enum.find(new_children, fn {id, _, _, _} -> id == Worker end)
+
+      {Worker, new_worker_pid, _type, _modules} =
+        Enum.find(new_children, fn {id, _, _, _} -> id == Worker end)
 
       assert is_pid(new_worker_pid)
       assert Process.alive?(new_worker_pid)
@@ -77,13 +81,17 @@ defmodule Livekit.Agents.WorkerSupervisorTest do
       on_exit(fn -> stop_supervisor(sup_pid) end)
 
       children = Supervisor.which_children(sup_pid)
-      {JobSupervisor, job_sup_pid, _type, _modules} = Enum.find(children, fn {id, _, _, _} -> id == JobSupervisor end)
+
+      {JobSupervisor, job_sup_pid, _type, _modules} =
+        Enum.find(children, fn {id, _, _, _} -> id == JobSupervisor end)
 
       Process.exit(job_sup_pid, :kill)
       Process.sleep(200)
 
       new_children = Supervisor.which_children(sup_pid)
-      {JobSupervisor, new_job_sup_pid, _type, _modules} = Enum.find(new_children, fn {id, _, _, _} -> id == JobSupervisor end)
+
+      {JobSupervisor, new_job_sup_pid, _type, _modules} =
+        Enum.find(new_children, fn {id, _, _, _} -> id == JobSupervisor end)
 
       assert is_pid(new_job_sup_pid)
       assert Process.alive?(new_job_sup_pid)

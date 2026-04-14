@@ -180,7 +180,10 @@ defmodule Livekit.Agents.LLM.OpenAITest do
       OpenAI.chat(ctx, config: config_for(bypass))
     end
 
-    test "text response returns {:ok, %ChatMessage{role: :assistant}}", %{bypass: bypass, ctx: ctx} do
+    test "text response returns {:ok, %ChatMessage{role: :assistant}}", %{
+      bypass: bypass,
+      ctx: ctx
+    } do
       Bypass.expect_once(bypass, "POST", "/v1/chat/completions", fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")

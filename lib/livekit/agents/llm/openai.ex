@@ -359,10 +359,11 @@ defmodule Livekit.Agents.LLM.OpenAI do
   defp build_client(%Config{api_key: key, base_url: base_url}) do
     middleware = [
       {Tesla.Middleware.BaseUrl, base_url},
-      {Tesla.Middleware.Headers, [
-        {"Authorization", "Bearer #{key}"},
-        {"Content-Type", "application/json"}
-      ]},
+      {Tesla.Middleware.Headers,
+       [
+         {"Authorization", "Bearer #{key}"},
+         {"Content-Type", "application/json"}
+       ]},
       Tesla.Middleware.JSON
     ]
 
@@ -372,10 +373,11 @@ defmodule Livekit.Agents.LLM.OpenAI do
   defp build_stream_client(%Config{api_key: key, base_url: base_url}) do
     middleware = [
       {Tesla.Middleware.BaseUrl, base_url},
-      {Tesla.Middleware.Headers, [
-        {"Authorization", "Bearer #{key}"},
-        {"Content-Type", "application/json"}
-      ]},
+      {Tesla.Middleware.Headers,
+       [
+         {"Authorization", "Bearer #{key}"},
+         {"Content-Type", "application/json"}
+       ]},
       Tesla.Middleware.JSON
     ]
 
@@ -393,5 +395,4 @@ defmodule Livekit.Agents.LLM.OpenAI do
   defp mock_chat_response do
     ChatContext.new_message(:assistant, ["I'm a mock LLM response."])
   end
-
 end

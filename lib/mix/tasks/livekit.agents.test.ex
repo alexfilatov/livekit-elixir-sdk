@@ -74,19 +74,21 @@ defmodule Mix.Tasks.Livekit.Agents.Test do
     {:ok, :all, %{}}
   end
 
-  defp parse_args([test_type | args]) when test_type in ["unit", "integration", "load", "pipeline", "providers", "all"] do
-    {parsed, _, _} = OptionParser.parse(args,
-      strict: [
-        room: :string,
-        server_url: :string,
-        api_key: :string,
-        api_secret: :string,
-        concurrent: :integer,
-        duration: :integer,
-        verbose: :boolean,
-        help: :boolean
-      ]
-    )
+  defp parse_args([test_type | args])
+       when test_type in ["unit", "integration", "load", "pipeline", "providers", "all"] do
+    {parsed, _, _} =
+      OptionParser.parse(args,
+        strict: [
+          room: :string,
+          server_url: :string,
+          api_key: :string,
+          api_secret: :string,
+          concurrent: :integer,
+          duration: :integer,
+          verbose: :boolean,
+          help: :boolean
+        ]
+      )
 
     if parsed[:help] do
       {:error, :help}
@@ -199,11 +201,12 @@ defmodule Mix.Tasks.Livekit.Agents.Test do
     start_time = System.monotonic_time(:second)
 
     # Start multiple agent sessions concurrently
-    agent_tasks = for i <- 1..config.concurrent do
-      Task.async(fn ->
-        load_test_agent(config, i, config.duration)
-      end)
-    end
+    agent_tasks =
+      for i <- 1..config.concurrent do
+        Task.async(fn ->
+          load_test_agent(config, i, config.duration)
+        end)
+      end
 
     # Wait for all agents to complete
     results = Task.await_many(agent_tasks, (config.duration + 10) * 1000)
@@ -238,25 +241,26 @@ defmodule Mix.Tasks.Livekit.Agents.Test do
   end
 
   defp run_test_suite(tests) do
-    results = Enum.map(tests, fn {name, test_fn} ->
-      Mix.shell().info("Testing #{name}...")
+    results =
+      Enum.map(tests, fn {name, test_fn} ->
+        Mix.shell().info("Testing #{name}...")
 
-      try do
-        case test_fn.() do
-          :ok ->
-            Mix.shell().info("  ✅ #{name} - PASSED")
-            {name, :passed}
+        try do
+          case test_fn.() do
+            :ok ->
+              Mix.shell().info("  ✅ #{name} - PASSED")
+              {name, :passed}
 
-          {:error, reason} ->
-            Mix.shell().error("  ❌ #{name} - FAILED: #{inspect(reason)}")
-            {name, :failed, reason}
+            {:error, reason} ->
+              Mix.shell().error("  ❌ #{name} - FAILED: #{inspect(reason)}")
+              {name, :failed, reason}
+          end
+        rescue
+          error ->
+            Mix.shell().error("  ❌ #{name} - ERROR: #{inspect(error)}")
+            {name, :error, error}
         end
-      rescue
-        error ->
-          Mix.shell().error("  ❌ #{name} - ERROR: #{inspect(error)}")
-          {name, :error, error}
-      end
-    end)
+      end)
 
     # Summary
     passed = Enum.count(results, fn {_, status} -> status == :passed end)
@@ -270,6 +274,7 @@ defmodule Mix.Tasks.Livekit.Agents.Test do
     else
       failed_tests = Enum.filter(results, fn {_, status} -> status != :passed end)
       Mix.shell().error("❌ Failed tests:")
+
       Enum.each(failed_tests, fn {name, status, reason} ->
         Mix.shell().error("  - #{name}: #{status} - #{inspect(reason)}")
       end)
@@ -322,14 +327,15 @@ defmodule Mix.Tasks.Livekit.Agents.Test do
   end
 
   defp test_job_context do
-    context = Livekit.Agents.JobContext.new(%{
-      job_id: "test-job",
-      room_name: "test-room",
-      participant_identity: "test-agent",
-      server_url: "ws://localhost:7880",
-      api_key: "test-key",
-      api_secret: "test-secret"
-    })
+    context =
+      Livekit.Agents.JobContext.new(%{
+        job_id: "test-job",
+        room_name: "test-room",
+        participant_identity: "test-agent",
+        server_url: "ws://localhost:7880",
+        api_key: "test-key",
+        api_secret: "test-secret"
+      })
 
     case Livekit.Agents.JobContext.validate(context) do
       :ok -> :ok
@@ -443,7 +449,8 @@ defmodule Mix.Tasks.Livekit.Agents.Test do
 
     case Livekit.Agents.Pipeline.process_audio(pipeline, audio_frame) do
       {:ok, _result} -> :ok
-      {:error, :no_stt_node} -> :ok  # Expected for mock
+      # Expected for mock
+      {:error, :no_stt_node} -> :ok
       error -> error
     end
   end
@@ -453,7 +460,8 @@ defmodule Mix.Tasks.Livekit.Agents.Test do
 
     case Livekit.Agents.Pipeline.process_text(pipeline, "Hello, test!") do
       {:ok, _result} -> :ok
-      {:error, _reason} -> :ok  # Expected for mock
+      # Expected for mock
+      {:error, _reason} -> :ok
     end
   end
 
@@ -610,10 +618,13 @@ defmodule Mix.Tasks.Livekit.Agents.Test do
     successful = Enum.count(results, fn %{success: success} -> success end)
     failed = length(results) - successful
 
-    total_messages = Enum.sum(Enum.map(results, fn
-      %{messages_processed: count} -> count
-      _ -> 0
-    end))
+    total_messages =
+      Enum.sum(
+        Enum.map(results, fn
+          %{messages_processed: count} -> count
+          _ -> 0
+        end)
+      )
 
     Mix.shell().info("Load Test Results:")
     Mix.shell().info(String.duplicate("=", 30))
@@ -627,6 +638,7 @@ defmodule Mix.Tasks.Livekit.Agents.Test do
     if failed > 0 do
       Mix.shell().error("❌ Load test had failures")
       failed_results = Enum.filter(results, fn %{success: success} -> not success end)
+
       Enum.each(failed_results, fn %{agent_id: id, error: error} ->
         Mix.shell().error("  Agent #{id}: #{inspect(error)}")
       end)

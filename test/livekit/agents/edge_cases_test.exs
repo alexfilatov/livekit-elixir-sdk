@@ -660,7 +660,13 @@ defmodule Livekit.Agents.EdgeCasesTest do
 
   defp make_frame(timestamp_us) do
     data = <<1000::little-signed-16>>
-    AudioFrame.new(data, sample_rate: 16_000, channels: 1, format: :pcm_16, timestamp_us: timestamp_us)
+
+    AudioFrame.new(data,
+      sample_rate: 16_000,
+      channels: 1,
+      format: :pcm_16,
+      timestamp_us: timestamp_us
+    )
   end
 
   defp silent_frame do

@@ -19,7 +19,8 @@ defmodule Livekit.Agents.IntegrationTest do
       {:ok, agent_pid} = VoiceAgent.start_link(config)
 
       # Create some test audio
-      audio_data = :crypto.strong_rand_bytes(4800)  # ~100ms at 48kHz
+      # ~100ms at 48kHz
+      audio_data = :crypto.strong_rand_bytes(4800)
       audio_frame = AudioFrame.new(audio_data, sample_rate: 48_000)
 
       # Process audio through the agent
@@ -61,14 +62,15 @@ defmodule Livekit.Agents.IntegrationTest do
     end
 
     test "job context creation and validation" do
-      context = JobContext.new(%{
-        job_id: "test-job-123",
-        room_name: "test-room",
-        participant_identity: "test-agent",
-        server_url: "ws://localhost:7880",
-        api_key: "test-key",
-        api_secret: "test-secret"
-      })
+      context =
+        JobContext.new(%{
+          job_id: "test-job-123",
+          room_name: "test-room",
+          participant_identity: "test-agent",
+          server_url: "ws://localhost:7880",
+          api_key: "test-key",
+          api_secret: "test-secret"
+        })
 
       assert context.job_id == "test-job-123"
       assert context.room_name == "test-room"

@@ -22,7 +22,8 @@ defmodule Livekit.Agents.VoiceAgentTest do
 
       {:ok, pid} = VoiceAgent.start_link(config)
 
-      audio_data = :crypto.strong_rand_bytes(4800)  # ~100ms of audio
+      # ~100ms of audio
+      audio_data = :crypto.strong_rand_bytes(4800)
       audio_frame = AudioFrame.new(audio_data, sample_rate: 48_000)
 
       assert :ok = VoiceAgent.process_audio_frame(pid, audio_frame)

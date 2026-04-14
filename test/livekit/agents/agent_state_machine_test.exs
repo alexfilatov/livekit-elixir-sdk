@@ -134,8 +134,7 @@ defmodule Livekit.Agents.AgentStateMachineTest do
       {:ok, pid} = AgentStateMachine.start_link(session_id: session_id)
       AgentStateMachine.set_state(pid, :listening)
 
-      assert_receive {:livekit_event,
-                      %AgentStateChanged{from: :initializing, to: :listening}},
+      assert_receive {:livekit_event, %AgentStateChanged{from: :initializing, to: :listening}},
                      500
 
       AgentStateMachine.set_state(pid, :thinking)

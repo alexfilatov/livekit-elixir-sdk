@@ -41,11 +41,13 @@ defmodule Livekit.Agents.TTS.OpenAITest do
     end
 
     test "missing api_key in real mode returns error" do
-      assert {:error, :missing_api_key} = OpenAI.validate_config(%Config{mock: false, api_key: nil})
+      assert {:error, :missing_api_key} =
+               OpenAI.validate_config(%Config{mock: false, api_key: nil})
     end
 
     test "empty api_key in real mode returns error" do
-      assert {:error, :missing_api_key} = OpenAI.validate_config(%Config{mock: false, api_key: ""})
+      assert {:error, :missing_api_key} =
+               OpenAI.validate_config(%Config{mock: false, api_key: ""})
     end
 
     test "invalid speed (too low) returns error" do
@@ -162,7 +164,10 @@ defmodule Livekit.Agents.TTS.OpenAITest do
       assert audio == <<5, 6, 7, 8>>
     end
 
-    test "returns raw audio bytes from server (not JSON-decoded)", %{bypass: bypass, config: config} do
+    test "returns raw audio bytes from server (not JSON-decoded)", %{
+      bypass: bypass,
+      config: config
+    } do
       raw_audio = :crypto.strong_rand_bytes(256)
 
       Bypass.expect_once(bypass, "POST", "/v1/audio/speech", fn conn ->
@@ -185,7 +190,10 @@ defmodule Livekit.Agents.TTS.OpenAITest do
       assert {:error, {:api_error, 429, _}} = OpenAI.synthesize("Test", config: config)
     end
 
-    test "returns {:error, {:api_error, 401, _}} on unauthorized", %{bypass: bypass, config: config} do
+    test "returns {:error, {:api_error, 401, _}} on unauthorized", %{
+      bypass: bypass,
+      config: config
+    } do
       Bypass.expect_once(bypass, "POST", "/v1/audio/speech", fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")

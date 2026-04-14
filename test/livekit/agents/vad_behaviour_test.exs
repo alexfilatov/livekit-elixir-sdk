@@ -9,7 +9,13 @@ defmodule Livekit.Agents.VADTest do
 
     @impl true
     def stream(_config) do
-      pid = spawn(fn -> receive do :stop -> :ok end end)
+      pid =
+        spawn(fn ->
+          receive do
+            :stop -> :ok
+          end
+        end)
+
       {:ok, pid}
     end
 
