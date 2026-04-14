@@ -92,13 +92,18 @@ defmodule Livekit.Agents.RoomIO do
   # ---------------------------------------------------------------------------
 
   @doc """
-  Starts a `RoomIO` GenServer linked to the calling process.
+  Starts a `RoomIO` GenServer.
+
+  Uses `GenServer.start/3` (not `start_link`) so callers receive `{:error, reason}`
+  on validation failure instead of an EXIT signal — matching the `Room.connect/1` pattern.
+  Callers that need crash propagation should monitor the returned pid or start this
+  GenServer under a supervisor.
 
   Requires a `%RoomIO.Config{}` with both `:room_pid` and `:pipeline_pid` set.
   Returns `{:ok, pid}` on success, or `{:error, :missing_config}` if either pid is `nil`.
   """
   @spec start_link(Config.t()) :: GenServer.on_start()
-  def start_link(%Config{} = config), do: GenServer.start_link(__MODULE__, config)
+  def start_link(%Config{} = config), do: GenServer.start(__MODULE__, config)
 
   @doc """
   Stops the `RoomIO` GenServer cleanly.
