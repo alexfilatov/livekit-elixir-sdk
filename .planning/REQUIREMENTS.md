@@ -88,10 +88,10 @@
 - [x] **TEST-01**: 100% test coverage for all new behaviour modules
 - [x] **TEST-02**: 100% test coverage for ChatContext and tool system
 - [x] **TEST-03**: 100% test coverage for all provider implementations (using mock mode)
-- [ ] **TEST-04**: 100% test coverage for pipeline, VAD, turn detection
+- [x] **TEST-04**: 100% test coverage for pipeline, VAD, turn detection
 - [ ] **TEST-05**: 100% test coverage for state machines and events
 - [ ] **TEST-06**: 100% test coverage for worker infrastructure
-- [ ] **TEST-07**: Integration tests for full STT -> LLM -> TTS flow (mock providers)
+- [x] **TEST-07**: Integration tests for full STT -> LLM -> TTS flow (mock providers)
 
 ## v2 Requirements
 
@@ -169,8 +169,8 @@
 | PIPE-04 | Phase 7 | Complete |
 | PIPE-05 | Phase 7 | Complete |
 | PIPE-06 | Phase 7 | Complete |
-| TEST-04 | Phase 7 | Pending |
-| TEST-07 | Phase 7 | Pending |
+| TEST-04 | Phase 7 | Complete |
+| TEST-07 | Phase 7 | Complete |
 | EVNT-01 | Phase 8 | Pending |
 | EVNT-02 | Phase 8 | Pending |
 | EVNT-03 | Phase 8 | Pending |

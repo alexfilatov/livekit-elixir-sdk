@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Deepgram STT** - Real Deepgram provider: batch HTTP and streaming WebSocket transcription (completed 2026-04-14)
 - [x] **Phase 5: OpenAI LLM** - Real OpenAI provider: chat completions with SSE streaming and tool calling (completed 2026-04-14)
 - [x] **Phase 6: OpenAI TTS** - Real OpenAI provider: audio synthesis with voice/format options and response caching (completed 2026-04-14)
-- [ ] **Phase 7: Voice Pipeline** - Streaming STT -> LLM -> TTS pipeline with VAD, turn detection, and interruption handling
+- [x] **Phase 7: Voice Pipeline** - Streaming STT -> LLM -> TTS pipeline with VAD, turn detection, and interruption handling (completed 2026-04-14)
 - [ ] **Phase 8: State & Events** - User and agent state machines, typed events, :telemetry integration, and Registry pub/sub
 - [ ] **Phase 9: Worker Infrastructure** - WebSocket worker protocol, OTP supervision tree, job lifecycle, and graceful shutdown
 
@@ -130,7 +130,7 @@ Plans:
 Plans:
 - [x] 07-01-PLAN.md — EnergyVAD pure module (classify/2 via AudioFrame.is_silence?); TurnDetector GenServer (timer-based turn boundaries)
 - [x] 07-02-PLAN.md — Pipeline GenServer rewrite: push_frame/2 cast, Task.async STT->LLM->TTS, interruption, ChatContext ownership, :telemetry events
-- [ ] 07-03-PLAN.md — Full ExUnit test suite: EnergyVAD unit, TurnDetector unit, Pipeline integration with inline mock providers
+- [x] 07-03-PLAN.md — Full ExUnit test suite: EnergyVAD unit, TurnDetector unit, Pipeline integration with inline mock providers
 
 ### Phase 8: State & Events
 **Goal**: User and agent state machines with typed event structs, :telemetry metrics, and Registry-based pub/sub
@@ -170,6 +170,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 | 4. Deepgram STT | 3/3 | Complete   | 2026-04-14 |
 | 5. OpenAI LLM | 2/2 | Complete   | 2026-04-14 |
 | 6. OpenAI TTS | 2/2 | Complete   | 2026-04-14 |
-| 7. Voice Pipeline | 2/3 | In Progress|  |
+| 7. Voice Pipeline | 3/3 | Complete   | 2026-04-14 |
 | 8. State & Events | 0/? | Not started | - |
 | 9. Worker Infrastructure | 0/? | Not started | - |
