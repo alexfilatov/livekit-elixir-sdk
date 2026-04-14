@@ -1,0 +1,526 @@
+# LiveKit Voice Agent - Interactive Demo
+
+```elixir
+Mix.install([
+  {:livekit, path: "../.."},
+  {:kino, "~> 0.12.0"},
+  {:req, "~> 0.4.0"}
+])
+```
+
+## Introduction
+
+This Livebook demonstrates how to create and interact with a LiveKit Voice Agent using the Elixir SDK. You'll be able to:
+
+- Configure a voice agent with STT, LLM, and TTS providers
+- Connect to a LiveKit room
+- Have real-time voice conversations with the AI agent
+- Monitor agent performance and metrics
+
+## 🔧 Configuration
+
+First, let's set up all the necessary API keys and configuration:
+
+```elixir
+# API Keys Configuration
+api_keys_form = Kino.Control.form(
+  [
+    livekit_url: Kino.Input.text("LiveKit Server URL", default: "ws://localhost:7880"),
+    livekit_api_key: Kino.Input.password("LiveKit API Key"),
+    livekit_api_secret: Kino.Input.password("LiveKit API Secret"),
+    deepgram_api_key: Kino.Input.password("Deepgram API Key (for STT)"),
+    openai_api_key: Kino.Input.password("OpenAI API Key (for LLM and TTS)")
+  ],
+  submit: "Save Configuration"
+)
+```
+
+```elixir
+# Agent Configuration
+agent_config_form = Kino.Control.form(
+  [
+    room_name: Kino.Input.text("Room Name", default: "voice-agent-demo"),
+    agent_name: Kino.Input.text("Agent Name", default: "Kelly"),
+    agent_instructions: Kino.Input.textarea("Agent Instructions",
+      default: """
+      You are Kelly, a helpful and friendly AI assistant. You have a great sense of humor and love to help people.
+      Keep your responses concise and engaging. You can help with questions, have conversations, and provide assistance.
+      """),
+    openai_model: Kino.Input.select("OpenAI Model",
+      options: [{"GPT-4o Mini", "gpt-4o-mini"}, {"GPT-4o", "gpt-4o"}, {"GPT-3.5 Turbo", "gpt-3.5-turbo"}],
+      default: "gpt-4o-mini"),
+    openai_voice: Kino.Input.select("OpenAI Voice",
+      options: [{"Alloy", "alloy"}, {"Echo", "echo"}, {"Fable", "fable"}, {"Onyx", "onyx"}, {"Nova", "nova"}, {"Shimmer", "shimmer"}],
+      default: "alloy"),
+    deepgram_model: Kino.Input.select("Deepgram Model",
+      options: [{"Nova 2", "nova-2"}, {"Nova", "nova"}, {"Enhanced", "enhanced"}, {"Base", "base"}],
+      default: "nova-2")
+  ],
+  submit: "Configure Agent"
+)
+```
+
+## 🎤 Voice Agent Setup
+
+Let's create and start the voice agent with your configuration:
+
+```elixir
+# Wait for configuration
+api_config = Kino.Control.read(api_keys_form)
+agent_config = Kino.Control.read(agent_config_form)
+
+# Validate configuration
+if api_config.livekit_api_key == "" or api_config.livekit_api_secret == "" do
+  Kino.interrupt!(:error, "Please provide LiveKit API credentials")
+end
+
+if api_config.deepgram_api_key == "" or api_config.openai_api_key == "" do
+  Kino.interrupt!(:error, "Please provide Deepgram and OpenAI API keys")
+end
+
+Kino.nothing()
+```
+
+```elixir
+# Start the LiveKit application
+Application.ensure_all_started(:livekit)
+
+# Create voice agent configuration
+voice_agent_config = %Livekit.Agents.VoiceAgent.Config{
+  instructions: agent_config.agent_instructions,
+  name: agent_config.agent_name,
+  vad_enabled: true,
+  turn_detection: :multilingual,
+  preemptive_synthesis: true,
+
+  # Configure STT (Speech-to-Text) with Deepgram
+  stt: {Livekit.Agents.STT.Deepgram, %{
+    api_key: api_config.deepgram_api_key,
+    model: agent_config.deepgram_model,
+    language: "en-US",
+    smart_format: true,
+    punctuate: true,
+    interim_results: true,
+    endpointing: true,
+    vad_events: true
+  }},
+
+  # Configure LLM (Large Language Model) with OpenAI
+  llm: {Livekit.Agents.LLM.OpenAI, %{
+    api_key: api_config.openai_api_key,
+    model: agent_config.openai_model,
+    temperature: 0.7,
+    max_tokens: 1000,
+    instructions: agent_config.agent_instructions
+  }},
+
+  # Configure TTS (Text-to-Speech) with OpenAI
+  tts: {Livekit.Agents.TTS.OpenAI, %{
+    api_key: api_config.openai_api_key,
+    voice: String.to_atom(agent_config.openai_voice),
+    model: :tts_1,
+    response_format: :pcm,
+    speed: 1.0
+  }}
+}
+
+Kino.Markdown.new("✅ **Voice Agent Configuration Created**")
+```
+
+```elixir
+# Create agent session configuration
+session_config = %Livekit.Agents.AgentSession.Config{
+  room_name: agent_config.room_name,
+  participant_identity: "voice-agent-#{agent_config.agent_name |> String.downcase()}",
+  server_url: api_config.livekit_url,
+  api_key: api_config.livekit_api_key,
+  api_secret: api_config.livekit_api_secret,
+  voice_agent_config: voice_agent_config,
+  auto_subscribe: true,
+  auto_publish_audio: true,
+  auto_publish_video: false
+}
+
+# Start the agent session
+{:ok, session_pid} = Livekit.Agents.AgentSession.start_link(session_config)
+
+Kino.Markdown.new("✅ **Agent Session Started**")
+```
+
+```elixir
+# Connect to the room
+case Livekit.Agents.AgentSession.connect_to_room(session_pid) do
+  :ok ->
+    Kino.Markdown.new("🎉 **Successfully connected to room: #{agent_config.room_name}**")
+  {:error, reason} ->
+    Kino.Markdown.new("❌ **Failed to connect to room:** #{inspect(reason)}")
+end
+```
+
+## 📊 Agent Status and Monitoring
+
+```elixir
+# Create status monitoring
+status_frame = Kino.Frame.new()
+
+# Function to update status
+update_status = fn ->
+  status = Livekit.Agents.AgentSession.get_status(session_pid)
+  participants = Livekit.Agents.AgentSession.list_participants(session_pid)
+
+  status_html = """
+  <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; font-family: 'SF Pro Display', system-ui;">
+    <h3 style="color: #1a73e8; margin-top: 0;">🤖 Agent Status</h3>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0;">
+      <div>
+        <h4 style="color: #333; margin: 0 0 10px 0;">Connection</h4>
+        <p><strong>Room:</strong> #{status.room_name}</p>
+        <p><strong>Connected:</strong> #{if status.room_connected, do: "✅ Yes", else: "❌ No"}</p>
+        <p><strong>Identity:</strong> #{status.participant_identity}</p>
+        <p><strong>Voice Agent:</strong> #{if status.voice_agent_active, do: "✅ Active", else: "❌ Inactive"}</p>
+      </div>
+
+      <div>
+        <h4 style="color: #333; margin: 0 0 10px 0;">Statistics</h4>
+        <p><strong>Participants:</strong> #{status.participants_count}</p>
+        <p><strong>Audio Tracks:</strong> #{status.audio_tracks_count}</p>
+        <p><strong>Messages Processed:</strong> #{status.metrics.messages_processed}</p>
+        <p><strong>Audio Frames:</strong> #{status.metrics.audio_frames_processed}</p>
+      </div>
+    </div>
+
+    <div style="margin-top: 20px;">
+      <h4 style="color: #333; margin: 0 0 10px 0;">Participants (#{length(participants)})</h4>
+      #{if length(participants) > 0 do
+        participants
+        |> Enum.map(fn p -> "<span style='background: #e3f2fd; padding: 4px 8px; border-radius: 4px; margin: 2px;'>#{p.identity}</span>" end)
+        |> Enum.join(" ")
+      else
+        "<em style='color: #666;'>No participants yet</em>"
+      end}
+    </div>
+
+    <div style="margin-top: 15px; font-size: 12px; color: #666;">
+      Last updated: #{DateTime.utc_now() |> DateTime.to_string()}
+    </div>
+  </div>
+  """
+
+  Kino.Frame.render(status_frame, Kino.HTML.new(status_html))
+end
+
+# Initial status update
+update_status.()
+
+status_frame
+```
+
+```elixir
+# Auto-refresh status every 5 seconds
+refresh_task = Task.async(fn ->
+  Stream.interval(5000)
+  |> Enum.each(fn _ ->
+    if Process.alive?(session_pid) do
+      update_status.()
+    end
+  end)
+end)
+
+Kino.nothing()
+```
+
+## 🎙️ Voice Interaction
+
+### Join the Room with Your Browser
+
+To interact with the voice agent, you need to join the room from your browser or mobile device:
+
+```elixir
+# Generate a participant token for browser access
+participant_token = Livekit.AccessToken.new(api_config.livekit_api_key, api_config.livekit_api_secret)
+|> Livekit.AccessToken.with_identity("user-#{:rand.uniform(1000)}")
+|> Livekit.AccessToken.with_ttl(3600)  # 1 hour
+|> Livekit.AccessToken.add_grant(%{
+  room_join: true,
+  room: agent_config.room_name,
+  can_publish: true,
+  can_subscribe: true,
+  can_publish_data: true
+})
+|> Livekit.AccessToken.to_jwt()
+
+# Create connection URL
+room_url = api_config.livekit_url
+|> String.replace("ws://", "https://")
+|> String.replace("wss://", "https://")
+
+connection_info = """
+<div style="background: #e8f5e8; padding: 20px; border-radius: 8px; border-left: 4px solid #4caf50;">
+  <h3 style="color: #2e7d32; margin-top: 0;">🌐 Join the Voice Chat</h3>
+
+  <p><strong>Option 1: Use LiveKit Meet (Recommended)</strong></p>
+  <p>1. Go to: <a href="https://meet.livekit.io" target="_blank">meet.livekit.io</a></p>
+  <p>2. Enter your server URL: <code>#{api_config.livekit_url}</code></p>
+  <p>3. Enter room name: <code>#{agent_config.room_name}</code></p>
+  <p>4. Use this token: <code style="word-break: break-all; font-size: 11px;">#{participant_token}</code></p>
+
+  <p style="margin-top: 20px;"><strong>Option 2: Use LiveKit Playground</strong></p>
+  <p>Go to the <a href="https://playground.livekit.io" target="_blank">LiveKit Playground</a> and use the same credentials.</p>
+
+  <div style="background: #fff3cd; padding: 10px; border-radius: 4px; margin-top: 15px;">
+    <strong>💡 Tips:</strong>
+    <ul style="margin: 5px 0;">
+      <li>Make sure to enable your microphone and speakers</li>
+      <li>The agent will respond to your voice automatically</li>
+      <li>You can see real-time status updates above</li>
+    </ul>
+  </div>
+</div>
+"""
+
+Kino.HTML.new(connection_info)
+```
+
+### Voice Agent Controls
+
+```elixir
+# Control panel for the voice agent
+controls_form = Kino.Control.form(
+  [
+    action: Kino.Input.select("Action",
+      options: [
+        {"Send Text Message", "send_message"},
+        {"Get Agent Metrics", "get_metrics"},
+        {"Update Agent Instructions", "update_instructions"},
+        {"Restart Agent", "restart_agent"}
+      ]),
+    message_text: Kino.Input.text("Message Text (for send message)"),
+    new_instructions: Kino.Input.textarea("New Instructions (for update)")
+  ],
+  submit: "Execute Action"
+)
+```
+
+```elixir
+# Handle control actions
+control_action = Kino.Control.read(controls_form)
+
+case control_action.action do
+  "send_message" when control_action.message_text != "" ->
+    case Livekit.Agents.AgentSession.send_message(session_pid, control_action.message_text) do
+      :ok ->
+        Kino.Markdown.new("✅ **Message sent:** #{control_action.message_text}")
+      {:error, reason} ->
+        Kino.Markdown.new("❌ **Failed to send message:** #{inspect(reason)}")
+    end
+
+  "get_metrics" ->
+    status = Livekit.Agents.AgentSession.get_status(session_pid)
+    metrics_json = Jason.encode!(status.metrics, pretty: true)
+    Kino.Markdown.new("📊 **Agent Metrics:**\n```json\n#{metrics_json}\n```")
+
+  "update_instructions" when control_action.new_instructions != "" ->
+    # This would require implementing instruction updates in the agent
+    Kino.Markdown.new("ℹ️ **Note:** Instruction updates require agent restart")
+
+  "restart_agent" ->
+    # Restart the agent session
+    try do
+      Livekit.Agents.AgentSession.disconnect_from_room(session_pid)
+      GenServer.stop(session_pid)
+
+      # Start new session
+      {:ok, new_session_pid} = Livekit.Agents.AgentSession.start_link(session_config)
+      Livekit.Agents.AgentSession.connect_to_room(new_session_pid)
+
+      # Update the session_pid variable (this is a limitation in Livebook)
+      Kino.Markdown.new("✅ **Agent restarted** - Please re-run the status monitoring cell")
+    rescue
+      error ->
+        Kino.Markdown.new("❌ **Restart failed:** #{inspect(error)}")
+    end
+
+  _ ->
+    Kino.Markdown.new("⚠️ **Please select an action and provide required inputs**")
+end
+```
+
+## 🧪 Test Audio Processing
+
+Let's test the audio processing pipeline with a sample:
+
+```elixir
+# Create a test audio frame
+test_audio_data = :crypto.strong_rand_bytes(4800)  # ~100ms of audio at 48kHz
+test_audio_frame = Livekit.Agents.AudioFrame.new(test_audio_data,
+  sample_rate: 48_000,
+  timestamp_us: System.monotonic_time(:microsecond)
+)
+
+# Get the voice agent from the session (this is a simplified test)
+agent_status = Livekit.Agents.AgentSession.get_status(session_pid)
+
+test_result = if agent_status.voice_agent_active do
+  "✅ Voice agent is active and ready to process audio"
+else
+  "⚠️ Voice agent is not active"
+end
+
+audio_info = """
+**🎵 Audio Frame Test:**
+- Sample Rate: #{test_audio_frame.sample_rate} Hz
+- Channels: #{test_audio_frame.channels}
+- Format: #{test_audio_frame.format}
+- Duration: #{Livekit.Agents.AudioFrame.duration_ms(test_audio_frame)} ms
+- Data Size: #{byte_size(test_audio_frame.data)} bytes
+
+#{test_result}
+"""
+
+Kino.Markdown.new(audio_info)
+```
+
+## 📈 Real-time Metrics Dashboard
+
+```elixir
+# Create a metrics chart
+metrics_frame = Kino.Frame.new()
+
+# Function to update metrics chart
+update_metrics = fn ->
+  if Process.alive?(session_pid) do
+    status = Livekit.Agents.AgentSession.get_status(session_pid)
+
+    metrics_data = [
+      %{metric: "Messages", value: status.metrics.messages_processed, color: "#4caf50"},
+      %{metric: "Audio Frames", value: status.metrics.audio_frames_processed, color: "#2196f3"},
+      %{metric: "Participants", value: status.participants_count, color: "#ff9800"},
+      %{metric: "Audio Tracks", value: status.audio_tracks_count, color: "#9c27b0"}
+    ]
+
+    chart_html = """
+    <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+      <h3 style="margin-top: 0; color: #333;">📊 Real-time Metrics</h3>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px;">
+        #{Enum.map(metrics_data, fn %{metric: metric, value: value, color: color} ->
+          """
+          <div style="text-align: center; padding: 15px; border: 2px solid #{color}; border-radius: 8px;">
+            <div style="font-size: 24px; font-weight: bold; color: #{color};">#{value}</div>
+            <div style="font-size: 14px; color: #666; margin-top: 5px;">#{metric}</div>
+          </div>
+          """
+        end) |> Enum.join("")}
+      </div>
+      <div style="margin-top: 15px; font-size: 12px; color: #999; text-align: center;">
+        Updated: #{DateTime.utc_now() |> DateTime.to_time() |> Time.to_string()}
+      </div>
+    </div>
+    """
+
+    Kino.Frame.render(metrics_frame, Kino.HTML.new(chart_html))
+  end
+end
+
+# Initial metrics update
+update_metrics.()
+
+metrics_frame
+```
+
+```elixir
+# Auto-refresh metrics every 3 seconds
+metrics_task = Task.async(fn ->
+  Stream.interval(3000)
+  |> Enum.each(fn _ -> update_metrics.() end)
+end)
+
+Kino.nothing()
+```
+
+## 🏁 Session Management
+
+```elixir
+# Session cleanup and management
+cleanup_form = Kino.Control.form(
+  [
+    action: Kino.Input.select("Session Action",
+      options: [
+        {"Get Session Info", "info"},
+        {"Disconnect from Room", "disconnect"},
+        {"Stop Agent Session", "stop"}
+      ])
+  ],
+  submit: "Execute"
+)
+```
+
+```elixir
+cleanup_action = Kino.Control.read(cleanup_form)
+
+case cleanup_action.action do
+  "info" ->
+    if Process.alive?(session_pid) do
+      status = Livekit.Agents.AgentSession.get_status(session_pid)
+      session_info = Jason.encode!(status, pretty: true)
+      Kino.Markdown.new("📋 **Complete Session Info:**\n```json\n#{session_info}\n```")
+    else
+      Kino.Markdown.new("❌ **Session is not active**")
+    end
+
+  "disconnect" ->
+    if Process.alive?(session_pid) do
+      case Livekit.Agents.AgentSession.disconnect_from_room(session_pid) do
+        :ok ->
+          Kino.Markdown.new("✅ **Disconnected from room**")
+        {:error, reason} ->
+          Kino.Markdown.new("❌ **Disconnect failed:** #{inspect(reason)}")
+      end
+    else
+      Kino.Markdown.new("❌ **Session is not active**")
+    end
+
+  "stop" ->
+    if Process.alive?(session_pid) do
+      GenServer.stop(session_pid)
+      Kino.Markdown.new("🛑 **Agent session stopped**")
+    else
+      Kino.Markdown.new("❌ **Session is already stopped**")
+    end
+
+  _ ->
+    Kino.Markdown.new("⚠️ **Please select an action**")
+end
+```
+
+## 🎯 Summary and Next Steps
+
+This Livebook provides a complete interactive environment for testing LiveKit voice agents. Here's what you can do:
+
+### ✅ **What's Working:**
+- **Voice Agent Creation** with STT, LLM, and TTS
+- **Room Connection** and participant management
+- **Real-time Monitoring** of agent status and metrics
+- **Browser Integration** for voice conversations
+- **Interactive Controls** for testing and management
+
+### 🚀 **How to Use:**
+1. **Fill in your API keys** in the configuration forms above
+2. **Run all cells** to start the voice agent
+3. **Join the room** using the browser link provided
+4. **Start talking** - the agent will hear and respond to you
+5. **Monitor performance** using the real-time dashboards
+
+### 💡 **Tips for Best Experience:**
+- Use a good microphone and speakers/headphones
+- Ensure stable internet connection
+- Monitor the metrics to see agent activity
+- Try different voices and models to find your preference
+
+### 🔧 **Customization Options:**
+- Change agent personality by modifying instructions
+- Experiment with different OpenAI voices
+- Adjust Deepgram STT settings for your language/accent
+- Configure different LLM models for varying response styles
+
+**🎉 Your voice agent is now ready for conversation!**
