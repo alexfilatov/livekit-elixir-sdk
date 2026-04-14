@@ -488,7 +488,7 @@ defmodule Mix.Tasks.Livekit.Agents.Test do
 
   # Provider Test Functions
 
-  defp test_deepgram_connection(config) do
+  defp test_deepgram_connection(_config) do
     case System.get_env("DEEPGRAM_API_KEY") do
       nil ->
         Mix.shell().info("  ⚠️  Skipping Deepgram test (no API key)")
@@ -500,13 +500,9 @@ defmodule Mix.Tasks.Livekit.Agents.Test do
           model: "nova-2"
         }
 
-        case Deepgram.start_link(deepgram_config) do
-          {:ok, pid} ->
-            GenServer.stop(pid)
-            :ok
-
-          error ->
-            error
+        case Deepgram.validate_config(deepgram_config) do
+          :ok -> :ok
+          error -> error
         end
     end
   end

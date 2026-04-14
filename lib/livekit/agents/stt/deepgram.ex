@@ -1,238 +1,166 @@
 defmodule Livekit.Agents.STT.Deepgram do
   @moduledoc """
-  Deepgram Speech-to-Text provider for LiveKit agents.
+  Deepgram Speech-to-Text provider implementing `Livekit.Agents.STT`.
 
-  This module provides speech-to-text functionality using Deepgram's API.
-  It supports both streaming and non-streaming transcription.
+  Supports batch HTTP transcription via Deepgram `/v1/listen` and streaming
+  WebSocket transcription (see `stream/1`). Configure mock mode for testing
+  without a real API key.
+
+  ## Configuration
+
+      %Livekit.Agents.STT.Deepgram.Config{
+        api_key: "your_key",
+        model: "nova-2",
+        language: "en-US",
+        mock: false
+      }
+
+  ## Batch usage
+
+      {:ok, event} = Livekit.Agents.STT.Deepgram.transcribe(audio_binary, config: config)
+      # => %SpeechEvent{type: :final, text: "hello world", confidence: 0.9987}
+
+  ## Mock mode (no API key required)
+
+      config = %Config{mock: true}
+      {:ok, event} = Livekit.Agents.STT.Deepgram.transcribe(audio_binary, config: config)
+      # => synthetic SpeechEvent
   """
 
-  use GenServer
+  use Livekit.Agents.STT
+
   require Logger
 
-  alias Livekit.Agents.AudioFrame
+  alias Livekit.Agents.STT.SpeechEvent
+
+  # --- Config struct ---
 
   defmodule Config do
     @moduledoc """
-    Configuration for Deepgram STT provider.
+    Configuration for the Deepgram STT provider.
+
+    ## Fields
+
+    - `:api_key` — Deepgram API key (required unless `:mock` is `true`)
+    - `:model` — Deepgram model name (default: `"nova-2"`)
+    - `:language` — BCP-47 language code (default: `"en-US"`)
+    - `:smart_format` — enable smart formatting (default: `true`)
+    - `:punctuate` — enable punctuation (default: `true`)
+    - `:diarize` — enable speaker diarization (default: `false`)
+    - `:interim_results` — emit interim results in streaming mode (default: `true`)
+    - `:endpointing` — enable VAD-based endpointing (default: `true`)
+    - `:vad_events` — emit VAD events in streaming mode (default: `true`)
+    - `:sample_rate` — audio sample rate in Hz (default: `48_000`)
+    - `:encoding` — audio encoding format (default: `"linear16"`)
+    - `:min_buffer_duration_ms` — minimum audio duration to accumulate before sending
+      a batch request; shorter audio is buffered (default: `100`)
+    - `:mock` — return synthetic results without calling the API (default: `false`)
     """
 
     @type t :: %__MODULE__{
-      api_key: String.t(),
-      model: String.t(),
-      language: String.t(),
-      smart_format: boolean(),
-      punctuate: boolean(),
-      diarize: boolean(),
-      interim_results: boolean(),
-      endpointing: boolean(),
-      vad_events: boolean(),
-      sample_rate: pos_integer(),
-      encoding: String.t()
-    }
+            api_key: String.t() | nil,
+            model: String.t(),
+            language: String.t(),
+            smart_format: boolean(),
+            punctuate: boolean(),
+            diarize: boolean(),
+            interim_results: boolean(),
+            endpointing: boolean(),
+            vad_events: boolean(),
+            sample_rate: pos_integer(),
+            encoding: String.t(),
+            min_buffer_duration_ms: non_neg_integer(),
+            mock: boolean()
+          }
 
-    defstruct [
-      api_key: nil,
-      model: "nova-2",
-      language: "en-US",
-      smart_format: true,
-      punctuate: true,
-      diarize: false,
-      interim_results: true,
-      endpointing: true,
-      vad_events: true,
-      sample_rate: 48_000,
-      encoding: "linear16"
-    ]
+    defstruct api_key: nil,
+              model: "nova-2",
+              language: "en-US",
+              smart_format: true,
+              punctuate: true,
+              diarize: false,
+              interim_results: true,
+              endpointing: true,
+              vad_events: true,
+              sample_rate: 48_000,
+              encoding: "linear16",
+              min_buffer_duration_ms: 100,
+              mock: false
   end
 
-  defmodule State do
-    @moduledoc false
+  # --- STT behaviour callbacks ---
 
-    @type t :: %__MODULE__{
-      config: Config.t(),
-      client: Tesla.Client.t(),
-      websocket: pid() | nil,
-      streaming: boolean(),
-      buffer: binary(),
-      last_transcript: String.t(),
-      metrics: map()
-    }
-
-    defstruct [
-      :config,
-      :client,
-      :websocket,
-      streaming: false,
-      buffer: <<>>,
-      last_transcript: "",
-      metrics: %{
-        requests_sent: 0,
-        responses_received: 0,
-        total_audio_duration_ms: 0,
-        errors: 0
-      }
-    ]
-  end
-
-  # Client API
-
-  @doc """
-  Starts the Deepgram STT provider.
-  """
-  @spec start_link(Config.t()) :: GenServer.on_start()
-  def start_link(config) do
-    GenServer.start_link(__MODULE__, config)
-  end
-
-  @doc """
-  Processes audio through speech-to-text.
-  """
-  @spec process_audio(pid(), AudioFrame.t()) :: {:ok, term()} | {:error, term()}
-  def process_audio(stt_pid, audio_frame) do
-    GenServer.call(stt_pid, {:process_audio, audio_frame}, 10_000)
-  end
-
-  @doc """
-  Transcribes audio data directly (non-streaming).
-  """
-  @spec transcribe(pid(), binary(), keyword()) :: {:ok, String.t()} | {:error, term()}
-  def transcribe(stt_pid, audio_data, opts \\ []) do
-    GenServer.call(stt_pid, {:transcribe, audio_data, opts}, 15_000)
-  end
-
-  @doc """
-  Starts streaming transcription.
-  """
-  @spec start_streaming(pid()) :: :ok | {:error, term()}
-  def start_streaming(stt_pid) do
-    GenServer.call(stt_pid, :start_streaming)
-  end
-
-  @doc """
-  Stops streaming transcription.
-  """
-  @spec stop_streaming(pid()) :: :ok
-  def stop_streaming(stt_pid) do
-    GenServer.call(stt_pid, :stop_streaming)
-  end
-
-  @doc """
-  Gets provider metrics.
-  """
-  @spec get_metrics(pid()) :: map()
-  def get_metrics(stt_pid) do
-    GenServer.call(stt_pid, :get_metrics)
-  end
-
-  # GenServer Callbacks
-
-  @impl true
-  def init(config) do
-    Logger.info("Starting Deepgram STT provider")
-
-    # Validate configuration
-    case validate_config(config) do
-      :ok ->
-        client = create_http_client(config)
-
-        state = %State{
-          config: config,
-          client: client
+  @impl Livekit.Agents.STT
+  @spec capabilities() :: %{
+          streaming: boolean(),
+          interim_results: boolean(),
+          diarization: boolean(),
+          languages: [String.t()]
         }
-
-        {:ok, state}
-
-      {:error, reason} ->
-        Logger.error("Invalid Deepgram configuration: #{inspect(reason)}")
-        {:stop, reason}
-    end
+  def capabilities do
+    %{
+      streaming: true,
+      interim_results: true,
+      diarization: true,
+      languages: ["en", "en-US", "es", "fr", "de", "ja", "ko", "pt", "ru", "zh"]
+    }
   end
 
-  @impl true
-  def handle_call({:process_audio, audio_frame}, _from, state) do
-    case process_audio_frame(state, audio_frame) do
-      {:ok, result, new_state} ->
-        {:reply, {:ok, result}, new_state}
+  @impl Livekit.Agents.STT
+  @spec validate_config(Config.t()) :: :ok | {:error, term()}
+  def validate_config(%Config{mock: true}), do: :ok
+  def validate_config(%Config{api_key: nil}), do: {:error, :missing_api_key}
+  def validate_config(%Config{api_key: ""}), do: {:error, :missing_api_key}
+  def validate_config(%Config{sample_rate: sr}) when sr <= 0, do: {:error, :invalid_sample_rate}
+  def validate_config(%Config{}), do: :ok
 
-      {:error, reason, new_state} ->
-        {:reply, {:error, reason}, new_state}
-    end
-  end
+  @impl Livekit.Agents.STT
+  @spec transcribe(binary(), keyword()) :: {:ok, SpeechEvent.t()} | {:error, term()}
+  def transcribe(audio, opts \\ []) do
+    config = Keyword.get(opts, :config, %Config{})
 
-  @impl true
-  def handle_call({:transcribe, audio_data, opts}, _from, state) do
-    case transcribe_audio(state, audio_data, opts) do
-      {:ok, transcript, new_state} ->
-        {:reply, {:ok, transcript}, new_state}
-
-      {:error, reason, new_state} ->
-        {:reply, {:error, reason}, new_state}
-    end
-  end
-
-  @impl true
-  def handle_call(:start_streaming, _from, state) do
-    case start_websocket_streaming(state) do
-      {:ok, new_state} ->
-        {:reply, :ok, new_state}
-
-      {:error, reason} ->
-        {:reply, {:error, reason}, state}
-    end
-  end
-
-  @impl true
-  def handle_call(:stop_streaming, _from, state) do
-    new_state = stop_websocket_streaming(state)
-    {:reply, :ok, new_state}
-  end
-
-  @impl true
-  def handle_call(:get_metrics, _from, state) do
-    {:reply, state.metrics, state}
-  end
-
-  @impl true
-  def handle_info({:websocket_message, message}, state) do
-    new_state = handle_websocket_message(state, message)
-    {:noreply, new_state}
-  end
-
-  @impl true
-  def handle_info({:websocket_closed, reason}, state) do
-    Logger.warn("Deepgram WebSocket closed: #{inspect(reason)}")
-    new_state = %{state | websocket: nil, streaming: false}
-    {:noreply, new_state}
-  end
-
-  @impl true
-  def terminate(_reason, state) do
-    stop_websocket_streaming(state)
-    :ok
-  end
-
-  # Private Functions
-
-  defp validate_config(config) do
     cond do
-      is_nil(config.api_key) or config.api_key == "" ->
-        {:error, :missing_api_key}
+      config.mock or is_nil(config.api_key) or config.api_key == "" ->
+        {:ok, mock_speech_event(audio, config)}
 
-      config.sample_rate <= 0 ->
-        {:error, :invalid_sample_rate}
+      byte_size(audio) == 0 ->
+        {:ok, %SpeechEvent{type: :final, text: "", confidence: 0.0, language: config.language}}
 
       true ->
-        :ok
+        do_transcribe(audio, config)
     end
   end
 
-  defp create_http_client(config) do
+  # --- Private helpers ---
+
+  @spec do_transcribe(binary(), Config.t()) :: {:ok, SpeechEvent.t()} | {:error, term()}
+  defp do_transcribe(audio, config) do
+    client = build_http_client(config)
+    query = build_query_params(config)
+
+    case Tesla.post(client, "/v1/listen", audio, query: query) do
+      {:ok, %Tesla.Env{status: 200, body: body}} ->
+        parse_batch_response(body, config.language)
+
+      {:ok, %Tesla.Env{status: status, body: body}} ->
+        Logger.error("Deepgram API error #{status}: #{inspect(body)}")
+        {:error, {:api_error, status, body}}
+
+      {:error, reason} ->
+        Logger.error("Deepgram HTTP error: #{inspect(reason)}")
+        {:error, reason}
+    end
+  end
+
+  @spec build_http_client(Config.t()) :: Tesla.Client.t()
+  defp build_http_client(config) do
     middleware = [
-      {Tesla.Middleware.BaseUrl, "https://api.deepgram.com/v1"},
-      {Tesla.Middleware.Headers, [
-        {"Authorization", "Token #{config.api_key}"},
-        {"Content-Type", "application/json"}
-      ]},
+      {Tesla.Middleware.BaseUrl, "https://api.deepgram.com"},
+      {Tesla.Middleware.Headers,
+       [
+         {"Authorization", "Token #{config.api_key}"},
+         {"Content-Type", "audio/l16"}
+       ]},
       Tesla.Middleware.JSON,
       {Tesla.Middleware.Logger, debug: false}
     ]
@@ -240,141 +168,76 @@ defmodule Livekit.Agents.STT.Deepgram do
     Tesla.client(middleware, Tesla.Adapter.Hackney)
   end
 
-  defp process_audio_frame(state, audio_frame) do
-    if state.streaming do
-      # Send to WebSocket
-      send_audio_to_websocket(state, audio_frame)
-    else
-      # Buffer for batch processing
-      new_buffer = state.buffer <> audio_frame.data
-      buffer_duration_ms = calculate_buffer_duration(new_buffer, audio_frame.sample_rate)
-
-      # Process if buffer is large enough (e.g., 1 second)
-      if buffer_duration_ms >= 1000 do
-        case transcribe_audio(state, new_buffer, []) do
-          {:ok, transcript, new_state} ->
-            result = if String.trim(transcript) != "" do
-              {:text, transcript}
-            else
-              :silence
-            end
-
-            clean_state = %{new_state | buffer: <<>>}
-            {:ok, result, clean_state}
-
-          {:error, reason, new_state} ->
-            {:error, reason, new_state}
-        end
-      else
-        new_state = %{state | buffer: new_buffer}
-        {:ok, :processing, new_state}
-      end
-    end
+  @spec build_query_params(Config.t()) :: keyword()
+  defp build_query_params(config) do
+    [
+      model: config.model,
+      language: config.language,
+      smart_format: config.smart_format,
+      punctuate: config.punctuate,
+      diarize: config.diarize,
+      encoding: config.encoding,
+      sample_rate: config.sample_rate
+    ]
   end
 
-  defp transcribe_audio(state, audio_data, _opts) do
+  @spec parse_batch_response(map(), String.t()) :: {:ok, SpeechEvent.t()} | {:error, term()}
+  defp parse_batch_response(body, language) do
     try do
-      # Prepare request body
-      body = %{
-        model: state.config.model,
-        language: state.config.language,
-        smart_format: state.config.smart_format,
-        punctuate: state.config.punctuate,
-        diarize: state.config.diarize,
-        encoding: state.config.encoding,
-        sample_rate: state.config.sample_rate
+      transcript =
+        body
+        |> get_in([
+          "results",
+          "channels",
+          Access.at(0),
+          "alternatives",
+          Access.at(0),
+          "transcript"
+        ])
+        |> then(fn t -> t || "" end)
+
+      confidence =
+        body
+        |> get_in([
+          "results",
+          "channels",
+          Access.at(0),
+          "alternatives",
+          Access.at(0),
+          "confidence"
+        ])
+        |> then(fn c -> c || 0.0 end)
+
+      event = %SpeechEvent{
+        type: :final,
+        text: transcript,
+        confidence: confidence,
+        language: language
       }
 
-      # For development, use mock transcription
-      transcript = mock_transcribe(audio_data)
-
-      new_metrics = state.metrics
-                   |> Map.update!(:requests_sent, &(&1 + 1))
-                   |> Map.update!(:responses_received, &(&1 + 1))
-
-      new_state = %{state |
-        last_transcript: transcript,
-        metrics: new_metrics
-      }
-
-      {:ok, transcript, new_state}
+      {:ok, event}
     rescue
-      error ->
-        Logger.error("Deepgram transcription error: #{inspect(error)}")
-        error_metrics = Map.update!(state.metrics, :errors, &(&1 + 1))
-        new_state = %{state | metrics: error_metrics}
-        {:error, error, new_state}
+      err ->
+        Logger.error("Failed to parse Deepgram response: #{inspect(err)}")
+        {:error, {:parse_error, err}}
     end
   end
 
-  defp start_websocket_streaming(state) do
-    # For development, simulate WebSocket streaming
-    Logger.info("Starting Deepgram WebSocket streaming (mock)")
+  @spec mock_speech_event(binary(), Config.t()) :: SpeechEvent.t()
+  defp mock_speech_event(audio, config) do
+    text =
+      case byte_size(audio) do
+        size when size < 1_000 -> ""
+        size when size < 5_000 -> "Hello"
+        size when size < 10_000 -> "Hello, how are you?"
+        _ -> "Hello, how are you doing today?"
+      end
 
-    new_state = %{state | streaming: true, websocket: :mock_websocket}
-    {:ok, new_state}
-  end
-
-  defp stop_websocket_streaming(state) do
-    if state.websocket do
-      Logger.info("Stopping Deepgram WebSocket streaming")
-    end
-
-    %{state | streaming: false, websocket: nil}
-  end
-
-  defp send_audio_to_websocket(state, audio_frame) do
-    if state.websocket do
-      Logger.debug("Sending audio to Deepgram WebSocket: #{byte_size(audio_frame.data)} bytes")
-
-      # Simulate processing delay and response
-      spawn(fn ->
-        Process.sleep(100)
-        transcript = mock_transcribe(audio_frame.data)
-        if String.trim(transcript) != "" do
-          send(self(), {:websocket_message, %{transcript: transcript, is_final: false}})
-        end
-      end)
-
-      new_metrics = Map.update!(state.metrics, :requests_sent, &(&1 + 1))
-      {:ok, :sent, %{state | metrics: new_metrics}}
-    else
-      {:error, :not_streaming, state}
-    end
-  end
-
-  defp handle_websocket_message(state, message) do
-    transcript = Map.get(message, :transcript, "")
-    is_final = Map.get(message, :is_final, false)
-
-    Logger.debug("Received Deepgram transcript: #{transcript} (final: #{is_final})")
-
-    if is_final do
-      # Send final transcript to parent process
-      send(self(), {:transcript_result, {:text, transcript}})
-    else
-      # Send partial transcript
-      send(self(), {:transcript_result, {:partial, transcript}})
-    end
-
-    new_metrics = Map.update!(state.metrics, :responses_received, &(&1 + 1))
-    %{state | last_transcript: transcript, metrics: new_metrics}
-  end
-
-  defp calculate_buffer_duration(buffer, sample_rate) do
-    # Assuming 16-bit PCM (2 bytes per sample)
-    sample_count = div(byte_size(buffer), 2)
-    (sample_count * 1000) / sample_rate
-  end
-
-  # Mock function for development
-  defp mock_transcribe(audio_data) do
-    # Simple mock that varies based on audio data size
-    case byte_size(audio_data) do
-      size when size < 1000 -> ""
-      size when size < 5000 -> "Hello"
-      size when size < 10_000 -> "Hello, how are you?"
-      _ -> "Hello, how are you doing today? This is a mock transcription."
-    end
+    %SpeechEvent{
+      type: :final,
+      text: text,
+      confidence: 0.95,
+      language: config.language
+    }
   end
 end
