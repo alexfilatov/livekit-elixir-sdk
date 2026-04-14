@@ -183,44 +183,42 @@ defmodule Livekit.Agents.STT.Deepgram do
 
   @spec parse_batch_response(map(), String.t()) :: {:ok, SpeechEvent.t()} | {:error, term()}
   defp parse_batch_response(body, language) do
-    try do
-      transcript =
-        body
-        |> get_in([
-          "results",
-          "channels",
-          Access.at(0),
-          "alternatives",
-          Access.at(0),
-          "transcript"
-        ])
-        |> then(fn t -> t || "" end)
+    transcript =
+      body
+      |> get_in([
+        "results",
+        "channels",
+        Access.at(0),
+        "alternatives",
+        Access.at(0),
+        "transcript"
+      ])
+      |> then(fn t -> t || "" end)
 
-      confidence =
-        body
-        |> get_in([
-          "results",
-          "channels",
-          Access.at(0),
-          "alternatives",
-          Access.at(0),
-          "confidence"
-        ])
-        |> then(fn c -> c || 0.0 end)
+    confidence =
+      body
+      |> get_in([
+        "results",
+        "channels",
+        Access.at(0),
+        "alternatives",
+        Access.at(0),
+        "confidence"
+      ])
+      |> then(fn c -> c || 0.0 end)
 
-      event = %SpeechEvent{
-        type: :final,
-        text: transcript,
-        confidence: confidence,
-        language: language
-      }
+    event = %SpeechEvent{
+      type: :final,
+      text: transcript,
+      confidence: confidence,
+      language: language
+    }
 
-      {:ok, event}
-    rescue
-      err ->
-        Logger.error("Failed to parse Deepgram response: #{inspect(err)}")
-        {:error, {:parse_error, err}}
-    end
+    {:ok, event}
+  rescue
+    err ->
+      Logger.error("Failed to parse Deepgram response: #{inspect(err)}")
+      {:error, {:parse_error, err}}
   end
 
   @spec mock_speech_event(binary(), Config.t()) :: SpeechEvent.t()
