@@ -275,6 +275,7 @@ defmodule Livekit.Agents.AgentHandoffTest do
 
   describe "handoff/3 — error handling" do
     test "returns error when new pipeline config is missing providers" do
+      Process.flag(:trap_exit, true)
       old_pid = start_pipeline()
 
       bad_config = %Pipeline.Config{
@@ -293,6 +294,7 @@ defmodule Livekit.Agents.AgentHandoffTest do
     end
 
     test "old pipeline remains alive after failed handoff" do
+      Process.flag(:trap_exit, true)
       old_pid = start_pipeline()
       _ctx = add_messages(old_pid)
 
