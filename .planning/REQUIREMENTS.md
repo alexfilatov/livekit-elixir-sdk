@@ -15,12 +15,12 @@
 
 ### Chat Context
 
-- [ ] **CHAT-01**: Define `ChatMessage` struct with id, role (system/user/assistant/tool), content, timestamp
-- [ ] **CHAT-02**: Define `FunctionCall` struct with call_id, name, arguments
-- [ ] **CHAT-03**: Define `FunctionCallOutput` struct with call_id, result, error flag
-- [ ] **CHAT-04**: Define `ChatContext` module with add, truncate, merge, copy operations
-- [ ] **CHAT-05**: ChatContext preserves system messages during truncation
-- [ ] **CHAT-06**: ChatContext supports multi-modal content types (text, structured)
+- [x] **CHAT-01**: Define `ChatMessage` struct with id, role (system/user/assistant/tool), content, timestamp
+- [x] **CHAT-02**: Define `FunctionCall` struct with call_id, name, arguments
+- [x] **CHAT-03**: Define `FunctionCallOutput` struct with call_id, result, error flag
+- [x] **CHAT-04**: Define `ChatContext` module with add, truncate, merge, copy operations
+- [x] **CHAT-05**: ChatContext preserves system messages during truncation
+- [x] **CHAT-06**: ChatContext supports multi-modal content types (text, structured)
 
 ### Tool System
 
@@ -132,12 +132,12 @@
 | BEHV-04 | Phase 1 | Complete |
 | BEHV-05 | Phase 1 | Complete |
 | TEST-01 | Phase 1 | Complete |
-| CHAT-01 | Phase 2 | Pending |
-| CHAT-02 | Phase 2 | Pending |
-| CHAT-03 | Phase 2 | Pending |
-| CHAT-04 | Phase 2 | Pending |
-| CHAT-05 | Phase 2 | Pending |
-| CHAT-06 | Phase 2 | Pending |
+| CHAT-01 | Phase 2 | Complete |
+| CHAT-02 | Phase 2 | Complete |
+| CHAT-03 | Phase 2 | Complete |
+| CHAT-04 | Phase 2 | Complete |
+| CHAT-05 | Phase 2 | Complete |
+| CHAT-06 | Phase 2 | Complete |
 | TEST-02 | Phase 2 | Pending |
 | TOOL-01 | Phase 3 | Pending |
 | TOOL-02 | Phase 3 | Pending |

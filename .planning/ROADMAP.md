@@ -50,7 +50,10 @@ Plans:
   3. Calling `truncate/2` on a `ChatContext` never drops the system message regardless of token budget
   4. `FunctionCall` and `FunctionCallOutput` structs round-trip through Jason encode/decode without data loss
   5. ChatContext accepts multi-modal content (plain text and structured maps) in message content
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [x] 02-01-PLAN.md — ChatMessage, FunctionCall, FunctionCallOutput nested structs + ChatContext operations (add, truncate, merge, copy) with Jason.Encoder implementations
+- [ ] 02-02-PLAN.md — Full ExUnit test suite for all CHAT-0x requirements; 100% coverage gate
 
 ### Phase 3: Tool System
 **Goal**: Tool definitions with JSON schema generation and an execution loop that feeds function call results back to the LLM
@@ -146,7 +149,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Provider Behaviours | 3/3 | Complete   | 2026-04-14 |
-| 2. Chat Context | 0/? | Not started | - |
+| 2. Chat Context | 1/2 | In Progress|  |
 | 3. Tool System | 0/? | Not started | - |
 | 4. Deepgram STT | 0/? | Not started | - |
 | 5. OpenAI LLM | 0/? | Not started | - |
