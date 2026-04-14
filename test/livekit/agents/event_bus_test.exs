@@ -148,7 +148,7 @@ defmodule Livekit.Agents.EventBusTest do
         %{}
       )
 
-      assert_receive {:livekit_event, %TelemetryMeasurement{metric: :ttft_ms}}, 500
+      assert_receive {:livekit_event, %TelemetryMeasurement{metric: :stt_latency_ms}}, 500
       EventBus.unsubscribe(session_id)
     end
 

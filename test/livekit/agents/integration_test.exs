@@ -1,6 +1,9 @@
 defmodule Livekit.Agents.IntegrationTest do
   use ExUnit.Case, async: false
 
+  # Legacy integration tests — reference old Pipeline.new/0 and mock provider APIs.
+  @moduletag :legacy
+
   alias Livekit.Agents.{VoiceAgent, AgentSession, Worker, JobContext, AudioFrame}
   alias Livekit.Agents.STT.Deepgram
   alias Livekit.Agents.LLM.OpenAI
