@@ -193,7 +193,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 9. Worker Infrastructure | 1/2 | In Progress|  |
 | 10. Livebook Showcases | 3/3 | Complete   | 2026-04-14 |
 | 11. WebRTC Room Client | 4/4 | Complete   | 2026-04-14 |
-| 12. RoomIO and Agent Session | 0/2 | Planned    |  |
+| 12. RoomIO and Agent Session | 2/2 | Complete   | 2026-04-14 |
 
 ### Phase 11: WebRTC Room Client (Rustler NIFs)
 
@@ -213,11 +213,11 @@ Plans:
 **Goal:** Connect the WebRTC Room Client to the Agent Pipeline via RoomIO. Audio flows Room -> RoomIO -> Pipeline -> RoomIO -> Room. AgentSession is refactored to use real Room connections when server_url is provided.
 **Requirements**: RIO-01, RIO-02, RIO-03, RIO-04, RIO-05, SES-01, SES-02, SES-03, RIO-TEST-01, RIO-TEST-02, SES-TEST-01, SES-TEST-02
 **Depends on:** Phase 11
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
-- [ ] 12-01-PLAN.md — RoomIO GenServer (room audio <-> pipeline bridge) + AgentSession refactor (real Room + RoomIO + Pipeline)
-- [ ] 12-02-PLAN.md — RoomIO tests with mock Room and Pipeline; AgentSession integration tests
+- [x] 12-01-PLAN.md — RoomIO GenServer (room audio <-> pipeline bridge) + AgentSession refactor (real Room + RoomIO + Pipeline)
+- [x] 12-02-PLAN.md — RoomIO tests with mock Room and Pipeline; AgentSession integration tests
 
 ### Phase 13: Real Worker-Server Protocol (Protobuf)
 
