@@ -84,10 +84,13 @@ defmodule Mix.Tasks.Livekit.Agents.Dev do
     # Override with command line args
     %{
       room_name: resolve(parsed[:room], base_config[:room_name], "dev-room"),
-      participant_identity: resolve(parsed[:identity], base_config[:participant_identity], "dev-agent"),
-      server_url: resolve(parsed[:server_url], base_config[:server_url], get_env_var("LIVEKIT_URL")),
+      participant_identity:
+        resolve(parsed[:identity], base_config[:participant_identity], "dev-agent"),
+      server_url:
+        resolve(parsed[:server_url], base_config[:server_url], get_env_var("LIVEKIT_URL")),
       api_key: resolve(parsed[:api_key], base_config[:api_key], get_env_var("LIVEKIT_API_KEY")),
-      api_secret: resolve(parsed[:api_secret], base_config[:api_secret], get_env_var("LIVEKIT_API_SECRET")),
+      api_secret:
+        resolve(parsed[:api_secret], base_config[:api_secret], get_env_var("LIVEKIT_API_SECRET")),
       dev_port: resolve(parsed[:port], base_config[:dev_port], 4000),
       verbose: resolve(parsed[:verbose], base_config[:verbose], false)
     }

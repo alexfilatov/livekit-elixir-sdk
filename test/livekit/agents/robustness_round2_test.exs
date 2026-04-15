@@ -127,7 +127,17 @@ defmodule Livekit.Agents.RobustnessRound2Test do
   alias Livekit.Agents.{AudioFrame, EventBus, Events, Pipeline, Worker}
   alias Livekit.Agents.Events.TelemetryMeasurement
   alias Livekit.Agents.Pipeline.TurnDetector
-  alias Livekit.Agents.Round2.{FailingSTT, FunctionCallLLM, ListMultiLLM, ListOneLLM, MockLLM, MockSTT, MockTTS}
+
+  alias Livekit.Agents.Round2.{
+    FailingSTT,
+    FunctionCallLLM,
+    ListMultiLLM,
+    ListOneLLM,
+    MockLLM,
+    MockSTT,
+    MockTTS
+  }
+
   alias Livekit.Agents.STT.{Deepgram, DeepgramStream}
   alias Livekit.Agents.TTS.OpenAI, as: TTSOAI
 

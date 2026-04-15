@@ -153,7 +153,11 @@ defmodule Livekit.Agents.TTS.Fallback do
             "Failing over to #{inspect(secondary_mod)}."
         )
 
-        tts_stream_via_secondary(secondary_mod, secondary_cfg, :secondary_does_not_support_streaming)
+        tts_stream_via_secondary(
+          secondary_mod,
+          secondary_cfg,
+          :secondary_does_not_support_streaming
+        )
     end
   end
 

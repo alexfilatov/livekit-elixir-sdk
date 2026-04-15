@@ -117,9 +117,11 @@ defmodule Mix.Tasks.Livekit.Agents.Start do
 
     # Override with command line args
     %{
-      server_url: resolve(parsed[:server_url], base_config[:server_url], get_env_var("LIVEKIT_URL")),
+      server_url:
+        resolve(parsed[:server_url], base_config[:server_url], get_env_var("LIVEKIT_URL")),
       api_key: resolve(parsed[:api_key], base_config[:api_key], get_env_var("LIVEKIT_API_KEY")),
-      api_secret: resolve(parsed[:api_secret], base_config[:api_secret], get_env_var("LIVEKIT_API_SECRET")),
+      api_secret:
+        resolve(parsed[:api_secret], base_config[:api_secret], get_env_var("LIVEKIT_API_SECRET")),
       workers: resolve(parsed[:workers], base_config[:workers], 1),
       log_level: String.to_atom(resolve(parsed[:log_level], base_config[:log_level], "info")),
       metrics_port: resolve(parsed[:metrics_port], base_config[:metrics_port], 9090),

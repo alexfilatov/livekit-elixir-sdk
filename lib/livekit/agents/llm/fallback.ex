@@ -136,18 +136,39 @@ defmodule Livekit.Agents.LLM.Fallback do
 
     if function_exported?(primary_mod, :stream, 2) do
       provider_opts = Keyword.put(Keyword.delete(opts, :config), :config, primary_cfg)
-      llm_stream_with_primary_fallback(ctx, primary_mod, provider_opts, secondary_mod, secondary_cfg, opts)
+
+      llm_stream_with_primary_fallback(
+        ctx,
+        primary_mod,
+        provider_opts,
+        secondary_mod,
+        secondary_cfg,
+        opts
+      )
     else
       Logger.warning(
         "[LLM.Fallback] Primary #{inspect(primary_mod)} does not support streaming. " <>
           "Falling over to #{inspect(secondary_mod)}."
       )
 
-      llm_stream_via_secondary(ctx, secondary_mod, secondary_cfg, opts, :no_provider_supports_streaming)
+      llm_stream_via_secondary(
+        ctx,
+        secondary_mod,
+        secondary_cfg,
+        opts,
+        :no_provider_supports_streaming
+      )
     end
   end
 
-  defp llm_stream_with_primary_fallback(ctx, primary_mod, provider_opts, secondary_mod, secondary_cfg, opts) do
+  defp llm_stream_with_primary_fallback(
+         ctx,
+         primary_mod,
+         provider_opts,
+         secondary_mod,
+         secondary_cfg,
+         opts
+       ) do
     case primary_mod.stream(ctx, provider_opts) do
       {:ok, _} = result ->
         result
@@ -158,7 +179,13 @@ defmodule Livekit.Agents.LLM.Fallback do
             "Failing over to #{inspect(secondary_mod)}."
         )
 
-        llm_stream_via_secondary(ctx, secondary_mod, secondary_cfg, opts, :secondary_does_not_support_streaming)
+        llm_stream_via_secondary(
+          ctx,
+          secondary_mod,
+          secondary_cfg,
+          opts,
+          :secondary_does_not_support_streaming
+        )
     end
   end
 

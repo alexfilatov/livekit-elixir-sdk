@@ -153,10 +153,13 @@ defmodule Mix.Tasks.Livekit.Agents.Console do
     # Override with command line args
     %{
       room_name: resolve(parsed[:room], base_config[:room_name], "test-room"),
-      participant_identity: resolve(parsed[:identity], base_config[:participant_identity], "console-agent"),
-      server_url: resolve(parsed[:server_url], base_config[:server_url], get_env_var("LIVEKIT_URL")),
+      participant_identity:
+        resolve(parsed[:identity], base_config[:participant_identity], "console-agent"),
+      server_url:
+        resolve(parsed[:server_url], base_config[:server_url], get_env_var("LIVEKIT_URL")),
       api_key: resolve(parsed[:api_key], base_config[:api_key], get_env_var("LIVEKIT_API_KEY")),
-      api_secret: resolve(parsed[:api_secret], base_config[:api_secret], get_env_var("LIVEKIT_API_SECRET"))
+      api_secret:
+        resolve(parsed[:api_secret], base_config[:api_secret], get_env_var("LIVEKIT_API_SECRET"))
     }
   end
 
