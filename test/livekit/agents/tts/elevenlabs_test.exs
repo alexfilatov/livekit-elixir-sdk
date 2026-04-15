@@ -33,18 +33,14 @@ defmodule Livekit.Agents.TTS.ElevenLabsTest do
   # ── validate_config ────────────────────────────────────────────────────────
 
   describe "validate_config/1" do
-    test "mock: true passes without api_key" do
-      assert :ok = ElevenLabs.validate_config(%Config{mock: true})
+    test "missing api_key returns error" do
+      assert {:error, :missing_api_key} =
+               ElevenLabs.validate_config(%Config{api_key: nil})
     end
 
-    test "missing api_key in real mode returns error" do
+    test "empty api_key returns error" do
       assert {:error, :missing_api_key} =
-               ElevenLabs.validate_config(%Config{mock: false, api_key: nil})
-    end
-
-    test "empty api_key in real mode returns error" do
-      assert {:error, :missing_api_key} =
-               ElevenLabs.validate_config(%Config{mock: false, api_key: ""})
+               ElevenLabs.validate_config(%Config{api_key: ""})
     end
 
     test "missing voice_id returns error" do
@@ -114,77 +110,6 @@ defmodule Livekit.Agents.TTS.ElevenLabsTest do
                  stability: 0.5,
                  similarity_boost: 0.75
                })
-    end
-  end
-
-  # ── mock mode ─────────────────────────────────────────────────────────────
-
-  describe "synthesize/2 mock mode" do
-    test "returns audio binary for mock: true" do
-      config = %Config{mock: true}
-      assert {:ok, audio} = ElevenLabs.synthesize("Hello, world!", config: config)
-      assert is_binary(audio)
-      assert byte_size(audio) > 0
-    end
-
-    test "different voice IDs produce different audio" do
-      rachel_config = %Config{mock: true, voice_id: "21m00Tcm4TlvDq8ikWAM"}
-      other_config = %Config{mock: true, voice_id: "EXAVITQu4vr4xnSDxMaL"}
-      {:ok, rachel_audio} = ElevenLabs.synthesize("Hello", config: rachel_config)
-      {:ok, other_audio} = ElevenLabs.synthesize("Hello", config: other_config)
-      assert rachel_audio != other_audio
-    end
-
-    test "nil api_key with mock: false falls back to mock mode" do
-      config = %Config{api_key: nil, mock: false}
-      assert {:ok, audio} = ElevenLabs.synthesize("Test", config: config)
-      assert byte_size(audio) > 0
-    end
-
-    test "empty api_key with mock: false falls back to mock mode" do
-      config = %Config{api_key: "", mock: false}
-      assert {:ok, audio} = ElevenLabs.synthesize("Test", config: config)
-      assert byte_size(audio) > 0
-    end
-
-    test "longer text produces more audio samples" do
-      config = %Config{mock: true}
-      {:ok, short_audio} = ElevenLabs.synthesize("Hi", config: config)
-
-      {:ok, long_audio} =
-        ElevenLabs.synthesize(String.duplicate("Hello world ", 20), config: config)
-
-      assert byte_size(long_audio) > byte_size(short_audio)
-    end
-
-    test "voice_id override option is honoured in mock mode" do
-      config = %Config{mock: true, voice_id: "21m00Tcm4TlvDq8ikWAM"}
-
-      {:ok, rachel_audio} = ElevenLabs.synthesize("Hello", config: config)
-
-      {:ok, override_audio} =
-        ElevenLabs.synthesize("Hello",
-          config: config,
-          voice_id: "EXAVITQu4vr4xnSDxMaL"
-        )
-
-      assert rachel_audio != override_audio
-    end
-
-    test "known voice IDs each produce non-empty audio" do
-      voice_ids = [
-        "21m00Tcm4TlvDq8ikWAM",
-        "AZnzlk1XvdvUeBnXmlld",
-        "EXAVITQu4vr4xnSDxMaL",
-        "ErXwobaYiN019PkySvjV",
-        "MF3mGyEYCl7XYWbV9V6O"
-      ]
-
-      for voice_id <- voice_ids do
-        config = %Config{mock: true, voice_id: voice_id}
-        assert {:ok, audio} = ElevenLabs.synthesize("Test audio", config: config)
-        assert byte_size(audio) > 0, "Expected non-empty audio for voice_id #{voice_id}"
-      end
     end
   end
 
@@ -363,7 +288,6 @@ defmodule Livekit.Agents.TTS.ElevenLabsTest do
     test "cache hit avoids second HTTP request", %{bypass: bypass, config: config} do
       {:ok, cache_pid} = Cache.start_link()
 
-      # Bypass expects exactly ONE call; second call must come from cache
       Bypass.expect_once(
         bypass,
         "POST",

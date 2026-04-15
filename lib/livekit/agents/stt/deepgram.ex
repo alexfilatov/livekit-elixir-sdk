@@ -3,28 +3,20 @@ defmodule Livekit.Agents.STT.Deepgram do
   Deepgram Speech-to-Text provider implementing `Livekit.Agents.STT`.
 
   Supports batch HTTP transcription via Deepgram `/v1/listen` and streaming
-  WebSocket transcription (see `stream/1`). Configure mock mode for testing
-  without a real API key.
+  WebSocket transcription (see `stream/1`).
 
   ## Configuration
 
       %Livekit.Agents.STT.Deepgram.Config{
         api_key: "your_key",
         model: "nova-2",
-        language: "en-US",
-        mock: false
+        language: "en-US"
       }
 
   ## Batch usage
 
       {:ok, event} = Livekit.Agents.STT.Deepgram.transcribe(audio_binary, config: config)
       # => %SpeechEvent{type: :final, text: "hello world", confidence: 0.9987}
-
-  ## Mock mode (no API key required)
-
-      config = %Config{mock: true}
-      {:ok, event} = Livekit.Agents.STT.Deepgram.transcribe(audio_binary, config: config)
-      # => synthetic SpeechEvent
   """
 
   use Livekit.Agents.STT
@@ -42,7 +34,7 @@ defmodule Livekit.Agents.STT.Deepgram do
 
     ## Fields
 
-    - `:api_key` — Deepgram API key (required unless `:mock` is `true`)
+    - `:api_key` — Deepgram API key (required)
     - `:model` — Deepgram model name (default: `"nova-2"`)
     - `:language` — BCP-47 language code (default: `"en-US"`)
     - `:smart_format` — enable smart formatting (default: `true`)
@@ -55,7 +47,6 @@ defmodule Livekit.Agents.STT.Deepgram do
     - `:encoding` — audio encoding format (default: `"linear16"`)
     - `:min_buffer_duration_ms` — minimum audio duration to accumulate before sending
       a batch request; shorter audio is buffered (default: `100`)
-    - `:mock` — return synthetic results without calling the API (default: `false`)
     - `:base_url` — override the Deepgram API base URL (default: `"https://api.deepgram.com"`);
       useful in tests to point at a Bypass server
     """
@@ -73,7 +64,6 @@ defmodule Livekit.Agents.STT.Deepgram do
             sample_rate: pos_integer(),
             encoding: String.t(),
             min_buffer_duration_ms: non_neg_integer(),
-            mock: boolean(),
             base_url: String.t()
           }
 
@@ -89,7 +79,6 @@ defmodule Livekit.Agents.STT.Deepgram do
               sample_rate: 48_000,
               encoding: "linear16",
               min_buffer_duration_ms: 100,
-              mock: false,
               base_url: "https://api.deepgram.com"
   end
 
@@ -113,9 +102,7 @@ defmodule Livekit.Agents.STT.Deepgram do
 
   @impl Livekit.Agents.STT
   @spec validate_config(Config.t()) :: :ok | {:error, term()}
-  def validate_config(%Config{mock: true}), do: :ok
-  def validate_config(%Config{api_key: nil}), do: {:error, :missing_api_key}
-  def validate_config(%Config{api_key: ""}), do: {:error, :missing_api_key}
+  def validate_config(%Config{api_key: key}) when key in [nil, ""], do: {:error, :missing_api_key}
   def validate_config(%Config{sample_rate: sr}) when sr <= 0, do: {:error, :invalid_sample_rate}
   def validate_config(%Config{}), do: :ok
 
@@ -125,8 +112,8 @@ defmodule Livekit.Agents.STT.Deepgram do
     config = Keyword.get(opts, :config, %Config{})
 
     cond do
-      config.mock or is_nil(config.api_key) or config.api_key == "" ->
-        {:ok, mock_speech_event(audio, config)}
+      is_nil(config.api_key) or config.api_key == "" ->
+        {:error, :missing_api_key}
 
       byte_size(audio) == 0 ->
         {:ok, %SpeechEvent{type: :final, text: "", confidence: 0.0, language: config.language}}
@@ -142,12 +129,9 @@ defmodule Livekit.Agents.STT.Deepgram do
   Returns `{:ok, stream_pid}` where `stream_pid` is a `DeepgramStream` process
   that sends `{:speech_event, %SpeechEvent{}}` messages to the calling process.
 
-  In mock mode (config.mock: true or no api_key), returns a synthetic stream
-  that emits start → interim → final → end events with a small delay.
-
   ## Usage
 
-      config = %Livekit.Agents.STT.Deepgram.Config{api_key: "...", mock: false}
+      config = %Livekit.Agents.STT.Deepgram.Config{api_key: "..."}
       {:ok, stream_pid} = Livekit.Agents.STT.Deepgram.stream(config)
 
       # Send audio
@@ -255,23 +239,5 @@ defmodule Livekit.Agents.STT.Deepgram do
     err ->
       Logger.error("Failed to parse Deepgram response: #{inspect(err)}")
       {:error, {:parse_error, err}}
-  end
-
-  @spec mock_speech_event(binary(), Config.t()) :: SpeechEvent.t()
-  defp mock_speech_event(audio, config) do
-    text =
-      case byte_size(audio) do
-        size when size < 1_000 -> ""
-        size when size < 5_000 -> "Hello"
-        size when size < 10_000 -> "Hello, how are you?"
-        _ -> "Hello, how are you doing today?"
-      end
-
-    %SpeechEvent{
-      type: :final,
-      text: text,
-      confidence: 0.95,
-      language: config.language
-    }
   end
 end

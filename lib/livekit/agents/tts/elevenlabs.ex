@@ -17,12 +17,6 @@ defmodule Livekit.Agents.TTS.ElevenLabs do
 
       {:ok, audio} = ElevenLabs.synthesize("Hello, world!", config: config)
 
-  ## Mock mode
-
-  Set `config.mock: true` (or omit the API key) to generate a sine-wave PCM
-  binary locally without making any HTTP request. Useful for tests and local
-  development.
-
   ## Caching
 
   Pass a `Cache` pid via the `:cache` option to enable response caching. Cache
@@ -66,7 +60,6 @@ defmodule Livekit.Agents.TTS.ElevenLabs do
             similarity_boost: float() | nil,
             output_format: String.t(),
             sample_rate: pos_integer(),
-            mock: boolean(),
             base_url: String.t(),
             cache_ttl_seconds: pos_integer(),
             cache_max_entries: pos_integer()
@@ -79,7 +72,6 @@ defmodule Livekit.Agents.TTS.ElevenLabs do
               similarity_boost: nil,
               output_format: "pcm_16000",
               sample_rate: 16_000,
-              mock: false,
               base_url: "https://api.elevenlabs.io",
               cache_ttl_seconds: 3600,
               cache_max_entries: 500
@@ -120,13 +112,12 @@ defmodule Livekit.Agents.TTS.ElevenLabs do
   @doc """
   Validates the provider configuration.
 
-  Returns `:ok` when mock mode is active or when the API key is present and
-  voice settings are within bounds. Returns `{:error, reason}` otherwise.
+  Returns `{:error, :missing_api_key}` when the API key is absent or empty.
+  Returns `{:error, reason}` when voice settings are invalid.
+  Returns `:ok` when all values are valid.
   """
   @impl true
   @spec validate_config(Config.t()) :: :ok | {:error, term()}
-  def validate_config(%Config{mock: true}), do: :ok
-
   def validate_config(%Config{api_key: key}) when key in [nil, ""],
     do: {:error, :missing_api_key}
 
@@ -163,19 +154,15 @@ defmodule Livekit.Agents.TTS.ElevenLabs do
     cache_pid = Keyword.get(opts, :cache)
     effective_config = %{config | voice_id: voice_id}
 
-    if mock_mode?(effective_config) do
-      {:ok, mock_synthesize(text, effective_config)}
-    else
-      cache_key = build_cache_key(effective_config, text)
+    cache_key = build_cache_key(effective_config, text)
 
-      case maybe_cache_get(cache_pid, cache_key) do
-        {:ok, cached} ->
-          Logger.debug("ElevenLabs TTS cache hit for text: #{String.slice(text, 0, 50)}")
-          {:ok, cached}
+    case maybe_cache_get(cache_pid, cache_key) do
+      {:ok, cached} ->
+        Logger.debug("ElevenLabs TTS cache hit for text: #{String.slice(text, 0, 50)}")
+        {:ok, cached}
 
-        :miss ->
-          synthesize_uncached(effective_config, text, cache_pid, cache_key)
-      end
+      :miss ->
+        synthesize_uncached(effective_config, text, cache_pid, cache_key)
     end
   end
 
@@ -191,54 +178,6 @@ defmodule Livekit.Agents.TTS.ElevenLabs do
 
       {:error, _} = err ->
         err
-    end
-  end
-
-  defp mock_mode?(%Config{mock: true}), do: true
-  defp mock_mode?(%Config{api_key: nil}), do: true
-  defp mock_mode?(%Config{api_key: ""}), do: true
-  defp mock_mode?(_), do: false
-
-  defp mock_synthesize(text, config) do
-    estimated_duration = estimate_audio_duration(text)
-    sample_count = round(estimated_duration * config.sample_rate)
-
-    # Use a fixed base frequency for the Rachel voice; other voice IDs get 440 Hz
-    frequency =
-      case config.voice_id do
-        "21m00Tcm4TlvDq8ikWAM" -> 349.23
-        "AZnzlk1XvdvUeBnXmlld" -> 392.0
-        "EXAVITQu4vr4xnSDxMaL" -> 440.0
-        "ErXwobaYiN019PkySvjV" -> 493.88
-        "MF3mGyEYCl7XYWbV9V6O" -> 523.25
-        _ -> 440.0
-      end
-
-    if sample_count <= 0 do
-      <<>>
-    else
-      samples =
-        for i <- 0..(sample_count - 1) do
-          sin_value = :math.sin(2 * :math.pi() * frequency * i / config.sample_rate)
-          envelope = compute_envelope(i, sample_count)
-          pcm_value = round(sin_value * envelope * 16_000)
-          pcm_value = max(-32_768, min(32_767, pcm_value))
-          <<pcm_value::little-signed-16>>
-        end
-
-      IO.iodata_to_binary(samples)
-    end
-  end
-
-  defp estimate_audio_duration(text) do
-    String.length(text) / 5 / 150 * 60
-  end
-
-  defp compute_envelope(i, sample_count) do
-    cond do
-      i < 1000 -> i / 1000
-      i > sample_count - 1000 -> (sample_count - i) / 1000
-      true -> 1.0
     end
   end
 

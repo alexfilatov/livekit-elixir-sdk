@@ -15,12 +15,11 @@ defmodule Livekit.Agents.AgentSession do
 
   Audio flows: Room → RoomIO → Pipeline → RoomIO → Room.
 
-  ## Mock mode (`:server_url` nil or empty)
+  ## No server_url (`:server_url` nil or empty)
 
-  When no `server_url` is provided the session enters a lightweight simulation
-  mode used for development and testing. A background process sends synthetic
-  participant events so downstream code can be exercised without a real LiveKit
-  server.
+  When no `server_url` is provided, `connect_to_room/1` returns
+  `{:error, :missing_server_url}`. A server URL is required to connect to a
+  LiveKit room.
 
   ## Usage
 
@@ -40,7 +39,7 @@ defmodule Livekit.Agents.AgentSession do
   require Logger
 
   alias Livekit.WebRTC.Room
-  alias Livekit.Agents.{AudioFrame, Pipeline, RoomIO}
+  alias Livekit.Agents.{Pipeline, RoomIO}
   alias Livekit.{AccessToken, Grants}
 
   # ---------------------------------------------------------------------------
@@ -137,8 +136,8 @@ defmodule Livekit.Agents.AgentSession do
   @doc """
   Connects the session to the configured room.
 
-  In real mode starts Room, Pipeline, and RoomIO. In mock mode starts a
-  lightweight simulation loop. Returns `:ok` or `{:error, reason}`.
+  Starts Room, Pipeline, and RoomIO. Returns `:ok` or `{:error, reason}`.
+  Requires `config.server_url` to be set.
   """
   @spec connect_to_room(pid()) :: :ok | {:error, term()}
   def connect_to_room(session_pid) do
@@ -281,16 +280,14 @@ defmodule Livekit.Agents.AgentSession do
   # Private Helpers
   # ---------------------------------------------------------------------------
 
-  defp real_mode?(%Config{server_url: nil}), do: false
-  defp real_mode?(%Config{server_url: ""}), do: false
-  defp real_mode?(_config), do: true
+  defp connect_to_room_internal(%State{config: %Config{server_url: nil}} = _state),
+    do: {:error, :missing_server_url}
 
-  defp connect_to_room_internal(%State{config: config} = state) do
-    if real_mode?(config) do
-      connect_real(state)
-    else
-      connect_mock(state)
-    end
+  defp connect_to_room_internal(%State{config: %Config{server_url: ""}} = _state),
+    do: {:error, :missing_server_url}
+
+  defp connect_to_room_internal(%State{} = state) do
+    connect_real(state)
   end
 
   defp connect_real(%State{config: config} = state) do
@@ -352,39 +349,6 @@ defmodule Livekit.Agents.AgentSession do
       room_pid: room_pid,
       pipeline_pid: pipeline_pid
     })
-  end
-
-  defp connect_mock(%State{config: config} = state) do
-    Logger.info("[AgentSession] Mock mode — simulating room connection for #{config.room_name}")
-    session_pid = self()
-    spawn_link(fn -> simulate_room_events(session_pid) end)
-    {:ok, %{state | room_connected: true}}
-  end
-
-  defp simulate_room_events(session_pid) do
-    Process.sleep(2_000)
-
-    participant_info = %{
-      identity: "user_#{:rand.uniform(1_000)}",
-      name: "Test User",
-      joined_at: DateTime.utc_now(),
-      metadata: %{}
-    }
-
-    GenServer.cast(session_pid, {:participant_joined, participant_info})
-
-    Process.sleep(3_000)
-
-    audio_data = :crypto.strong_rand_bytes(4_800)
-
-    _ =
-      AudioFrame.new(audio_data,
-        sample_rate: 48_000,
-        timestamp_us: System.monotonic_time(:microsecond)
-      )
-
-    Process.sleep(10_000)
-    simulate_room_events(session_pid)
   end
 
   defp disconnect_from_room_internal(state) do

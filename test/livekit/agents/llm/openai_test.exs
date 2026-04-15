@@ -40,77 +40,16 @@ defmodule Livekit.Agents.LLM.OpenAITest do
   # ---------------------------------------------------------------------------
 
   describe "validate_config/1" do
-    test "mock: true with nil api_key returns :ok" do
-      assert :ok = OpenAI.validate_config(%Config{mock: true, api_key: nil})
+    test "nil api_key returns {:error, :missing_api_key}" do
+      assert {:error, :missing_api_key} = OpenAI.validate_config(%Config{api_key: nil})
     end
 
-    test "mock: false with nil api_key returns {:error, :missing_api_key}" do
-      assert {:error, :missing_api_key} =
-               OpenAI.validate_config(%Config{mock: false, api_key: nil})
+    test "empty string api_key returns {:error, :missing_api_key}" do
+      assert {:error, :missing_api_key} = OpenAI.validate_config(%Config{api_key: ""})
     end
 
-    test "mock: false with empty string api_key returns {:error, :missing_api_key}" do
-      assert {:error, :missing_api_key} =
-               OpenAI.validate_config(%Config{mock: false, api_key: ""})
-    end
-
-    test "mock: false with valid api_key returns :ok" do
-      assert :ok = OpenAI.validate_config(%Config{mock: false, api_key: "sk-test"})
-    end
-  end
-
-  # ---------------------------------------------------------------------------
-  # chat/2 mock mode
-  # ---------------------------------------------------------------------------
-
-  describe "chat/2 mock mode" do
-    setup do
-      ctx = ChatContext.new() |> ChatContext.add(ChatContext.new_message(:user, ["Hello"]))
-      config = %Config{mock: true}
-      {:ok, ctx: ctx, config: config}
-    end
-
-    test "returns {:ok, result}", %{ctx: ctx, config: config} do
-      assert {:ok, _result} = OpenAI.chat(ctx, config: config)
-    end
-
-    test "returned message has role :assistant", %{ctx: ctx, config: config} do
-      {:ok, result} = OpenAI.chat(ctx, config: config)
-      assert %ChatMessage{role: :assistant} = result
-    end
-
-    test "returned message content is a non-empty list", %{ctx: ctx, config: config} do
-      {:ok, result} = OpenAI.chat(ctx, config: config)
-      assert %ChatMessage{content: content} = result
-      assert is_list(content)
-      assert length(content) > 0
-    end
-  end
-
-  # ---------------------------------------------------------------------------
-  # stream/2 mock mode
-  # ---------------------------------------------------------------------------
-
-  describe "stream/2 mock mode" do
-    setup do
-      ctx = ChatContext.new() |> ChatContext.add(ChatContext.new_message(:user, ["Hello"]))
-      config = %Config{mock: true}
-      {:ok, ctx: ctx, config: config}
-    end
-
-    test "returns {:ok, pid} where pid is a process", %{ctx: ctx, config: config} do
-      assert {:ok, pid} = OpenAI.stream(ctx, config: config)
-      assert is_pid(pid)
-    end
-
-    test "sends text chunk to caller", %{ctx: ctx, config: config} do
-      {:ok, _pid} = OpenAI.stream(ctx, config: config)
-      assert_receive {:llm_chunk, %LLMChunk{type: :text}}, 1000
-    end
-
-    test "sends done chunk to caller", %{ctx: ctx, config: config} do
-      {:ok, _pid} = OpenAI.stream(ctx, config: config)
-      assert_receive {:llm_chunk, %LLMChunk{type: :done}}, 1000
+    test "valid api_key returns :ok" do
+      assert :ok = OpenAI.validate_config(%Config{api_key: "sk-test"})
     end
   end
 
@@ -131,7 +70,7 @@ defmodule Livekit.Agents.LLM.OpenAITest do
     end
 
     defp config_for(bypass),
-      do: %Config{api_key: "sk-test", mock: false, base_url: "http://localhost:#{bypass.port}"}
+      do: %Config{api_key: "sk-test", base_url: "http://localhost:#{bypass.port}"}
 
     defp text_response(content) do
       %{
@@ -246,7 +185,7 @@ defmodule Livekit.Agents.LLM.OpenAITest do
     end
 
     defp stream_config_for(bypass),
-      do: %Config{api_key: "sk-test", mock: false, base_url: "http://localhost:#{bypass.port}"}
+      do: %Config{api_key: "sk-test", base_url: "http://localhost:#{bypass.port}"}
 
     defp sse_body(chunks) do
       Enum.map_join(chunks, fn
@@ -272,7 +211,6 @@ defmodule Livekit.Agents.LLM.OpenAITest do
 
       assert {:ok, pid} = OpenAI.stream(ctx, config: stream_config_for(bypass))
       assert is_pid(pid)
-      # Wait for the spawned process to complete the HTTP request
       assert_receive {:llm_chunk, %LLMChunk{type: :done}}, 2000
     end
 
@@ -310,7 +248,7 @@ defmodule Livekit.Agents.LLM.OpenAITest do
     end
 
     defp to_messages_config_for(bypass),
-      do: %Config{api_key: "sk-test", mock: false, base_url: "http://localhost:#{bypass.port}"}
+      do: %Config{api_key: "sk-test", base_url: "http://localhost:#{bypass.port}"}
 
     defp simple_text_response do
       %{

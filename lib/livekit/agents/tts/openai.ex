@@ -12,12 +12,6 @@ defmodule Livekit.Agents.TTS.OpenAI do
 
       {:ok, audio} = OpenAI.synthesize("Hello, world!", config: config)
 
-  ## Mock mode
-
-  Set `config.mock: true` (or omit the API key) to generate a sine-wave PCM
-  binary locally without making any HTTP request. Useful for tests and local
-  development.
-
   ## Caching
 
   Pass a `Cache` pid via the `:cache` option to enable response caching.  Cache
@@ -51,7 +45,6 @@ defmodule Livekit.Agents.TTS.OpenAI do
             response_format: response_format(),
             speed: float(),
             sample_rate: pos_integer(),
-            mock: boolean(),
             base_url: String.t(),
             cache_ttl_seconds: pos_integer(),
             cache_max_entries: pos_integer()
@@ -63,7 +56,6 @@ defmodule Livekit.Agents.TTS.OpenAI do
               response_format: :pcm,
               speed: 1.0,
               sample_rate: 48_000,
-              mock: false,
               base_url: "https://api.openai.com",
               cache_ttl_seconds: 3600,
               cache_max_entries: 500
@@ -93,14 +85,14 @@ defmodule Livekit.Agents.TTS.OpenAI do
   @doc """
   Validates the provider configuration.
 
-  Returns `:ok` when mock mode is active or when the API key is present and
-  speed/sample_rate are within bounds. Returns `{:error, reason}` otherwise.
+  Returns `{:error, :missing_api_key}` when the API key is absent or empty.
+  Returns `{:error, reason}` when speed or sample_rate are out of bounds.
+  Returns `:ok` when all values are valid.
   """
   @impl true
   @spec validate_config(Config.t()) :: :ok | {:error, term()}
   def validate_config(config) do
     cond do
-      config.mock == true -> :ok
       is_nil(config.api_key) or config.api_key == "" -> {:error, :missing_api_key}
       config.speed < 0.25 or config.speed > 4.0 -> {:error, :invalid_speed}
       config.sample_rate <= 0 -> {:error, :invalid_sample_rate}
@@ -130,19 +122,15 @@ defmodule Livekit.Agents.TTS.OpenAI do
     cache_pid = Keyword.get(opts, :cache)
     effective_config = %{config | voice: voice, response_format: format}
 
-    if mock_mode?(effective_config) do
-      {:ok, mock_synthesize(text, effective_config)}
-    else
-      cache_key = build_cache_key(effective_config, text)
+    cache_key = build_cache_key(effective_config, text)
 
-      case maybe_cache_get(cache_pid, cache_key) do
-        {:ok, cached} ->
-          Logger.debug("TTS cache hit for text: #{String.slice(text, 0, 50)}")
-          {:ok, cached}
+    case maybe_cache_get(cache_pid, cache_key) do
+      {:ok, cached} ->
+        Logger.debug("TTS cache hit for text: #{String.slice(text, 0, 50)}")
+        {:ok, cached}
 
-        :miss ->
-          synthesize_uncached(effective_config, text, cache_pid, cache_key)
-      end
+      :miss ->
+        synthesize_uncached(effective_config, text, cache_pid, cache_key)
     end
   end
 
@@ -158,54 +146,6 @@ defmodule Livekit.Agents.TTS.OpenAI do
 
       {:error, _} = err ->
         err
-    end
-  end
-
-  defp mock_mode?(%Config{mock: true}), do: true
-  defp mock_mode?(%Config{api_key: nil}), do: true
-  defp mock_mode?(%Config{api_key: ""}), do: true
-  defp mock_mode?(_), do: false
-
-  defp mock_synthesize(text, config) do
-    estimated_duration = estimate_audio_duration(text)
-    sample_count = round(estimated_duration * config.sample_rate)
-
-    frequency =
-      case config.voice do
-        :alloy -> 440.0
-        :echo -> 493.88
-        :fable -> 523.25
-        :onyx -> 392.0
-        :nova -> 349.23
-        :shimmer -> 293.66
-      end
-
-    # ISSUE-10: Guard against empty range when sample_count is 0
-    if sample_count <= 0 do
-      <<>>
-    else
-      samples =
-        for i <- 0..(sample_count - 1) do
-          sin_value = :math.sin(2 * :math.pi() * frequency * i / config.sample_rate)
-          envelope = compute_envelope(i, sample_count)
-          pcm_value = round(sin_value * envelope * 16_000)
-          pcm_value = max(-32_768, min(32_767, pcm_value))
-          <<pcm_value::little-signed-16>>
-        end
-
-      IO.iodata_to_binary(samples)
-    end
-  end
-
-  defp estimate_audio_duration(text) do
-    String.length(text) / 5 / 150 * 60
-  end
-
-  defp compute_envelope(i, sample_count) do
-    cond do
-      i < 1000 -> i / 1000
-      i > sample_count - 1000 -> (sample_count - i) / 1000
-      true -> 1.0
     end
   end
 

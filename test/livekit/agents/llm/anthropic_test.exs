@@ -41,83 +41,16 @@ defmodule Livekit.Agents.LLM.AnthropicTest do
   # ---------------------------------------------------------------------------
 
   describe "validate_config/1" do
-    test "mock: true with nil api_key returns :ok" do
-      assert :ok = Anthropic.validate_config(%Config{mock: true, api_key: nil})
+    test "nil api_key returns {:error, :missing_api_key}" do
+      assert {:error, :missing_api_key} = Anthropic.validate_config(%Config{api_key: nil})
     end
 
-    test "mock: false with nil api_key returns {:error, :missing_api_key}" do
-      assert {:error, :missing_api_key} =
-               Anthropic.validate_config(%Config{mock: false, api_key: nil})
+    test "empty string api_key returns {:error, :missing_api_key}" do
+      assert {:error, :missing_api_key} = Anthropic.validate_config(%Config{api_key: ""})
     end
 
-    test "mock: false with empty string api_key returns {:error, :missing_api_key}" do
-      assert {:error, :missing_api_key} =
-               Anthropic.validate_config(%Config{mock: false, api_key: ""})
-    end
-
-    test "mock: false with valid api_key returns :ok" do
-      assert :ok = Anthropic.validate_config(%Config{mock: false, api_key: "sk-ant-test"})
-    end
-  end
-
-  # ---------------------------------------------------------------------------
-  # chat/2 mock mode
-  # ---------------------------------------------------------------------------
-
-  describe "chat/2 mock mode" do
-    setup do
-      ctx = ChatContext.new() |> ChatContext.add(ChatContext.new_message(:user, ["Hello"]))
-      config = %Config{mock: true}
-      {:ok, ctx: ctx, config: config}
-    end
-
-    test "returns {:ok, result}", %{ctx: ctx, config: config} do
-      assert {:ok, _result} = Anthropic.chat(ctx, config: config)
-    end
-
-    test "returned message has role :assistant", %{ctx: ctx, config: config} do
-      {:ok, result} = Anthropic.chat(ctx, config: config)
-      assert %ChatMessage{role: :assistant} = result
-    end
-
-    test "returned message content is a non-empty list", %{ctx: ctx, config: config} do
-      {:ok, result} = Anthropic.chat(ctx, config: config)
-      assert %ChatMessage{content: content} = result
-      assert is_list(content)
-      assert length(content) > 0
-    end
-
-    test "no api_key also triggers mock mode" do
-      ctx = ChatContext.new() |> ChatContext.add(ChatContext.new_message(:user, ["Hi"]))
-      config = %Config{api_key: nil, mock: false}
-      assert {:ok, %ChatMessage{role: :assistant}} = Anthropic.chat(ctx, config: config)
-    end
-  end
-
-  # ---------------------------------------------------------------------------
-  # stream/2 mock mode
-  # ---------------------------------------------------------------------------
-
-  describe "stream/2 mock mode" do
-    setup do
-      ctx = ChatContext.new() |> ChatContext.add(ChatContext.new_message(:user, ["Hello"]))
-      config = %Config{mock: true}
-      {:ok, ctx: ctx, config: config}
-    end
-
-    test "returns {:ok, pid} where pid is a process", %{ctx: ctx, config: config} do
-      assert {:ok, pid} = Anthropic.stream(ctx, config: config)
-      assert is_pid(pid)
-    end
-
-    test "sends text chunk to caller", %{ctx: ctx, config: config} do
-      {:ok, _pid} = Anthropic.stream(ctx, config: config)
-      assert_receive {:llm_chunk, %LLMChunk{type: :text}}, 1000
-    end
-
-    test "sends done chunk to caller", %{ctx: ctx, config: config} do
-      {:ok, _pid} = Anthropic.stream(ctx, config: config)
-      assert_receive {:llm_chunk, %LLMChunk{type: :done}}, 1000
+    test "valid api_key returns :ok" do
+      assert :ok = Anthropic.validate_config(%Config{api_key: "sk-ant-test"})
     end
   end
 
@@ -140,7 +73,6 @@ defmodule Livekit.Agents.LLM.AnthropicTest do
     defp config_for(bypass),
       do: %Config{
         api_key: "sk-ant-test",
-        mock: false,
         base_url: "http://localhost:#{bypass.port}"
       }
 
@@ -272,9 +204,7 @@ defmodule Livekit.Agents.LLM.AnthropicTest do
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         decoded = Jason.decode!(body)
 
-        # System prompt must be at top level, not in messages array
         assert decoded["system"] == "You are helpful."
-        # messages array must NOT contain a system role entry
         refute Enum.any?(decoded["messages"], &(&1["role"] == "system"))
 
         conn
@@ -304,7 +234,6 @@ defmodule Livekit.Agents.LLM.AnthropicTest do
     defp stream_config_for(bypass),
       do: %Config{
         api_key: "sk-ant-test",
-        mock: false,
         base_url: "http://localhost:#{bypass.port}"
       }
 
@@ -374,7 +303,6 @@ defmodule Livekit.Agents.LLM.AnthropicTest do
     defp to_messages_config_for(bypass),
       do: %Config{
         api_key: "sk-ant-test",
-        mock: false,
         base_url: "http://localhost:#{bypass.port}"
       }
 

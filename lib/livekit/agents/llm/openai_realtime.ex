@@ -27,17 +27,10 @@ defmodule Livekit.Agents.LLM.OpenAIRealtime do
       :ok = OpenAIRealtime.connect(pid)
       :ok = OpenAIRealtime.push_audio(pid, audio_binary)
       :ok = OpenAIRealtime.generate_reply(pid)
-
-  ## Mock mode
-
-  Set `mock: true` in `Config` (or omit `:api_key`) to use deterministic
-  synthetic events without any API calls. Safe for CI and unit tests.
   """
 
   use GenServer
   require Logger
-
-  alias Livekit.Agents.AudioFrame
 
   @openai_host ~c"api.openai.com"
   @openai_port 443
@@ -48,27 +41,24 @@ defmodule Livekit.Agents.LLM.OpenAIRealtime do
 
     ## Fields
 
-    - `:api_key` — OpenAI API key. Required unless `:mock` is `true`.
+    - `:api_key` — OpenAI API key. Required.
     - `:model` — Realtime model name (default: `"gpt-4o-realtime-preview"`).
     - `:instructions` — System prompt / persona instructions for the session.
     - `:voice` — TTS voice: `"alloy"`, `"echo"`, `"fable"`, `"onyx"`, `"nova"`, or `"shimmer"`
       (default: `"alloy"`).
-    - `:mock` — When `true`, return synthetic events without API calls (default: `false`).
     """
 
     @type t :: %__MODULE__{
             api_key: String.t() | nil,
             model: String.t(),
             instructions: String.t(),
-            voice: String.t(),
-            mock: boolean()
+            voice: String.t()
           }
 
     defstruct api_key: nil,
               model: "gpt-4o-realtime-preview",
               instructions: "You are a helpful AI assistant.",
-              voice: "alloy",
-              mock: false
+              voice: "alloy"
   end
 
   defmodule State do
@@ -119,8 +109,7 @@ defmodule Livekit.Agents.LLM.OpenAIRealtime do
   @doc """
   Establishes the WebSocket connection to the OpenAI Realtime API.
 
-  In mock mode this is a no-op that immediately notifies the subscriber of a
-  successful connection. Returns `:ok` once the connection handshake starts.
+  Returns `:ok` once the connection handshake starts.
   """
   @spec connect(pid()) :: :ok
   def connect(pid) do
@@ -132,8 +121,6 @@ defmodule Livekit.Agents.LLM.OpenAIRealtime do
 
   `audio` must be PCM16 mono at 24 kHz (OpenAI Realtime requirement). Audio is
   Base64-encoded before being sent over the WebSocket JSON channel.
-
-  In mock mode the audio is silently discarded.
   """
   @spec push_audio(pid(), binary()) :: :ok
   def push_audio(pid, audio) when is_binary(audio) do
@@ -144,8 +131,7 @@ defmodule Livekit.Agents.LLM.OpenAIRealtime do
   Sends a `response.create` event to request a model reply.
 
   The server will generate a response based on the accumulated
-  `input_audio_buffer` and conversation history. In mock mode this triggers
-  a deterministic synthetic response.
+  `input_audio_buffer` and conversation history.
   """
   @spec generate_reply(pid()) :: :ok
   def generate_reply(pid) do
@@ -171,12 +157,10 @@ defmodule Livekit.Agents.LLM.OpenAIRealtime do
   @doc """
   Validates a `Config` struct.
 
-  Returns `:ok` when `config.mock` is `true` (no API key required).
   Returns `{:error, :missing_api_key}` when the API key is nil or empty.
+  Returns `:ok` when the API key is present.
   """
   @spec validate_config(Config.t()) :: :ok | {:error, :missing_api_key}
-  def validate_config(%Config{mock: true}), do: :ok
-
   def validate_config(%Config{api_key: key}) when key in [nil, ""],
     do: {:error, :missing_api_key}
 
@@ -187,23 +171,12 @@ defmodule Livekit.Agents.LLM.OpenAIRealtime do
   # ---------------------------------------------------------------------------
 
   @impl true
-  def init({%Config{mock: true} = config, subscriber}) do
-    state = %State{config: config, subscriber: subscriber, connected: false}
-    {:ok, state}
-  end
-
   def init({config, subscriber}) do
     state = %State{config: config, subscriber: subscriber}
     {:ok, state}
   end
 
   @impl true
-  def handle_cast(:connect, %State{config: %Config{mock: true}} = state) do
-    # Mock mode: simulate a successful session.created event
-    send(self(), :mock_session_created)
-    {:noreply, %{state | connected: true}}
-  end
-
   def handle_cast(:connect, state) do
     path = build_ws_path(state.config)
     headers = build_ws_headers(state.config)
@@ -228,12 +201,6 @@ defmodule Livekit.Agents.LLM.OpenAIRealtime do
     end
   end
 
-  def handle_cast({:push_audio, _audio}, %State{config: %Config{mock: true}} = state) do
-    # Mock mode: discard audio silently
-    new_metrics = Map.update!(state.metrics, :audio_chunks_sent, &(&1 + 1))
-    {:noreply, %{state | metrics: new_metrics}}
-  end
-
   def handle_cast({:push_audio, _audio}, %State{connected: false} = state) do
     Logger.warning("OpenAI Realtime: push_audio called before connection established; discarding")
     {:noreply, state}
@@ -253,13 +220,6 @@ defmodule Livekit.Agents.LLM.OpenAIRealtime do
     {:noreply, %{state | metrics: new_metrics}}
   end
 
-  def handle_cast(:generate_reply, %State{config: %Config{mock: true}} = state) do
-    # Mock mode: emit a canned sequence of realtime events
-    send(self(), :mock_generate_reply)
-    new_metrics = Map.update!(state.metrics, :replies_generated, &(&1 + 1))
-    {:noreply, %{state | metrics: new_metrics}}
-  end
-
   def handle_cast(:generate_reply, %State{connected: false} = state) do
     Logger.warning("OpenAI Realtime: generate_reply called before connection; ignoring")
     {:noreply, state}
@@ -270,10 +230,6 @@ defmodule Livekit.Agents.LLM.OpenAIRealtime do
     :gun.ws_send(state.conn, state.stream_ref, {:text, event})
     new_metrics = Map.update!(state.metrics, :replies_generated, &(&1 + 1))
     {:noreply, %{state | metrics: new_metrics}}
-  end
-
-  def handle_cast(:disconnect, %State{config: %Config{mock: true}} = state) do
-    {:stop, :normal, state}
   end
 
   def handle_cast(:disconnect, %State{conn: nil} = state) do
@@ -291,31 +247,6 @@ defmodule Livekit.Agents.LLM.OpenAIRealtime do
   end
 
   @impl true
-  def handle_info(:mock_session_created, state) do
-    Logger.debug("OpenAI Realtime mock session created")
-    {:noreply, %{state | session_id: "mock-session-#{:erlang.unique_integer([:positive])}"}}
-  end
-
-  def handle_info(:mock_generate_reply, state) do
-    subscriber = state.subscriber
-
-    spawn(fn ->
-      send(subscriber, {:realtime_speech_stopped})
-      Process.sleep(10)
-      send(subscriber, {:realtime_text, "Hello, I'm a mock realtime response."})
-      Process.sleep(10)
-      # Send a short silent PCM16 audio chunk (mono, 24kHz)
-      silent_pcm = AudioFrame.new(<<0::size(480 * 16)>>, sample_rate: 24_000, channels: 1)
-      send(subscriber, {:realtime_audio, silent_pcm.data})
-      Process.sleep(10)
-      send(subscriber, {:realtime_transcript, "Hello, I'm a mock realtime response."})
-      Process.sleep(10)
-      send(subscriber, {:realtime_done})
-    end)
-
-    {:noreply, state}
-  end
-
   def handle_info(
         {:gun_upgrade, conn, _stream_ref, ["websocket"], _headers},
         %State{conn: conn} = state
@@ -340,14 +271,6 @@ defmodule Livekit.Agents.LLM.OpenAIRealtime do
 
     :gun.ws_send(conn, state.stream_ref, {:text, update_event})
     {:noreply, %{state | connected: true}}
-  end
-
-  def handle_info(
-        {:gun_ws, _conn, _stream_ref, {:text, frame}},
-        %State{connected: true, config: %Config{mock: true}} = state
-      ) do
-    new_state = handle_server_event(state, frame)
-    {:noreply, new_state}
   end
 
   def handle_info({:gun_ws, conn, _stream_ref, {:text, frame}}, %State{conn: conn} = state) do

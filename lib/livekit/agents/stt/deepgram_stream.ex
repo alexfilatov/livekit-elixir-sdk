@@ -90,12 +90,6 @@ defmodule Livekit.Agents.STT.DeepgramStream do
   # --- GenServer callbacks ---
 
   @impl true
-  def init({%Config{mock: true} = config, subscriber}) do
-    # Mock mode: spawn a task that emits synthetic events, then schedule exit
-    spawn_mock_stream(subscriber, config)
-    {:ok, %State{config: config, subscriber: subscriber}}
-  end
-
   def init({config, subscriber}) do
     buffer = AudioBuffer.new(min_duration_ms: config.min_buffer_duration_ms)
     state = %State{config: config, subscriber: subscriber, buffer: buffer}
@@ -170,21 +164,11 @@ defmodule Livekit.Agents.STT.DeepgramStream do
     {:stop, :normal, state}
   end
 
-  def handle_info(:mock_exit, state) do
-    {:stop, :normal, state}
-  end
-
   def handle_info(_msg, state) do
     {:noreply, state}
   end
 
   @impl true
-  def handle_cast({:send_audio, _audio}, %State{buffer: nil} = state) do
-    # Mock mode — no buffer; audio is discarded
-    {:noreply, state}
-  end
-
-  # ISSUE-08: Discard audio after finish has been called
   def handle_cast({:send_audio, _audio}, %State{finishing: true} = state) do
     {:noreply, state}
   end
@@ -209,31 +193,22 @@ defmodule Livekit.Agents.STT.DeepgramStream do
   end
 
   def handle_cast(:finish, state) do
-    # ISSUE-09: In mock mode (buffer == nil), the mock process already sends :end — skip it
-    if is_nil(state.buffer) do
-      {:noreply, %{state | finishing: true}}
-    else
-      # Flush any remaining buffered audio before closing
-      {remaining, _} = AudioBuffer.flush(state.buffer)
+    # Flush any remaining buffered audio before closing
+    {remaining, _} = AudioBuffer.flush(state.buffer)
 
-      if byte_size(remaining) > 0 and state.connected do
-        :gun.ws_send(state.conn, state.stream_ref, {:binary, remaining})
-      end
-
-      if state.connected do
-        close_msg = Jason.encode!(%{"type" => "CloseStream"})
-        :gun.ws_send(state.conn, state.stream_ref, {:text, close_msg})
-      else
-        # Never connected — emit terminal event directly
-        send(state.subscriber, {:speech_event, %SpeechEvent{type: :end}})
-      end
-
-      {:noreply, %{state | finishing: true}}
+    if byte_size(remaining) > 0 and state.connected do
+      :gun.ws_send(state.conn, state.stream_ref, {:binary, remaining})
     end
-  end
 
-  def handle_cast(:mock_done, state) do
-    {:stop, :normal, state}
+    if state.connected do
+      close_msg = Jason.encode!(%{"type" => "CloseStream"})
+      :gun.ws_send(state.conn, state.stream_ref, {:text, close_msg})
+    else
+      # Never connected — emit terminal event directly
+      send(state.subscriber, {:speech_event, %SpeechEvent{type: :end}})
+    end
+
+    {:noreply, %{state | finishing: true}}
   end
 
   @impl true
@@ -313,38 +288,5 @@ defmodule Livekit.Agents.STT.DeepgramStream do
 
     send(state.subscriber, {:speech_event, event})
     state
-  end
-
-  @spec spawn_mock_stream(pid(), Config.t()) :: pid()
-  defp spawn_mock_stream(subscriber, config) do
-    server = self()
-
-    spawn(fn ->
-      send(subscriber, {:speech_event, %SpeechEvent{type: :start}})
-      Process.sleep(50)
-
-      send(
-        subscriber,
-        {:speech_event,
-         %SpeechEvent{type: :interim, text: "Hello", confidence: 0.8, language: config.language}}
-      )
-
-      Process.sleep(50)
-
-      send(
-        subscriber,
-        {:speech_event,
-         %SpeechEvent{
-           type: :final,
-           text: "Hello, how are you?",
-           confidence: 0.95,
-           language: config.language
-         }}
-      )
-
-      Process.sleep(10)
-      send(subscriber, {:speech_event, %SpeechEvent{type: :end}})
-      GenServer.cast(server, :mock_done)
-    end)
   end
 end

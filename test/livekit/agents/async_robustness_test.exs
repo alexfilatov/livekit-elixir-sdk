@@ -4,12 +4,12 @@ defmodule Livekit.Agents.AsyncRobustnessTest do
   LiveKit Elixir Agents framework.
 
   Covers:
-  - Deepgram STT provider: mock mode, validation, streaming, and HTTP error paths
-  - OpenAI LLM provider: mock mode, message conversion, streaming, and HTTP errors
-  - OpenAI TTS provider: mock mode voices, caching, and HTTP error paths
+  - Deepgram STT provider: validation, capabilities, and HTTP error paths
+  - OpenAI LLM provider: message conversion, streaming, and HTTP errors
+  - OpenAI TTS provider: caching and HTTP error paths
   - EventBus: pub/sub robustness, concurrency, and lifecycle
   - Pipeline: rapid frame pushing, non-deadlock get_context, async turn delivery
-  - Worker: mock mode startup, status fields, and capacity tracking
+  - Worker: startup, status fields, and capacity tracking
   """
 
   # async: false because tests exercise a globally-named Registry (EventBus),
@@ -18,7 +18,7 @@ defmodule Livekit.Agents.AsyncRobustnessTest do
 
   alias Livekit.Agents.ChatContext
   alias Livekit.Agents.{AudioFrame, EventBus, Events, Pipeline, Worker}
-  alias Livekit.Agents.LLM.{LLMChunk, OpenAI}
+  alias Livekit.Agents.LLM.OpenAI
   alias Livekit.Agents.STT.{Deepgram, SpeechEvent}
   alias Livekit.Agents.TTS.OpenAI, as: TTSOAI
   alias Livekit.Agents.TTS.OpenAI.Cache
@@ -42,39 +42,19 @@ defmodule Livekit.Agents.AsyncRobustnessTest do
   # 1. Deepgram STT provider robustness
   # ---------------------------------------------------------------------------
 
-  describe "Deepgram.transcribe/2 mock mode" do
-    test "empty audio binary returns a result without crashing" do
-      config = %Deepgram.Config{mock: true}
-      result = Deepgram.transcribe(<<>>, config: config)
-      assert {:ok, %SpeechEvent{}} = result
-    end
-
-    test "empty audio binary returns a SpeechEvent struct" do
-      config = %Deepgram.Config{mock: true}
-      {:ok, event} = Deepgram.transcribe(<<>>, config: config)
-      assert %SpeechEvent{type: :final} = event
-      assert is_binary(event.text)
-      assert is_float(event.confidence) or is_integer(event.confidence)
-    end
-  end
-
   describe "Deepgram.validate_config/1" do
-    test "missing api_key but mock: true returns :ok" do
-      assert :ok = Deepgram.validate_config(%Deepgram.Config{mock: true, api_key: nil})
-    end
-
-    test "no api_key and no mock flag returns error" do
+    test "no api_key returns {:error, :missing_api_key}" do
       assert {:error, :missing_api_key} =
-               Deepgram.validate_config(%Deepgram.Config{mock: false, api_key: nil})
+               Deepgram.validate_config(%Deepgram.Config{api_key: nil})
     end
 
-    test "empty api_key with mock: false returns error" do
+    test "empty api_key returns error" do
       assert {:error, :missing_api_key} =
-               Deepgram.validate_config(%Deepgram.Config{mock: false, api_key: ""})
+               Deepgram.validate_config(%Deepgram.Config{api_key: ""})
     end
 
-    test "valid api_key with mock: false returns :ok" do
-      assert :ok = Deepgram.validate_config(%Deepgram.Config{mock: false, api_key: "dg_key"})
+    test "valid api_key returns :ok" do
+      assert :ok = Deepgram.validate_config(%Deepgram.Config{api_key: "dg_key"})
     end
   end
 
@@ -100,35 +80,6 @@ defmodule Livekit.Agents.AsyncRobustnessTest do
     end
   end
 
-  describe "Deepgram.stream/1 mock mode" do
-    test "delivers events in correct order: :start, :interim, :final, :end" do
-      config = %Deepgram.Config{mock: true}
-      {:ok, _pid} = Deepgram.stream(config)
-
-      assert_receive {:speech_event, %SpeechEvent{type: :start}}, 500
-      assert_receive {:speech_event, %SpeechEvent{type: :interim}}, 500
-      assert_receive {:speech_event, %SpeechEvent{type: :final}}, 500
-      assert_receive {:speech_event, %SpeechEvent{type: :end}}, 500
-    end
-
-    test "subscriber receives all events before stream process terminates" do
-      config = %Deepgram.Config{mock: true}
-      {:ok, stream_pid} = Deepgram.stream(config)
-
-      Process.flag(:trap_exit, true)
-      Process.link(stream_pid)
-
-      # Collect all speech events until stream ends
-      events = collect_speech_events(4, 1000)
-
-      types = Enum.map(events, & &1.type)
-      assert :start in types
-      assert :interim in types
-      assert :final in types
-      assert :end in types
-    end
-  end
-
   describe "Deepgram HTTP via Bypass" do
     setup do
       bypass = Bypass.open()
@@ -138,7 +89,6 @@ defmodule Livekit.Agents.AsyncRobustnessTest do
     defp deepgram_config(bypass) do
       %Deepgram.Config{
         api_key: "test_key",
-        mock: false,
         base_url: "http://localhost:#{bypass.port}"
       }
     end
@@ -203,60 +153,15 @@ defmodule Livekit.Agents.AsyncRobustnessTest do
   # 2. OpenAI LLM provider robustness
   # ---------------------------------------------------------------------------
 
-  describe "OpenAI LLM chat/2 mock mode" do
-    test "returns a ChatMessage" do
-      config = %OpenAI.Config{mock: true}
-      ctx = ChatContext.new() |> ChatContext.add(ChatContext.new_message(:user, ["Hello!"]))
-      assert {:ok, msg} = OpenAI.chat(ctx, config: config)
-      assert %ChatContext.ChatMessage{role: :assistant} = msg
-    end
-
-    test "handles empty string input without crashing" do
-      config = %OpenAI.Config{mock: true}
-      ctx = ChatContext.new() |> ChatContext.add(ChatContext.new_message(:user, [""]))
-      assert {:ok, %ChatContext.ChatMessage{role: :assistant}} = OpenAI.chat(ctx, config: config)
-    end
-  end
-
-  describe "OpenAI LLM stream/2 mock mode" do
-    test "sends LLMChunk messages to caller" do
-      config = %OpenAI.Config{mock: true}
-      ctx = ChatContext.new() |> ChatContext.add(ChatContext.new_message(:user, ["Hi"]))
-
-      {:ok, _pid} = OpenAI.stream(ctx, config: config)
-
-      assert_receive {:llm_chunk, %LLMChunk{type: :text}}, 500
-      assert_receive {:llm_chunk, %LLMChunk{type: :done}}, 500
-    end
-
-    test "done chunk arrives after text chunk" do
-      config = %OpenAI.Config{mock: true}
-      ctx = ChatContext.new() |> ChatContext.add(ChatContext.new_message(:user, ["Hi"]))
-
-      {:ok, _pid} = OpenAI.stream(ctx, config: config)
-
-      chunks = collect_llm_chunks(5, 500)
-      types = Enum.map(chunks, & &1.type)
-      assert :done in types
-      done_index = Enum.find_index(types, &(&1 == :done))
-      assert done_index == length(types) - 1
-    end
-  end
-
   describe "OpenAI LLM validate_config/1" do
-    test "mock: true returns :ok regardless of api_key" do
-      assert :ok = OpenAI.validate_config(%OpenAI.Config{mock: true, api_key: nil})
-      assert :ok = OpenAI.validate_config(%OpenAI.Config{mock: true, api_key: ""})
-    end
-
-    test "nil api_key with mock: false returns error" do
+    test "nil api_key returns error" do
       assert {:error, :missing_api_key} =
-               OpenAI.validate_config(%OpenAI.Config{mock: false, api_key: nil})
+               OpenAI.validate_config(%OpenAI.Config{api_key: nil})
     end
 
     test "empty string api_key returns error" do
       assert {:error, :missing_api_key} =
-               OpenAI.validate_config(%OpenAI.Config{mock: false, api_key: ""})
+               OpenAI.validate_config(%OpenAI.Config{api_key: ""})
     end
 
     test "valid api_key returns :ok" do
@@ -276,7 +181,6 @@ defmodule Livekit.Agents.AsyncRobustnessTest do
     defp llm_config(bypass) do
       %OpenAI.Config{
         api_key: "sk-test",
-        mock: false,
         base_url: "http://localhost:#{bypass.port}"
       }
     end
@@ -434,27 +338,10 @@ defmodule Livekit.Agents.AsyncRobustnessTest do
   # 3. OpenAI TTS provider robustness
   # ---------------------------------------------------------------------------
 
-  describe "OpenAI TTS synthesize/2 mock mode" do
-    for voice <- [:alloy, :echo, :fable, :onyx, :nova, :shimmer] do
-      @voice voice
-      test "voice #{voice} returns audio binary" do
-        config = %TTSOAI.Config{mock: true, voice: @voice}
-        assert {:ok, audio} = TTSOAI.synthesize("Hello there", config: config)
-        assert is_binary(audio)
-      end
-    end
-
-    test "empty string input returns audio (possibly empty)" do
-      config = %TTSOAI.Config{mock: true}
-      assert {:ok, audio} = TTSOAI.synthesize("", config: config)
-      assert is_binary(audio)
-    end
-  end
-
   describe "OpenAI TTS caching" do
     test "second call with cache returns cached result" do
       {:ok, cache} = Cache.start_link(ttl_seconds: 60)
-      config = %TTSOAI.Config{api_key: "sk-x", mock: false, base_url: "http://127.0.0.1:1"}
+      config = %TTSOAI.Config{api_key: "sk-x", base_url: "http://127.0.0.1:1"}
 
       text = "cache test #{unique_id()}"
 
@@ -472,30 +359,12 @@ defmodule Livekit.Agents.AsyncRobustnessTest do
       {:ok, result} = TTSOAI.synthesize(text, config: config, cache: cache)
       assert result == audio_data
     end
-
-    test "cache miss causes a fresh synthesis attempt" do
-      {:ok, cache} = Cache.start_link(ttl_seconds: 60, max_entries: 10)
-      config = %TTSOAI.Config{mock: true}
-      text = "fresh synthesis #{unique_id()}"
-
-      {:ok, audio1} = TTSOAI.synthesize(text, config: config, cache: cache)
-      {:ok, audio2} = TTSOAI.synthesize(text, config: config, cache: cache)
-
-      # Both return valid audio (mock always succeeds); deterministic mock returns
-      # equal binaries for same text+voice combination
-      assert is_binary(audio1)
-      assert is_binary(audio2)
-    end
   end
 
   describe "OpenAI TTS validate_config/1" do
-    test "mock: true returns :ok" do
-      assert :ok = TTSOAI.validate_config(%TTSOAI.Config{mock: true})
-    end
-
-    test "nil api_key with mock: false returns error" do
+    test "nil api_key returns error" do
       assert {:error, :missing_api_key} =
-               TTSOAI.validate_config(%TTSOAI.Config{mock: false, api_key: nil})
+               TTSOAI.validate_config(%TTSOAI.Config{api_key: nil})
     end
 
     test "speed below 0.25 returns error" do
@@ -527,7 +396,6 @@ defmodule Livekit.Agents.AsyncRobustnessTest do
     defp tts_config(bypass) do
       %TTSOAI.Config{
         api_key: "sk-test",
-        mock: false,
         base_url: "http://localhost:#{bypass.port}"
       }
     end
@@ -857,7 +725,7 @@ defmodule Livekit.Agents.AsyncRobustnessTest do
   end
 
   describe "Worker robustness" do
-    test "mock mode starts without errors" do
+    test "starts without errors" do
       pid = start_test_worker()
       assert Process.alive?(pid)
     end
@@ -885,7 +753,7 @@ defmodule Livekit.Agents.AsyncRobustnessTest do
       end
     end
 
-    test "get_status/1 registered is true after mock connect" do
+    test "get_status/1 registered is true after connect" do
       pid = start_test_worker()
       Process.sleep(50)
       status = Worker.get_status(pid)
@@ -965,31 +833,6 @@ defmodule Livekit.Agents.AsyncRobustnessTest do
   # ---------------------------------------------------------------------------
   # Private test helpers
   # ---------------------------------------------------------------------------
-
-  defp collect_speech_events(count, timeout) do
-    Enum.reduce_while(1..count, [], fn _, acc ->
-      receive do
-        {:speech_event, event} -> {:cont, acc ++ [event]}
-      after
-        timeout -> {:halt, acc}
-      end
-    end)
-  end
-
-  defp collect_llm_chunks(max, timeout) do
-    Enum.reduce_while(1..max, [], fn _, acc ->
-      receive do
-        {:llm_chunk, chunk} ->
-          if chunk.type == :done do
-            {:halt, acc ++ [chunk]}
-          else
-            {:cont, acc ++ [chunk]}
-          end
-      after
-        timeout -> {:halt, acc}
-      end
-    end)
-  end
 
   defp count_registry_processes do
     registry = Livekit.Agents.EventBus.Registry

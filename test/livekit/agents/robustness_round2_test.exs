@@ -520,12 +520,12 @@ defmodule Livekit.Agents.RobustnessRound2Test do
   end
 
   # ---------------------------------------------------------------------------
-  # 8. DeepgramStream finishing guard (ISSUE-08 and ISSUE-09 fixes)
+  # 8. DeepgramStream finishing guard (ISSUE-08 fix)
   # ---------------------------------------------------------------------------
 
   describe "DeepgramStream finish guard — ISSUE-08" do
-    test "send_audio after finish does not crash (mock mode)" do
-      config = %Deepgram.Config{mock: true}
+    test "send_audio after finish does not crash" do
+      config = %Deepgram.Config{api_key: "dg-test-key"}
       {:ok, stream_pid} = DeepgramStream.start_link({config, self()})
       assert Process.alive?(stream_pid)
 
@@ -537,56 +537,9 @@ defmodule Livekit.Agents.RobustnessRound2Test do
       DeepgramStream.send_audio(stream_pid, <<0, 1, 2, 3>>)
       DeepgramStream.send_audio(stream_pid, <<4, 5, 6, 7>>)
 
-      # Stream process may exit normally after mock events — that is also fine
+      # Stream process may exit normally — that is also fine
       # Main requirement: no crash / exception propagated
       assert true
-    end
-  end
-
-  describe "DeepgramStream mock mode — ISSUE-09" do
-    test "finish in mock mode does not send duplicate :end event" do
-      config = %Deepgram.Config{mock: true}
-      {:ok, _stream_pid} = DeepgramStream.start_link({config, self()})
-
-      # Collect all speech_event messages within 500 ms
-      collect_events = fn ->
-        Stream.repeatedly(fn ->
-          receive do
-            {:speech_event, e} -> e
-          after
-            500 -> nil
-          end
-        end)
-        |> Enum.take_while(& &1)
-      end
-
-      events = collect_events.()
-      end_events = Enum.filter(events, &(&1.type == :end))
-
-      # There should be exactly one :end event, not duplicated
-      assert length(end_events) == 1
-    end
-  end
-
-  # ---------------------------------------------------------------------------
-  # 9. TTS mock empty string (ISSUE-10 fix)
-  # ---------------------------------------------------------------------------
-
-  describe "TTS OpenAI.synthesize/2 empty string — ISSUE-10" do
-    test "empty string in mock mode returns {:ok, <<>>} without crashing" do
-      config = %TTSOAI.Config{mock: true}
-      result = TTSOAI.synthesize("", config: config)
-      assert {:ok, audio} = result
-      assert is_binary(audio)
-      # Per fix: empty text must produce an empty binary, not crash
-      assert audio == <<>>
-    end
-
-    test "non-empty string in mock mode returns non-empty binary" do
-      config = %TTSOAI.Config{mock: true}
-      {:ok, audio} = TTSOAI.synthesize("Hello", config: config)
-      assert is_binary(audio)
-      assert byte_size(audio) > 0
     end
   end
 

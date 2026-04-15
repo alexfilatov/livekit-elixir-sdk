@@ -13,11 +13,6 @@ defmodule Livekit.Agents.LLM.OpenAI do
   endpoint and forwards `{:llm_chunk, %LLMChunk{}}` messages to the caller. A terminal
   chunk with `type: :done` signals the end of the stream.
 
-  ## Mock mode
-
-  Set `mock: true` in the `Config` or omit `api_key` to receive deterministic synthetic
-  responses without making any API calls. Useful for testing and local development.
-
   ## Usage
 
       alias Livekit.Agents.LLM.OpenAI
@@ -46,12 +41,11 @@ defmodule Livekit.Agents.LLM.OpenAI do
 
     ## Fields
 
-    - `:api_key` — OpenAI API key. Required unless `:mock` is `true`.
+    - `:api_key` — OpenAI API key. Required.
     - `:model` — OpenAI model name (default: `"gpt-4o-mini"`).
     - `:instructions` — System prompt injected at the start of every conversation.
     - `:temperature` — Sampling temperature 0.0–2.0 (default: `0.7`).
     - `:max_tokens` — Maximum tokens in the response (default: `1000`).
-    - `:mock` — When `true`, return synthetic responses without API calls (default: `false`).
     - `:base_url` — Base URL for the OpenAI API (default: `"https://api.openai.com"`).
       Override for testing with Bypass.
     """
@@ -62,7 +56,6 @@ defmodule Livekit.Agents.LLM.OpenAI do
             instructions: String.t(),
             temperature: float(),
             max_tokens: pos_integer(),
-            mock: boolean(),
             base_url: String.t()
           }
 
@@ -71,7 +64,6 @@ defmodule Livekit.Agents.LLM.OpenAI do
               instructions: "You are a helpful AI assistant.",
               temperature: 0.7,
               max_tokens: 1000,
-              mock: false,
               base_url: "https://api.openai.com"
   end
 
@@ -96,13 +88,11 @@ defmodule Livekit.Agents.LLM.OpenAI do
   @doc """
   Validates a `Config` struct.
 
-  Returns `:ok` when `config.mock` is `true` (no API key required).
   Returns `{:error, :missing_api_key}` when the API key is `nil` or an empty string.
+  Returns `:ok` when the API key is present.
   """
   @impl Livekit.Agents.LLM
   @spec validate_config(Config.t()) :: :ok | {:error, :missing_api_key}
-  def validate_config(%Config{mock: true}), do: :ok
-
   def validate_config(%Config{api_key: key}) when key in [nil, ""],
     do: {:error, :missing_api_key}
 
@@ -131,12 +121,7 @@ defmodule Livekit.Agents.LLM.OpenAI do
           {:ok, ChatMessage.t() | FunctionCall.t()} | {:error, term()}
   def chat(%ChatContext{} = ctx, opts \\ []) do
     config = Keyword.fetch!(opts, :config)
-
-    if mock_mode?(config) do
-      {:ok, mock_chat_response()}
-    else
-      do_chat(ctx, config, opts)
-    end
+    do_chat(ctx, config, opts)
   end
 
   @doc """
@@ -157,19 +142,8 @@ defmodule Livekit.Agents.LLM.OpenAI do
   def stream(%ChatContext{} = ctx, opts \\ []) do
     config = Keyword.fetch!(opts, :config)
     subscriber = self()
-
-    if mock_mode?(config) do
-      pid =
-        spawn(fn ->
-          send(subscriber, {:llm_chunk, %LLMChunk{type: :text, content: "Mock"}})
-          send(subscriber, {:llm_chunk, %LLMChunk{type: :done}})
-        end)
-
-      {:ok, pid}
-    else
-      pid = spawn(fn -> do_stream(ctx, config, opts, subscriber) end)
-      {:ok, pid}
-    end
+    pid = spawn(fn -> do_stream(ctx, config, opts, subscriber) end)
+    {:ok, pid}
   end
 
   # ---------------------------------------------------------------------------
@@ -382,17 +356,5 @@ defmodule Livekit.Agents.LLM.OpenAI do
     ]
 
     Tesla.client(middleware, {Tesla.Adapter.Hackney, [recv_timeout: 60_000]})
-  end
-
-  # ---------------------------------------------------------------------------
-  # Private — helpers
-  # ---------------------------------------------------------------------------
-
-  defp mock_mode?(%Config{mock: true}), do: true
-  defp mock_mode?(%Config{api_key: key}) when key in [nil, ""], do: true
-  defp mock_mode?(%Config{}), do: false
-
-  defp mock_chat_response do
-    ChatContext.new_message(:assistant, ["I'm a mock LLM response."])
   end
 end

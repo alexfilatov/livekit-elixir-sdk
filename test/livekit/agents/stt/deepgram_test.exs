@@ -5,8 +5,6 @@ defmodule Livekit.Agents.STT.DeepgramTest do
   alias Livekit.Agents.STT.Deepgram.Config
   alias Livekit.Agents.STT.SpeechEvent
 
-  @small_audio :binary.copy(<<0>>, 500)
-  @medium_audio :binary.copy(<<0>>, 3000)
   @large_audio :binary.copy(<<0>>, 11_000)
 
   describe "capabilities/0" do
@@ -28,68 +26,41 @@ defmodule Livekit.Agents.STT.DeepgramTest do
   end
 
   describe "validate_config/1" do
-    test "returns :ok for mock mode regardless of api_key" do
-      assert :ok = Deepgram.validate_config(%Config{mock: true})
-      assert :ok = Deepgram.validate_config(%Config{mock: true, api_key: nil})
+    test "returns {:error, :missing_api_key} for nil api_key" do
+      assert {:error, :missing_api_key} = Deepgram.validate_config(%Config{api_key: nil})
     end
 
-    test "returns {:error, :missing_api_key} for nil api_key in live mode" do
-      assert {:error, :missing_api_key} =
-               Deepgram.validate_config(%Config{api_key: nil, mock: false})
+    test "returns {:error, :missing_api_key} for empty string api_key" do
+      assert {:error, :missing_api_key} = Deepgram.validate_config(%Config{api_key: ""})
     end
 
-    test "returns {:error, :missing_api_key} for empty string api_key in live mode" do
-      assert {:error, :missing_api_key} =
-               Deepgram.validate_config(%Config{api_key: "", mock: false})
+    test "returns :ok for valid api_key" do
+      assert :ok = Deepgram.validate_config(%Config{api_key: "dg_test_key"})
     end
 
-    test "returns :ok for valid api_key in live mode" do
-      assert :ok = Deepgram.validate_config(%Config{api_key: "dg_test_key", mock: false})
+    test "returns {:error, :invalid_sample_rate} for zero sample_rate" do
+      assert {:error, :invalid_sample_rate} =
+               Deepgram.validate_config(%Config{api_key: "key", sample_rate: 0})
     end
   end
 
-  describe "transcribe/2 mock mode" do
-    test "empty audio returns empty transcript" do
-      assert {:ok, event} = Deepgram.transcribe(<<>>, config: %Config{mock: true})
+  describe "transcribe/2 missing api_key" do
+    test "nil api_key returns {:error, :missing_api_key}" do
+      assert {:error, :missing_api_key} =
+               Deepgram.transcribe(@large_audio, config: %Config{api_key: nil})
+    end
+
+    test "empty api_key returns {:error, :missing_api_key}" do
+      assert {:error, :missing_api_key} =
+               Deepgram.transcribe(@large_audio, config: %Config{api_key: ""})
+    end
+  end
+
+  describe "transcribe/2 empty audio" do
+    test "empty audio with valid api_key returns empty SpeechEvent" do
+      config = %Config{api_key: "test_key"}
+      assert {:ok, event} = Deepgram.transcribe(<<>>, config: config)
       assert %SpeechEvent{type: :final, text: ""} = event
-    end
-
-    test "small audio (< 1000 bytes) returns empty text" do
-      assert {:ok, event} = Deepgram.transcribe(@small_audio, config: %Config{mock: true})
-      assert event.type == :final
-      assert event.text == ""
-    end
-
-    test "medium audio (1000-4999 bytes) returns 'Hello'" do
-      assert {:ok, event} = Deepgram.transcribe(@medium_audio, config: %Config{mock: true})
-      assert event.type == :final
-      assert event.text == "Hello"
-    end
-
-    test "large audio (>= 10000 bytes) returns longer transcript" do
-      assert {:ok, event} = Deepgram.transcribe(@large_audio, config: %Config{mock: true})
-      assert event.type == :final
-      assert String.length(event.text) > 5
-    end
-
-    test "language in returned event matches config language" do
-      config = %Config{mock: true, language: "fr"}
-      {:ok, event} = Deepgram.transcribe(@medium_audio, config: config)
-      assert event.language == "fr"
-    end
-
-    test "nil api_key with mock: false still returns mock result" do
-      config = %Config{api_key: nil, mock: false}
-
-      assert {:ok, %SpeechEvent{type: :final}} =
-               Deepgram.transcribe(@medium_audio, config: config)
-    end
-
-    test "empty api_key with mock: false still returns mock result" do
-      config = %Config{api_key: "", mock: false}
-
-      assert {:ok, %SpeechEvent{type: :final}} =
-               Deepgram.transcribe(@medium_audio, config: config)
     end
   end
 
@@ -102,7 +73,6 @@ defmodule Livekit.Agents.STT.DeepgramTest do
     defp config_for_bypass(bypass) do
       %Config{
         api_key: "test_key",
-        mock: false,
         base_url: "http://localhost:#{bypass.port}"
       }
     end

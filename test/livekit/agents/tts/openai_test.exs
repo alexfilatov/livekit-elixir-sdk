@@ -36,18 +36,12 @@ defmodule Livekit.Agents.TTS.OpenAITest do
   # ── validate_config ────────────────────────────────────────────────────────
 
   describe "validate_config/1" do
-    test "mock: true passes without api_key" do
-      assert :ok = OpenAI.validate_config(%Config{mock: true})
+    test "missing api_key returns error" do
+      assert {:error, :missing_api_key} = OpenAI.validate_config(%Config{api_key: nil})
     end
 
-    test "missing api_key in real mode returns error" do
-      assert {:error, :missing_api_key} =
-               OpenAI.validate_config(%Config{mock: false, api_key: nil})
-    end
-
-    test "empty api_key in real mode returns error" do
-      assert {:error, :missing_api_key} =
-               OpenAI.validate_config(%Config{mock: false, api_key: ""})
+    test "empty api_key returns error" do
+      assert {:error, :missing_api_key} = OpenAI.validate_config(%Config{api_key: ""})
     end
 
     test "invalid speed (too low) returns error" do
@@ -68,55 +62,6 @@ defmodule Livekit.Agents.TTS.OpenAITest do
 
     test "boundary speed 4.0 is valid" do
       assert :ok = OpenAI.validate_config(%Config{api_key: "k", speed: 4.0})
-    end
-  end
-
-  # ── mock mode ─────────────────────────────────────────────────────────────
-
-  describe "synthesize/2 mock mode" do
-    test "returns audio binary for mock: true" do
-      config = %Config{mock: true}
-      assert {:ok, audio} = OpenAI.synthesize("Hello, world!", config: config)
-      assert is_binary(audio)
-      assert byte_size(audio) > 0
-    end
-
-    test "different voices produce different audio" do
-      alloy_config = %Config{mock: true, voice: :alloy}
-      shimmer_config = %Config{mock: true, voice: :shimmer}
-      {:ok, alloy_audio} = OpenAI.synthesize("Hello", config: alloy_config)
-      {:ok, shimmer_audio} = OpenAI.synthesize("Hello", config: shimmer_config)
-      # Different frequencies => different waveforms
-      assert alloy_audio != shimmer_audio
-    end
-
-    test "all voices produce non-empty audio" do
-      voices = [:alloy, :echo, :fable, :onyx, :nova, :shimmer]
-
-      for voice <- voices do
-        config = %Config{mock: true, voice: voice}
-        assert {:ok, audio} = OpenAI.synthesize("Test audio", config: config)
-        assert byte_size(audio) > 0, "Expected non-empty audio for voice #{voice}"
-      end
-    end
-
-    test "nil api_key with mock: false falls back to mock mode" do
-      config = %Config{api_key: nil, mock: false}
-      assert {:ok, audio} = OpenAI.synthesize("Test", config: config)
-      assert byte_size(audio) > 0
-    end
-
-    test "empty api_key with mock: false falls back to mock mode" do
-      config = %Config{api_key: "", mock: false}
-      assert {:ok, audio} = OpenAI.synthesize("Test", config: config)
-      assert byte_size(audio) > 0
-    end
-
-    test "longer text produces more audio samples" do
-      config = %Config{mock: true}
-      {:ok, short_audio} = OpenAI.synthesize("Hi", config: config)
-      {:ok, long_audio} = OpenAI.synthesize(String.duplicate("Hello world ", 20), config: config)
-      assert byte_size(long_audio) > byte_size(short_audio)
     end
   end
 
@@ -211,7 +156,6 @@ defmodule Livekit.Agents.TTS.OpenAITest do
     test "cache hit avoids second HTTP request", %{bypass: bypass, config: config} do
       {:ok, cache_pid} = Cache.start_link()
 
-      # Bypass expects exactly ONE call; second call must come from cache
       Bypass.expect_once(bypass, "POST", "/v1/audio/speech", fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("audio/pcm")
@@ -222,7 +166,6 @@ defmodule Livekit.Agents.TTS.OpenAITest do
       assert {:ok, audio2} = OpenAI.synthesize("Cached text", config: config, cache: cache_pid)
       assert audio1 == audio2
       assert audio1 == <<10, 20, 30>>
-      # If Bypass were called twice it would raise — test passing proves cache hit on 2nd call
     end
 
     test "different texts produce separate cache entries", %{bypass: bypass, config: config} do

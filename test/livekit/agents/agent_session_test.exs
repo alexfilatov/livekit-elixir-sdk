@@ -54,13 +54,13 @@ defmodule Livekit.Agents.AgentSessionTest do
 
   defp mock_pipeline_config do
     %Pipeline.Config{
-      stt: {AgentSessionTest.MockSTT, %{mock: true}},
-      llm: {AgentSessionTest.MockLLM, %{mock: true}},
-      tts: {AgentSessionTest.MockTTS, %{mock: true}}
+      stt: {AgentSessionTest.MockSTT, %{}},
+      llm: {AgentSessionTest.MockLLM, %{}},
+      tts: {AgentSessionTest.MockTTS, %{}}
     }
   end
 
-  defp mock_config(overrides \\ []) do
+  defp base_config(overrides \\ []) do
     base = %AgentSession.Config{
       room_name: "test-room",
       participant_identity: "agent",
@@ -74,43 +74,39 @@ defmodule Livekit.Agents.AgentSessionTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Mock mode tests
+  # No server_url tests
   # ---------------------------------------------------------------------------
 
-  describe "mock mode (server_url nil)" do
+  describe "no server_url (server_url nil)" do
     test "start_link returns {:ok, pid}" do
-      config = mock_config()
+      config = base_config()
       assert {:ok, pid} = AgentSession.start_link(config)
       assert Process.alive?(pid)
       GenServer.stop(pid)
     end
 
-    test "connect_to_room returns :ok and room_connected becomes true" do
-      config = mock_config(room_name: nil)
+    test "connect_to_room returns {:error, :missing_server_url} when server_url is nil" do
+      config = base_config(room_name: nil)
       {:ok, pid} = AgentSession.start_link(config)
 
-      assert :ok = AgentSession.connect_to_room(pid)
+      assert {:error, :missing_server_url} = AgentSession.connect_to_room(pid)
       status = AgentSession.get_status(pid)
-      assert status.room_connected == true
+      assert status.room_connected == false
 
       GenServer.stop(pid)
     end
 
-    test "disconnect_from_room sets room_connected to false" do
-      config = mock_config(room_name: nil)
+    test "connect_to_room returns {:error, :missing_server_url} when server_url is empty string" do
+      config = base_config(server_url: "")
       {:ok, pid} = AgentSession.start_link(config)
 
-      AgentSession.connect_to_room(pid)
-      assert AgentSession.get_status(pid).room_connected == true
-
-      AgentSession.disconnect_from_room(pid)
-      assert AgentSession.get_status(pid).room_connected == false
+      assert {:error, :missing_server_url} = AgentSession.connect_to_room(pid)
 
       GenServer.stop(pid)
     end
 
     test "get_status map contains required keys" do
-      config = mock_config(room_name: nil)
+      config = base_config(room_name: nil)
       {:ok, pid} = AgentSession.start_link(config)
 
       status = AgentSession.get_status(pid)
@@ -125,10 +121,9 @@ defmodule Livekit.Agents.AgentSessionTest do
     end
 
     test "room_name: nil does not trigger auto_connect" do
-      config = mock_config(room_name: nil)
+      config = base_config(room_name: nil)
       {:ok, pid} = AgentSession.start_link(config)
 
-      # Give enough time for auto_connect to fire if it were going to
       Process.sleep(50)
       status = AgentSession.get_status(pid)
       assert status.room_connected == false
@@ -137,7 +132,7 @@ defmodule Livekit.Agents.AgentSessionTest do
     end
 
     test "get_status returns correct room_name and participant_identity" do
-      config = mock_config(room_name: "my-room", participant_identity: "my-agent")
+      config = base_config(room_name: "my-room", participant_identity: "my-agent")
       {:ok, pid} = AgentSession.start_link(config)
 
       status = AgentSession.get_status(pid)
@@ -154,7 +149,7 @@ defmodule Livekit.Agents.AgentSessionTest do
 
   describe "real mode (server_url set, MockNIF injected)" do
     defp real_config do
-      mock_config(
+      base_config(
         server_url: "wss://test.livekit.io",
         api_key: "test-key",
         api_secret: "test-secret",

@@ -9,22 +9,18 @@ defmodule Livekit.Agents.LLM.OpenAIRealtimeTest do
   # ---------------------------------------------------------------------------
 
   describe "validate_config/1" do
-    test "mock: true with nil api_key returns :ok" do
-      assert :ok = OpenAIRealtime.validate_config(%Config{mock: true, api_key: nil})
-    end
-
-    test "mock: false with nil api_key returns {:error, :missing_api_key}" do
+    test "nil api_key returns {:error, :missing_api_key}" do
       assert {:error, :missing_api_key} =
-               OpenAIRealtime.validate_config(%Config{mock: false, api_key: nil})
+               OpenAIRealtime.validate_config(%Config{api_key: nil})
     end
 
-    test "mock: false with empty string api_key returns {:error, :missing_api_key}" do
+    test "empty string api_key returns {:error, :missing_api_key}" do
       assert {:error, :missing_api_key} =
-               OpenAIRealtime.validate_config(%Config{mock: false, api_key: ""})
+               OpenAIRealtime.validate_config(%Config{api_key: ""})
     end
 
-    test "mock: false with valid api_key returns :ok" do
-      assert :ok = OpenAIRealtime.validate_config(%Config{mock: false, api_key: "sk-test-key"})
+    test "valid api_key returns :ok" do
+      assert :ok = OpenAIRealtime.validate_config(%Config{api_key: "sk-test-key"})
     end
   end
 
@@ -41,10 +37,6 @@ defmodule Livekit.Agents.LLM.OpenAIRealtimeTest do
       assert %Config{voice: "alloy"} = %Config{}
     end
 
-    test "default mock is false" do
-      assert %Config{mock: false} = %Config{}
-    end
-
     test "default api_key is nil" do
       assert %Config{api_key: nil} = %Config{}
     end
@@ -57,134 +49,90 @@ defmodule Livekit.Agents.LLM.OpenAIRealtimeTest do
   end
 
   # ---------------------------------------------------------------------------
-  # connect/1 mock mode
+  # start_link/1 and get_metrics/1
   # ---------------------------------------------------------------------------
 
-  describe "connect/1 mock mode" do
-    setup do
-      config = %Config{mock: true}
+  describe "start_link/1" do
+    test "starts a GenServer process with a valid api_key" do
+      config = %Config{api_key: "sk-test"}
+      assert {:ok, pid} = OpenAIRealtime.start_link({config, self()})
+      assert is_pid(pid)
+      OpenAIRealtime.disconnect(pid)
+    end
+  end
+
+  describe "get_metrics/1" do
+    test "returns a metrics map with expected keys" do
+      config = %Config{api_key: "sk-test"}
       {:ok, pid} = OpenAIRealtime.start_link({config, self()})
-      {:ok, pid: pid}
-    end
 
-    test "connect/1 returns :ok immediately", %{pid: pid} do
-      assert :ok = OpenAIRealtime.connect(pid)
-    end
-
-    test "session becomes connected after connect/1", %{pid: pid} do
-      OpenAIRealtime.connect(pid)
-      # Give the GenServer time to process the cast
-      Process.sleep(20)
       metrics = OpenAIRealtime.get_metrics(pid)
+
       assert is_map(metrics)
+      assert Map.has_key?(metrics, :audio_chunks_sent)
+      assert Map.has_key?(metrics, :audio_chunks_received)
+      assert Map.has_key?(metrics, :replies_generated)
+      assert Map.has_key?(metrics, :errors)
+      assert Map.has_key?(metrics, :last_activity)
+
+      OpenAIRealtime.disconnect(pid)
+    end
+
+    test "initial metrics are all zero" do
+      config = %Config{api_key: "sk-test"}
+      {:ok, pid} = OpenAIRealtime.start_link({config, self()})
+
+      metrics = OpenAIRealtime.get_metrics(pid)
+
+      assert metrics.audio_chunks_sent == 0
+      assert metrics.audio_chunks_received == 0
+      assert metrics.replies_generated == 0
+      assert metrics.errors == 0
+      assert is_nil(metrics.last_activity)
+
+      OpenAIRealtime.disconnect(pid)
     end
   end
 
   # ---------------------------------------------------------------------------
-  # push_audio/2 mock mode
+  # disconnect/1
   # ---------------------------------------------------------------------------
 
-  describe "push_audio/2 mock mode" do
-    setup do
-      config = %Config{mock: true}
+  describe "disconnect/1" do
+    test "disconnect/1 stops the GenServer" do
+      config = %Config{api_key: "sk-test"}
       {:ok, pid} = OpenAIRealtime.start_link({config, self()})
-      OpenAIRealtime.connect(pid)
-      Process.sleep(10)
-      {:ok, pid: pid}
-    end
 
-    test "push_audio/2 returns :ok", %{pid: pid} do
-      assert :ok = OpenAIRealtime.push_audio(pid, <<0, 1, 2, 3>>)
-    end
+      ref = Process.monitor(pid)
+      OpenAIRealtime.disconnect(pid)
 
-    test "push_audio/2 increments audio_chunks_sent metric", %{pid: pid} do
-      before_metrics = OpenAIRealtime.get_metrics(pid)
-      OpenAIRealtime.push_audio(pid, <<0, 1, 2, 3>>)
-      Process.sleep(10)
-      after_metrics = OpenAIRealtime.get_metrics(pid)
-      assert after_metrics.audio_chunks_sent == before_metrics.audio_chunks_sent + 1
-    end
-
-    test "push_audio/2 accepts empty binary", %{pid: pid} do
-      assert :ok = OpenAIRealtime.push_audio(pid, <<>>)
-    end
-
-    test "push_audio/2 accepts large audio chunks", %{pid: pid} do
-      large_audio = :binary.copy(<<0>>, 48_000)
-      assert :ok = OpenAIRealtime.push_audio(pid, large_audio)
-    end
-  end
-
-  # ---------------------------------------------------------------------------
-  # generate_reply/1 mock mode
-  # ---------------------------------------------------------------------------
-
-  describe "generate_reply/1 mock mode" do
-    setup do
-      config = %Config{mock: true}
-      {:ok, pid} = OpenAIRealtime.start_link({config, self()})
-      OpenAIRealtime.connect(pid)
-      Process.sleep(10)
-      {:ok, pid: pid}
-    end
-
-    test "generate_reply/1 returns :ok", %{pid: pid} do
-      assert :ok = OpenAIRealtime.generate_reply(pid)
-    end
-
-    test "generate_reply/1 triggers realtime_text event", %{pid: pid} do
-      OpenAIRealtime.generate_reply(pid)
-
-      assert_receive {:realtime_text, text}, 500
-      assert is_binary(text)
-      assert String.length(text) > 0
-    end
-
-    test "generate_reply/1 triggers realtime_audio event", %{pid: pid} do
-      OpenAIRealtime.generate_reply(pid)
-
-      assert_receive {:realtime_audio, audio}, 500
-      assert is_binary(audio)
-    end
-
-    test "generate_reply/1 triggers realtime_transcript event", %{pid: pid} do
-      OpenAIRealtime.generate_reply(pid)
-
-      assert_receive {:realtime_transcript, transcript}, 500
-      assert is_binary(transcript)
-    end
-
-    test "generate_reply/1 triggers realtime_done event", %{pid: pid} do
-      OpenAIRealtime.generate_reply(pid)
-
-      assert_receive {:realtime_done}, 500
-    end
-
-    test "generate_reply/1 triggers realtime_speech_stopped before text", %{pid: pid} do
-      OpenAIRealtime.generate_reply(pid)
-
-      assert_receive {:realtime_speech_stopped}, 500
-    end
-
-    test "generate_reply/1 increments replies_generated metric", %{pid: pid} do
-      before_metrics = OpenAIRealtime.get_metrics(pid)
-      OpenAIRealtime.generate_reply(pid)
-      Process.sleep(10)
-      after_metrics = OpenAIRealtime.get_metrics(pid)
-      assert after_metrics.replies_generated == before_metrics.replies_generated + 1
+      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, 500
     end
   end
 
   # ---------------------------------------------------------------------------
   # Server event handling (dispatch_event via internal message injection)
+  # The GenServer handles {:gun_ws, conn, ref, {:text, frame}} events.
+  # We inject them directly using send/2 to test dispatch_event logic
+  # without needing a real WebSocket connection.
+  # Note: the conn guard checks state.conn — since connected is false and
+  # conn is nil, we use the catch-all handle_info path for injected frames.
+  # To bypass the conn guard, we use a connected state by sending gun_upgrade first.
   # ---------------------------------------------------------------------------
 
-  describe "server event handling" do
+  describe "server event handling via injected gun_ws frames" do
     setup do
-      config = %Config{mock: true}
+      # Start with a valid api_key; the process won't actually connect since
+      # we never call connect/1. We use :sys.replace_state/2 to directly set
+      # conn: :fake_conn and connected: true so that gun_ws frame pattern
+      # matches succeed (they pin-match on state.conn).
+      config = %Config{api_key: "sk-test"}
       {:ok, pid} = OpenAIRealtime.start_link({config, self()})
-      OpenAIRealtime.connect(pid)
-      Process.sleep(10)
+
+      :sys.replace_state(pid, fn state ->
+        %{state | conn: :fake_conn, connected: true}
+      end)
+
       {:ok, pid: pid}
     end
 
@@ -192,13 +140,7 @@ defmodule Livekit.Agents.LLM.OpenAIRealtimeTest do
       audio_data = <<1, 2, 3, 4, 5, 6>>
       encoded = Base.encode64(audio_data)
 
-      event =
-        Jason.encode!(%{
-          "type" => "response.audio.delta",
-          "delta" => encoded
-        })
-
-      # Inject the event as if it arrived from the WebSocket
+      event = Jason.encode!(%{"type" => "response.audio.delta", "delta" => encoded})
       send(pid, {:gun_ws, :fake_conn, :fake_ref, {:text, event}})
 
       assert_receive {:realtime_audio, ^audio_data}, 500
@@ -263,7 +205,6 @@ defmodule Livekit.Agents.LLM.OpenAIRealtimeTest do
       event = Jason.encode!(%{"type" => "some.unknown.event", "data" => "whatever"})
       send(pid, {:gun_ws, :fake_conn, :fake_ref, {:text, event}})
       Process.sleep(50)
-      # No message received — assert mailbox is empty for our expected types
       refute_receive {:realtime_audio, _}, 50
       refute_receive {:realtime_text, _}, 50
       refute_receive {:realtime_done}, 50
@@ -273,55 +214,6 @@ defmodule Livekit.Agents.LLM.OpenAIRealtimeTest do
       send(pid, {:gun_ws, :fake_conn, :fake_ref, {:text, "not valid json!!!"}})
       Process.sleep(50)
       refute_receive {:realtime_audio, _}, 50
-    end
-  end
-
-  # ---------------------------------------------------------------------------
-  # get_metrics/1
-  # ---------------------------------------------------------------------------
-
-  describe "get_metrics/1" do
-    test "returns a metrics map with expected keys" do
-      config = %Config{mock: true}
-      {:ok, pid} = OpenAIRealtime.start_link({config, self()})
-
-      metrics = OpenAIRealtime.get_metrics(pid)
-
-      assert is_map(metrics)
-      assert Map.has_key?(metrics, :audio_chunks_sent)
-      assert Map.has_key?(metrics, :audio_chunks_received)
-      assert Map.has_key?(metrics, :replies_generated)
-      assert Map.has_key?(metrics, :errors)
-      assert Map.has_key?(metrics, :last_activity)
-    end
-
-    test "initial metrics are all zero" do
-      config = %Config{mock: true}
-      {:ok, pid} = OpenAIRealtime.start_link({config, self()})
-
-      metrics = OpenAIRealtime.get_metrics(pid)
-
-      assert metrics.audio_chunks_sent == 0
-      assert metrics.audio_chunks_received == 0
-      assert metrics.replies_generated == 0
-      assert metrics.errors == 0
-      assert is_nil(metrics.last_activity)
-    end
-  end
-
-  # ---------------------------------------------------------------------------
-  # disconnect/1
-  # ---------------------------------------------------------------------------
-
-  describe "disconnect/1" do
-    test "disconnect/1 stops the GenServer" do
-      config = %Config{mock: true}
-      {:ok, pid} = OpenAIRealtime.start_link({config, self()})
-
-      ref = Process.monitor(pid)
-      OpenAIRealtime.disconnect(pid)
-
-      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, 500
     end
   end
 end
