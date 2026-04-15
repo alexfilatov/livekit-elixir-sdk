@@ -45,7 +45,7 @@ jobs:
         LIVEKIT_SKIP_NATIVE: "1"
 
     - name: Run Credo
-      run: mix credo
+      run: mix credo --strict
       env:
         LIVEKIT_SKIP_NATIVE: "1"
 
