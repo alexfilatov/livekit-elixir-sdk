@@ -21,7 +21,7 @@ defmodule Livekit.Agents.EdgeCases.MockSTT do
     do: %{streaming: false, interim_results: false, diarization: false, languages: ["en"]}
 end
 
-defmodule Livekit.Agents.EdgeCases.MockLLM do
+defmodule MockLLM do
   @moduledoc false
   use Livekit.Agents.LLM
 
@@ -104,11 +104,12 @@ defmodule Livekit.Agents.EdgeCasesTest do
   alias Livekit.Agents.Pipeline.Config, as: PipelineConfig
   alias Livekit.Agents.Pipeline.{EnergyVAD, TurnDetector}
   alias Livekit.Agents.STT.AudioBuffer
-  alias Livekit.Agents.TTS.OpenAI.Cache
+  alias Livekit.Agents.Tool
   alias Livekit.Agents.Tool.{ToolContext, ToolSpec}
+  alias Livekit.Agents.TTS.OpenAI.Cache
   alias Livekit.Agents.{AgentStateMachine, UserStateMachine}
 
-  alias Livekit.Agents.EdgeCases.{MockSTT, PipelineMockLLM, MockTTS}
+  alias Livekit.Agents.EdgeCases.{MockSTT, MockTTS, PipelineMockLLM}
 
   # ---------------------------------------------------------------------------
   # 1. ChatContext edge cases
@@ -436,7 +437,7 @@ defmodule Livekit.Agents.EdgeCasesTest do
       set_mock_queue([{:function_call, "cid-1", "some_tool", "{}"}])
 
       assert {:ok, final_ctx} =
-               Livekit.Agents.Tool.run(Livekit.Agents.EdgeCases.MockLLM, ctx,
+               Tool.run(MockLLM, ctx,
                  tool_context: tc,
                  max_tool_steps: 0
                )
@@ -454,7 +455,7 @@ defmodule Livekit.Agents.EdgeCasesTest do
       set_mock_queue([{:assistant, "Hello from the assistant"}])
 
       assert {:ok, final_ctx} =
-               Livekit.Agents.Tool.run(Livekit.Agents.EdgeCases.MockLLM, ctx, tool_context: tc)
+               Tool.run(MockLLM, ctx, tool_context: tc)
 
       messages = ChatContext.messages(final_ctx)
       assert Enum.any?(messages, fn m -> m.role == :assistant end)
@@ -481,7 +482,7 @@ defmodule Livekit.Agents.EdgeCasesTest do
       ])
 
       assert {:ok, final_ctx} =
-               Livekit.Agents.Tool.run(Livekit.Agents.EdgeCases.MockLLM, ctx, tool_context: tc)
+               Tool.run(MockLLM, ctx, tool_context: tc)
 
       outputs = Enum.filter(final_ctx.items, &match?(%FunctionCallOutput{}, &1))
       assert length(outputs) == 1
@@ -508,7 +509,7 @@ defmodule Livekit.Agents.EdgeCasesTest do
       ])
 
       assert {:ok, final_ctx} =
-               Livekit.Agents.Tool.run(Livekit.Agents.EdgeCases.MockLLM, ctx, tool_context: tc)
+               Tool.run(MockLLM, ctx, tool_context: tc)
 
       outputs = Enum.filter(final_ctx.items, &match?(%FunctionCallOutput{}, &1))
       assert length(outputs) == 1

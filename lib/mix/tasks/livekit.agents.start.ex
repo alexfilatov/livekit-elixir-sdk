@@ -60,7 +60,7 @@ defmodule Mix.Tasks.Livekit.Agents.Start do
   use Mix.Task
   require Logger
 
-  alias Livekit.Agents.{Worker, VoiceAgent, AgentSession}
+  alias Livekit.Agents.{AgentSession, VoiceAgent, Worker}
 
   @shortdoc "Start agent in production mode"
 
@@ -117,17 +117,20 @@ defmodule Mix.Tasks.Livekit.Agents.Start do
 
     # Override with command line args
     %{
-      server_url: parsed[:server_url] || base_config[:server_url] || get_env_var("LIVEKIT_URL"),
-      api_key: parsed[:api_key] || base_config[:api_key] || get_env_var("LIVEKIT_API_KEY"),
-      api_secret:
-        parsed[:api_secret] || base_config[:api_secret] || get_env_var("LIVEKIT_API_SECRET"),
-      workers: parsed[:workers] || base_config[:workers] || 1,
-      log_level: String.to_atom(parsed[:log_level] || base_config[:log_level] || "info"),
-      metrics_port: parsed[:metrics_port] || base_config[:metrics_port] || 9090,
-      health_port: parsed[:health_port] || base_config[:health_port] || 8080,
-      voice_agent: base_config[:voice_agent] || %{}
+      server_url: resolve(parsed[:server_url], base_config[:server_url], get_env_var("LIVEKIT_URL")),
+      api_key: resolve(parsed[:api_key], base_config[:api_key], get_env_var("LIVEKIT_API_KEY")),
+      api_secret: resolve(parsed[:api_secret], base_config[:api_secret], get_env_var("LIVEKIT_API_SECRET")),
+      workers: resolve(parsed[:workers], base_config[:workers], 1),
+      log_level: String.to_atom(resolve(parsed[:log_level], base_config[:log_level], "info")),
+      metrics_port: resolve(parsed[:metrics_port], base_config[:metrics_port], 9090),
+      health_port: resolve(parsed[:health_port], base_config[:health_port], 8080),
+      voice_agent: resolve(nil, base_config[:voice_agent], %{})
     }
   end
+
+  defp resolve(nil, nil, default), do: default
+  defp resolve(nil, base, _default), do: base
+  defp resolve(value, _base, _default), do: value
 
   defp validate_production_config(config) do
     cond do
@@ -385,21 +388,10 @@ defmodule Mix.Tasks.Livekit.Agents.Start do
   defp build_tts_config(tts_config) do
     case tts_config[:provider] do
       "openai" ->
-        voice =
-          case tts_config[:voice] do
-            "alloy" -> :alloy
-            "echo" -> :echo
-            "fable" -> :fable
-            "onyx" -> :onyx
-            "nova" -> :nova
-            "shimmer" -> :shimmer
-            _ -> :alloy
-          end
-
         {Livekit.Agents.TTS.OpenAI,
          %{
            api_key: tts_config[:api_key],
-           voice: voice,
+           voice: parse_tts_voice(tts_config[:voice]),
            model: :tts_1
          }}
 
@@ -407,6 +399,14 @@ defmodule Mix.Tasks.Livekit.Agents.Start do
         nil
     end
   end
+
+  defp parse_tts_voice("alloy"), do: :alloy
+  defp parse_tts_voice("echo"), do: :echo
+  defp parse_tts_voice("fable"), do: :fable
+  defp parse_tts_voice("onyx"), do: :onyx
+  defp parse_tts_voice("nova"), do: :nova
+  defp parse_tts_voice("shimmer"), do: :shimmer
+  defp parse_tts_voice(_), do: :alloy
 
   defp monitor_production_session(session_pid, job_context) do
     # Production session monitoring with minimal logging

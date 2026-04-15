@@ -66,11 +66,9 @@ defmodule Livekit.Agents.EventBus do
   @spec subscribe(session_id :: String.t()) :: {:ok, term()} | {:error, term()}
   def subscribe(session_id) do
     # ISSUE-15: Handle Registry not started gracefully
-    try do
-      Registry.register(@registry, session_id, self())
-    catch
-      :exit, _ -> {:error, :not_started}
-    end
+    Registry.register(@registry, session_id, self())
+  catch
+    :exit, _ -> {:error, :not_started}
   end
 
   @doc """

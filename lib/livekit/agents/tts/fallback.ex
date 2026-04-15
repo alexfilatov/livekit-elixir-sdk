@@ -131,33 +131,37 @@ defmodule Livekit.Agents.TTS.Fallback do
     {secondary_mod, secondary_cfg} = config.secondary
 
     if function_exported?(primary_mod, :stream, 1) do
-      case primary_mod.stream(primary_cfg) do
-        {:ok, _} = result ->
-          result
-
-        {:error, reason} ->
-          Logger.warning(
-            "[TTS.Fallback] Primary stream #{inspect(primary_mod)} failed: #{inspect(reason)}. " <>
-              "Failing over to #{inspect(secondary_mod)}."
-          )
-
-          if function_exported?(secondary_mod, :stream, 1) do
-            secondary_mod.stream(secondary_cfg)
-          else
-            {:error, :secondary_does_not_support_streaming}
-          end
-      end
+      tts_stream_with_primary_fallback(primary_mod, primary_cfg, secondary_mod, secondary_cfg)
     else
       Logger.warning(
         "[TTS.Fallback] Primary #{inspect(primary_mod)} does not support streaming. " <>
           "Falling over to #{inspect(secondary_mod)}."
       )
 
-      if function_exported?(secondary_mod, :stream, 1) do
-        secondary_mod.stream(secondary_cfg)
-      else
-        {:error, :no_provider_supports_streaming}
-      end
+      tts_stream_via_secondary(secondary_mod, secondary_cfg, :no_provider_supports_streaming)
+    end
+  end
+
+  defp tts_stream_with_primary_fallback(primary_mod, primary_cfg, secondary_mod, secondary_cfg) do
+    case primary_mod.stream(primary_cfg) do
+      {:ok, _} = result ->
+        result
+
+      {:error, reason} ->
+        Logger.warning(
+          "[TTS.Fallback] Primary stream #{inspect(primary_mod)} failed: #{inspect(reason)}. " <>
+            "Failing over to #{inspect(secondary_mod)}."
+        )
+
+        tts_stream_via_secondary(secondary_mod, secondary_cfg, :secondary_does_not_support_streaming)
+    end
+  end
+
+  defp tts_stream_via_secondary(secondary_mod, secondary_cfg, error_atom) do
+    if function_exported?(secondary_mod, :stream, 1) do
+      secondary_mod.stream(secondary_cfg)
+    else
+      {:error, error_atom}
     end
   end
 end

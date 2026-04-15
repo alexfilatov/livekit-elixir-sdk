@@ -1,10 +1,10 @@
 defmodule Livekit.Agents.LLM.FallbackTest do
   use ExUnit.Case, async: true
 
+  alias Livekit.Agents.ChatContext
   alias Livekit.Agents.LLM.Fallback
   alias Livekit.Agents.LLM.Fallback.Config
   alias Livekit.Agents.LLM.LLMChunk
-  alias Livekit.Agents.ChatContext
 
   # ---------------------------------------------------------------------------
   # Minimal mock LLM providers

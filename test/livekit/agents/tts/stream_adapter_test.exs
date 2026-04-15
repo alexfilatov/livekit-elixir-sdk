@@ -1,9 +1,9 @@
 defmodule Livekit.Agents.TTS.StreamAdapterTest do
   use ExUnit.Case, async: true
 
+  alias Livekit.Agents.AudioFrame
   alias Livekit.Agents.TTS.StreamAdapter
   alias Livekit.Agents.TTS.StreamAdapter.Config
-  alias Livekit.Agents.AudioFrame
 
   # ---------------------------------------------------------------------------
   # Minimal mock batch TTS providers

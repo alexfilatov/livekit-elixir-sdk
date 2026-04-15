@@ -1,9 +1,9 @@
 defmodule Livekit.Agents.STT.StreamAdapterTest do
   use ExUnit.Case, async: true
 
+  alias Livekit.Agents.STT.SpeechEvent
   alias Livekit.Agents.STT.StreamAdapter
   alias Livekit.Agents.STT.StreamAdapter.Config
-  alias Livekit.Agents.STT.SpeechEvent
 
   # ---------------------------------------------------------------------------
   # Minimal mock batch STT providers
@@ -18,12 +18,10 @@ defmodule Livekit.Agents.STT.StreamAdapterTest do
       text = Map.get(config, :text, "default transcript")
       language = Map.get(config, :language, "en")
 
-      cond do
-        byte_size(audio) == 0 ->
-          {:ok, %SpeechEvent{type: :final, text: "", confidence: 0.0, language: language}}
-
-        true ->
-          {:ok, %SpeechEvent{type: :final, text: text, confidence: 0.99, language: language}}
+      if byte_size(audio) == 0 do
+        {:ok, %SpeechEvent{type: :final, text: "", confidence: 0.0, language: language}}
+      else
+        {:ok, %SpeechEvent{type: :final, text: text, confidence: 0.99, language: language}}
       end
     end
 

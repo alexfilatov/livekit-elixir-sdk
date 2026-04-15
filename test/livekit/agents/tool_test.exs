@@ -1,9 +1,9 @@
 defmodule Livekit.Agents.ToolTest do
   use ExUnit.Case, async: true
 
-  alias Livekit.Agents.Tool
-  alias Livekit.Agents.Tool.{ToolSpec, ToolContext, ToolError}
   alias Livekit.Agents.ChatContext
+  alias Livekit.Agents.Tool
+  alias Livekit.Agents.Tool.{ToolContext, ToolError, ToolSpec}
 
   # MockLLM uses Process dictionary for per-test queue control.
   # Each test calls set_mock_queue/1 to enqueue responses.

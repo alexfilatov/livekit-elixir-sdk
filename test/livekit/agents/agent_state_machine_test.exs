@@ -2,7 +2,7 @@ defmodule Livekit.Agents.AgentStateMachineTest do
   use ExUnit.Case, async: true
 
   alias Livekit.Agents.{AgentStateMachine, EventBus, Events}
-  alias Events.AgentStateChanged
+  alias Livekit.Agents.Events.AgentStateChanged
 
   defp ensure_event_bus do
     case EventBus.start_link() do

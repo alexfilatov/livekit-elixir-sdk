@@ -49,14 +49,14 @@ defmodule Livekit.Agents.Worker do
   alias Livekit.Agents.{AgentSession, JobSupervisor}
 
   alias Livekit.{
-    WorkerMessage,
-    ServerMessage,
-    RegisterWorkerRequest,
-    UpdateWorkerStatus,
     AvailabilityResponse,
-    UpdateJobStatus,
-    WorkerPing,
     JobType,
+    RegisterWorkerRequest,
+    ServerMessage,
+    UpdateJobStatus,
+    UpdateWorkerStatus,
+    WorkerMessage,
+    WorkerPing,
     WorkerStatus
   }
 
@@ -410,23 +410,12 @@ defmodule Livekit.Agents.Worker do
     case find_job_by_monitor(state.active_jobs, ref) do
       {job_id, _info} ->
         Logger.info("Job session #{job_id} (pid=#{inspect(pid)}) ended: #{inspect(reason)}")
-
-        if state.gun_pid do
-          status = if reason == :normal, do: :JS_SUCCESS, else: :JS_FAILED
-          send_job_status_update(state, job_id, status)
-        end
+        maybe_send_job_status(state, job_id, reason)
 
         new_active = Map.delete(state.active_jobs, job_id)
         new_metrics = Map.update!(state.metrics, :jobs_processed, &(&1 + 1))
         new_state = %{state | active_jobs: new_active, metrics: new_metrics}
-
-        if state.draining and map_size(new_active) == 0 do
-          GenServer.reply(state.drain_from, :ok)
-          {:stop, :normal, %{new_state | drain_from: nil}}
-        else
-          send_worker_load_update(new_state)
-          {:noreply, new_state}
-        end
+        handle_job_ended(new_state, new_active)
 
       nil ->
         Logger.debug("Unknown monitored process went down: #{inspect(pid)}")
@@ -782,5 +771,22 @@ defmodule Livekit.Agents.Worker do
     Enum.find(active_jobs, fn {_job_id, info} ->
       info.monitor_ref == ref
     end)
+  end
+
+  defp maybe_send_job_status(state, job_id, reason) do
+    if state.gun_pid do
+      status = if reason == :normal, do: :JS_SUCCESS, else: :JS_FAILED
+      send_job_status_update(state, job_id, status)
+    end
+  end
+
+  defp handle_job_ended(new_state, new_active) do
+    if new_state.draining and map_size(new_active) == 0 do
+      GenServer.reply(new_state.drain_from, :ok)
+      {:stop, :normal, %{new_state | drain_from: nil}}
+    else
+      send_worker_load_update(new_state)
+      {:noreply, new_state}
+    end
   end
 end

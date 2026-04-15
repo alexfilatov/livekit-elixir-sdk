@@ -123,21 +123,27 @@ defmodule Livekit.Agents.AgentHandoff do
   end
 
   defp wait_for_idle(pipeline_pid, deadline) do
-    if not Process.alive?(pipeline_pid) do
-      :ok
+    if Process.alive?(pipeline_pid) do
+      check_deadline_and_continue(pipeline_pid, deadline)
+    end
+  end
+
+  defp check_deadline_and_continue(pipeline_pid, deadline) do
+    now = System.monotonic_time(:millisecond)
+
+    if now >= deadline do
+      Logger.warning("[AgentHandoff] Timeout waiting for pipeline idle — proceeding anyway")
     else
-      now = System.monotonic_time(:millisecond)
+      poll_if_active(pipeline_pid, deadline)
+    end
+  end
 
-      if now >= deadline do
-        Logger.warning("[AgentHandoff] Timeout waiting for pipeline idle — proceeding anyway")
-      else
-        metrics = Pipeline.get_metrics(pipeline_pid)
+  defp poll_if_active(pipeline_pid, deadline) do
+    metrics = Pipeline.get_metrics(pipeline_pid)
 
-        if Map.get(metrics, :active_task_running, false) do
-          Process.sleep(50)
-          wait_for_idle(pipeline_pid, deadline)
-        end
-      end
+    if Map.get(metrics, :active_task_running, false) do
+      Process.sleep(50)
+      wait_for_idle(pipeline_pid, deadline)
     end
   end
 

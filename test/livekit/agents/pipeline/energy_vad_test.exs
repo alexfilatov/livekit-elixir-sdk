@@ -29,21 +29,21 @@ defmodule Livekit.Agents.Pipeline.EnergyVADTest do
   end
 
   describe "classify/2" do
-    test "returns :speech when AudioFrame.is_silence? is false" do
+    test "returns :speech when AudioFrame.silence? is false" do
       config = EnergyVAD.new(%{})
       frame = loud_frame()
-      refute AudioFrame.is_silence?(frame, config.threshold)
+      refute AudioFrame.silence?(frame, config.threshold)
       assert EnergyVAD.classify(frame, config) == :speech
     end
 
-    test "returns :silence when AudioFrame.is_silence? is true" do
+    test "returns :silence when AudioFrame.silence? is true" do
       config = EnergyVAD.new(%{})
       frame = silent_frame()
-      assert AudioFrame.is_silence?(frame, config.threshold)
+      assert AudioFrame.silence?(frame, config.threshold)
       assert EnergyVAD.classify(frame, config) == :silence
     end
 
-    test "passes config.threshold to AudioFrame.is_silence?/2" do
+    test "passes config.threshold to AudioFrame.silence?/2" do
       # Use a very low threshold (0.0001) so a quiet frame is :speech
       config = EnergyVAD.new(%{threshold: 0.0001})
       # pcm16 sample 50 → RMS = 50/32768 ≈ 0.00153, above 0.0001 → :speech

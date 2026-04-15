@@ -1,9 +1,9 @@
 defmodule Livekit.Agents.TTS.FallbackTest do
   use ExUnit.Case, async: true
 
+  alias Livekit.Agents.AudioFrame
   alias Livekit.Agents.TTS.Fallback
   alias Livekit.Agents.TTS.Fallback.Config
-  alias Livekit.Agents.AudioFrame
 
   # ---------------------------------------------------------------------------
   # Minimal mock TTS providers

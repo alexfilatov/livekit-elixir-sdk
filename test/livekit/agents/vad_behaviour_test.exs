@@ -1,8 +1,8 @@
 defmodule Livekit.Agents.VADTest do
   use ExUnit.Case, async: true
 
-  alias Livekit.Agents.VAD.VADEvent
   alias Livekit.Agents.AudioFrame
+  alias Livekit.Agents.VAD.VADEvent
 
   defmodule StubVAD do
     use Livekit.Agents.VAD

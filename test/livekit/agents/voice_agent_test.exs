@@ -5,7 +5,7 @@ defmodule Livekit.Agents.VoiceAgentTest do
   # These need to be rewritten to use the new Pipeline.start_link/1 API.
   @moduletag :legacy
 
-  alias Livekit.Agents.{VoiceAgent, AudioFrame, Pipeline}
+  alias Livekit.Agents.{AudioFrame, Pipeline, VoiceAgent}
 
   describe "VoiceAgent" do
     test "starts with valid configuration" do

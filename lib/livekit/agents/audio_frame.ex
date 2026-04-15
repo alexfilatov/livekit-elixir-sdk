@@ -194,8 +194,8 @@ defmodule Livekit.Agents.AudioFrame do
   @doc """
   Checks if the audio frame contains silence.
   """
-  @spec is_silence?(t(), float()) :: boolean()
-  def is_silence?(frame, threshold \\ 0.01) do
+  @spec silence?(t(), float()) :: boolean()
+  def silence?(frame, threshold \\ 0.01) do
     rms = calculate_rms(frame.data, frame.format)
     rms < threshold
   end
@@ -257,56 +257,52 @@ defmodule Livekit.Agents.AudioFrame do
   defp simple_resample(data, format, ratio) do
     # This is a very basic resampling implementation
     # In production, you'd want to use a proper library like libsamplerate
-    try do
-      sample_size = bytes_per_sample_for_format(format)
-      sample_count = div(byte_size(data), sample_size)
-      new_sample_count = round(sample_count * ratio)
+    sample_size = bytes_per_sample_for_format(format)
+    sample_count = div(byte_size(data), sample_size)
+    new_sample_count = round(sample_count * ratio)
 
-      resampled =
-        for i <- 0..(new_sample_count - 1) do
-          source_index = round(i / ratio) * sample_size
+    resampled =
+      for i <- 0..(new_sample_count - 1) do
+        source_index = round(i / ratio) * sample_size
 
-          if source_index + sample_size <= byte_size(data) do
-            binary_part(data, source_index, sample_size)
-          else
-            <<0::size(sample_size * 8)>>
-          end
+        if source_index + sample_size <= byte_size(data) do
+          binary_part(data, source_index, sample_size)
+        else
+          <<0::size(sample_size * 8)>>
         end
+      end
 
-      {:ok, IO.iodata_to_binary(resampled)}
-    rescue
-      _ -> {:error, :resample_failed}
-    end
+    {:ok, IO.iodata_to_binary(resampled)}
+  rescue
+    _ -> {:error, :resample_failed}
   end
 
   defp convert_audio_format(data, from_format, to_format) do
     # Basic format conversion - in production use a proper audio library
-    try do
-      converted =
-        case {from_format, to_format} do
-          {:pcm_16, :float32} -> pcm16_to_float32(data)
-          {:float32, :pcm_16} -> float32_to_pcm16(data)
-          # No conversion needed or unsupported
-          _ -> data
-        end
+    converted =
+      case {from_format, to_format} do
+        {:pcm_16, :float32} -> pcm16_to_float32(data)
+        {:float32, :pcm_16} -> float32_to_pcm16(data)
+        # No conversion needed or unsupported
+        _ -> data
+      end
 
-      {:ok, converted}
-    rescue
-      _ -> {:error, :conversion_failed}
-    end
+    {:ok, converted}
+  rescue
+    _ -> {:error, :conversion_failed}
   end
 
   defp pcm16_to_float32(data) do
     for <<sample::little-signed-16 <- data>>, into: <<>> do
-      float_sample = sample / 32768.0
+      float_sample = sample / 32_768.0
       <<float_sample::little-float-32>>
     end
   end
 
   defp float32_to_pcm16(data) do
     for <<sample::little-float-32 <- data>>, into: <<>> do
-      pcm_sample = round(sample * 32767.0)
-      pcm_sample = max(-32768, min(32767, pcm_sample))
+      pcm_sample = round(sample * 32_767.0)
+      pcm_sample = max(-32_768, min(32_767, pcm_sample))
       <<pcm_sample::little-signed-16>>
     end
   end
@@ -342,7 +338,7 @@ defmodule Livekit.Agents.AudioFrame do
         end)
 
       # Prevent clipping
-      mixed_sample = max(-32768, min(32767, mixed_sample))
+      mixed_sample = max(-32_768, min(32_767, mixed_sample))
       <<mixed_sample::little-signed-16>>
     end
   end
@@ -353,22 +349,20 @@ defmodule Livekit.Agents.AudioFrame do
   end
 
   defp split_stereo_data(data, :pcm_16) do
-    try do
-      {left_samples, right_samples} =
-        for <<left::little-signed-16, right::little-signed-16 <- data>>, reduce: {[], []} do
-          {left_acc, right_acc} -> {[left | left_acc], [right | right_acc]}
-        end
+    {left_samples, right_samples} =
+      for <<left::little-signed-16, right::little-signed-16 <- data>>, reduce: {[], []} do
+        {left_acc, right_acc} -> {[left | left_acc], [right | right_acc]}
+      end
 
-      left_data =
-        for sample <- Enum.reverse(left_samples), into: <<>>, do: <<sample::little-signed-16>>
+    left_data =
+      for sample <- Enum.reverse(left_samples), into: <<>>, do: <<sample::little-signed-16>>
 
-      right_data =
-        for sample <- Enum.reverse(right_samples), into: <<>>, do: <<sample::little-signed-16>>
+    right_data =
+      for sample <- Enum.reverse(right_samples), into: <<>>, do: <<sample::little-signed-16>>
 
-      {:ok, {left_data, right_data}}
-    rescue
-      _ -> {:error, :split_failed}
-    end
+    {:ok, {left_data, right_data}}
+  rescue
+    _ -> {:error, :split_failed}
   end
 
   defp split_stereo_data(_data, _format) do
@@ -378,12 +372,12 @@ defmodule Livekit.Agents.AudioFrame do
   defp calculate_rms(data, :pcm_16) do
     samples = for <<sample::little-signed-16 <- data>>, do: sample
 
-    if length(samples) == 0 do
+    if samples == [] do
       0.0
     else
       sum_of_squares =
         Enum.reduce(samples, 0, fn sample, acc ->
-          normalized = sample / 32768.0
+          normalized = sample / 32_768.0
           acc + normalized * normalized
         end)
 

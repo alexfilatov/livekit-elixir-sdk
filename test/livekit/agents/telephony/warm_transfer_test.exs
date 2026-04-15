@@ -1,8 +1,8 @@
 defmodule Livekit.Agents.Telephony.WarmTransferTest do
   use ExUnit.Case, async: true
 
-  alias Livekit.Agents.Telephony.WarmTransfer
   alias Livekit.Agents.Telephony.SIP.SIPParticipant
+  alias Livekit.Agents.Telephony.WarmTransfer
 
   # Helper: build a test SIP participant
   defp test_participant(overrides \\ %{}) do

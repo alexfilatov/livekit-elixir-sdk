@@ -17,11 +17,9 @@ defmodule Livekit.Agents.WorkerSupervisorTest do
 
   # Safely stop a supervisor, ignoring errors if it is already dead.
   defp stop_supervisor(pid) do
-    try do
-      if Process.alive?(pid), do: Supervisor.stop(pid, :normal, 2_000)
-    catch
-      :exit, _ -> :ok
-    end
+    if Process.alive?(pid), do: Supervisor.stop(pid, :normal, 2_000)
+  catch
+    :exit, _ -> :ok
   end
 
   defp test_config do

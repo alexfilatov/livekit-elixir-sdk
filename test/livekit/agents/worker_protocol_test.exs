@@ -4,22 +4,22 @@ defmodule Livekit.Agents.WorkerProtocolTest do
   use ExUnit.Case, async: true
 
   alias Livekit.{
-    WorkerMessage,
-    ServerMessage,
-    RegisterWorkerRequest,
-    RegisterWorkerResponse,
-    UpdateWorkerStatus,
     AvailabilityRequest,
     AvailabilityResponse,
+    Job,
     JobAssignment,
     JobTermination,
-    WorkerPing,
-    WorkerPong,
-    UpdateJobStatus,
-    Job,
+    JobType,
+    RegisterWorkerRequest,
+    RegisterWorkerResponse,
     Room,
     ServerInfo,
-    JobType,
+    ServerMessage,
+    UpdateJobStatus,
+    UpdateWorkerStatus,
+    WorkerMessage,
+    WorkerPing,
+    WorkerPong,
     WorkerStatus
   }
 

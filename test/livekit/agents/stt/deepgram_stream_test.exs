@@ -1,9 +1,9 @@
 defmodule Livekit.Agents.STT.DeepgramStreamTest do
   use ExUnit.Case, async: true
 
-  alias Livekit.Agents.STT.DeepgramStream
   alias Livekit.Agents.STT.Deepgram
   alias Livekit.Agents.STT.Deepgram.Config
+  alias Livekit.Agents.STT.DeepgramStream
   alias Livekit.Agents.STT.SpeechEvent
 
   @mock_config %Config{mock: true, language: "en-US"}

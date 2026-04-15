@@ -48,9 +48,9 @@ defmodule Mix.Tasks.Livekit.Agents.Test do
   use Mix.Task
   require Logger
 
-  alias Livekit.Agents.{VoiceAgent, AgentSession, Worker, AudioFrame}
-  alias Livekit.Agents.STT.Deepgram
+  alias Livekit.Agents.{AgentSession, AudioFrame, JobContext, Pipeline, VoiceAgent, Worker}
   alias Livekit.Agents.LLM.OpenAI
+  alias Livekit.Agents.STT.Deepgram
   alias Livekit.Agents.TTS.OpenAI, as: OpenAITTS
 
   @shortdoc "Test agent functionality"
@@ -328,7 +328,7 @@ defmodule Mix.Tasks.Livekit.Agents.Test do
 
   defp test_job_context do
     context =
-      Livekit.Agents.JobContext.new(%{
+      JobContext.new(%{
         job_id: "test-job",
         room_name: "test-room",
         participant_identity: "test-agent",
@@ -337,16 +337,16 @@ defmodule Mix.Tasks.Livekit.Agents.Test do
         api_secret: "test-secret"
       })
 
-    case Livekit.Agents.JobContext.validate(context) do
+    case JobContext.validate(context) do
       :ok -> :ok
       error -> error
     end
   end
 
   defp test_pipeline_init do
-    pipeline = Livekit.Agents.Pipeline.new()
+    pipeline = Pipeline.new()
 
-    if is_struct(pipeline, Livekit.Agents.Pipeline) do
+    if is_struct(pipeline, Pipeline) do
       :ok
     else
       {:error, "Pipeline initialization failed"}
@@ -417,24 +417,31 @@ defmodule Mix.Tasks.Livekit.Agents.Test do
         entrypoint: fn _job -> :ok end
       }
 
-      case Worker.start_link(worker_config) do
-        {:ok, worker_pid} ->
-          status = Worker.get_status(worker_pid)
-
-          if status.worker_id do
-            GenServer.stop(worker_pid)
-            :ok
-          else
-            GenServer.stop(worker_pid)
-            {:error, "Worker status invalid"}
-          end
-
-        {:error, reason} ->
-          {:error, reason}
-      end
+      start_and_check_worker(worker_config)
     else
       Mix.shell().info("  ⚠️  Skipping worker test (no credentials)")
       :ok
+    end
+  end
+
+  defp start_and_check_worker(worker_config) do
+    case Worker.start_link(worker_config) do
+      {:ok, worker_pid} ->
+        check_worker_status(worker_pid)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp check_worker_status(worker_pid) do
+    status = Worker.get_status(worker_pid)
+    GenServer.stop(worker_pid)
+
+    if status.worker_id do
+      :ok
+    else
+      {:error, "Worker status invalid"}
     end
   end
 
@@ -445,9 +452,9 @@ defmodule Mix.Tasks.Livekit.Agents.Test do
     audio_data = :crypto.strong_rand_bytes(4800)
     audio_frame = AudioFrame.new(audio_data, sample_rate: 48_000)
 
-    pipeline = Livekit.Agents.Pipeline.new()
+    pipeline = Pipeline.new()
 
-    case Livekit.Agents.Pipeline.process_audio(pipeline, audio_frame) do
+    case Pipeline.process_audio(pipeline, audio_frame) do
       {:ok, _result} -> :ok
       # Expected for mock
       {:error, :no_stt_node} -> :ok
@@ -456,9 +463,9 @@ defmodule Mix.Tasks.Livekit.Agents.Test do
   end
 
   defp test_llm_processing(_config) do
-    pipeline = Livekit.Agents.Pipeline.new()
+    pipeline = Pipeline.new()
 
-    case Livekit.Agents.Pipeline.process_text(pipeline, "Hello, test!") do
+    case Pipeline.process_text(pipeline, "Hello, test!") do
       {:ok, _result} -> :ok
       # Expected for mock
       {:error, _reason} -> :ok

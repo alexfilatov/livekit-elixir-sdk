@@ -13,26 +13,32 @@ defmodule Mix.Tasks.Livekit.Agents do
 
   use Mix.Task
 
+  alias Mix.Tasks.Livekit.Agents.Console
+  alias Mix.Tasks.Livekit.Agents.Create
+  alias Mix.Tasks.Livekit.Agents.Dev
+  alias Mix.Tasks.Livekit.Agents.Start
+  alias Mix.Tasks.Livekit.Agents.Test
+
   @shortdoc "LiveKit agent development tools"
 
   def run(["console" | args]) do
-    Mix.Tasks.Livekit.Agents.Console.run(args)
+    Console.run(args)
   end
 
   def run(["dev" | args]) do
-    Mix.Tasks.Livekit.Agents.Dev.run(args)
+    Dev.run(args)
   end
 
   def run(["start" | args]) do
-    Mix.Tasks.Livekit.Agents.Start.run(args)
+    Start.run(args)
   end
 
   def run(["create" | args]) do
-    Mix.Tasks.Livekit.Agents.Create.run(args)
+    Create.run(args)
   end
 
   def run(["test" | args]) do
-    Mix.Tasks.Livekit.Agents.Test.run(args)
+    Test.run(args)
   end
 
   def run([]) do
@@ -95,7 +101,7 @@ defmodule Mix.Tasks.Livekit.Agents.Console do
   use Mix.Task
   require Logger
 
-  alias Livekit.Agents.{VoiceAgent, AgentSession}
+  alias Livekit.Agents.{AgentSession, VoiceAgent}
 
   @shortdoc "Start agent in console mode"
 
@@ -146,15 +152,17 @@ defmodule Mix.Tasks.Livekit.Agents.Console do
 
     # Override with command line args
     %{
-      room_name: parsed[:room] || base_config[:room_name] || "test-room",
-      participant_identity:
-        parsed[:identity] || base_config[:participant_identity] || "console-agent",
-      server_url: parsed[:server_url] || base_config[:server_url] || get_env_var("LIVEKIT_URL"),
-      api_key: parsed[:api_key] || base_config[:api_key] || get_env_var("LIVEKIT_API_KEY"),
-      api_secret:
-        parsed[:api_secret] || base_config[:api_secret] || get_env_var("LIVEKIT_API_SECRET")
+      room_name: resolve(parsed[:room], base_config[:room_name], "test-room"),
+      participant_identity: resolve(parsed[:identity], base_config[:participant_identity], "console-agent"),
+      server_url: resolve(parsed[:server_url], base_config[:server_url], get_env_var("LIVEKIT_URL")),
+      api_key: resolve(parsed[:api_key], base_config[:api_key], get_env_var("LIVEKIT_API_KEY")),
+      api_secret: resolve(parsed[:api_secret], base_config[:api_secret], get_env_var("LIVEKIT_API_SECRET"))
     }
   end
+
+  defp resolve(nil, nil, default), do: default
+  defp resolve(nil, base, _default), do: base
+  defp resolve(value, _base, _default), do: value
 
   defp validate_config(config) do
     cond do

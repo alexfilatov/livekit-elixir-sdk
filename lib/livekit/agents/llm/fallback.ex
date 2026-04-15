@@ -136,36 +136,38 @@ defmodule Livekit.Agents.LLM.Fallback do
 
     if function_exported?(primary_mod, :stream, 2) do
       provider_opts = Keyword.put(Keyword.delete(opts, :config), :config, primary_cfg)
-
-      case primary_mod.stream(ctx, provider_opts) do
-        {:ok, _} = result ->
-          result
-
-        {:error, reason} ->
-          Logger.warning(
-            "[LLM.Fallback] Primary stream #{inspect(primary_mod)} failed: #{inspect(reason)}. " <>
-              "Failing over to #{inspect(secondary_mod)}."
-          )
-
-          if function_exported?(secondary_mod, :stream, 2) do
-            secondary_opts = Keyword.put(Keyword.delete(opts, :config), :config, secondary_cfg)
-            secondary_mod.stream(ctx, secondary_opts)
-          else
-            {:error, :secondary_does_not_support_streaming}
-          end
-      end
+      llm_stream_with_primary_fallback(ctx, primary_mod, provider_opts, secondary_mod, secondary_cfg, opts)
     else
       Logger.warning(
         "[LLM.Fallback] Primary #{inspect(primary_mod)} does not support streaming. " <>
           "Falling over to #{inspect(secondary_mod)}."
       )
 
-      if function_exported?(secondary_mod, :stream, 2) do
-        secondary_opts = Keyword.put(Keyword.delete(opts, :config), :config, secondary_cfg)
-        secondary_mod.stream(ctx, secondary_opts)
-      else
-        {:error, :no_provider_supports_streaming}
-      end
+      llm_stream_via_secondary(ctx, secondary_mod, secondary_cfg, opts, :no_provider_supports_streaming)
+    end
+  end
+
+  defp llm_stream_with_primary_fallback(ctx, primary_mod, provider_opts, secondary_mod, secondary_cfg, opts) do
+    case primary_mod.stream(ctx, provider_opts) do
+      {:ok, _} = result ->
+        result
+
+      {:error, reason} ->
+        Logger.warning(
+          "[LLM.Fallback] Primary stream #{inspect(primary_mod)} failed: #{inspect(reason)}. " <>
+            "Failing over to #{inspect(secondary_mod)}."
+        )
+
+        llm_stream_via_secondary(ctx, secondary_mod, secondary_cfg, opts, :secondary_does_not_support_streaming)
+    end
+  end
+
+  defp llm_stream_via_secondary(ctx, secondary_mod, secondary_cfg, opts, error_atom) do
+    if function_exported?(secondary_mod, :stream, 2) do
+      secondary_opts = Keyword.put(Keyword.delete(opts, :config), :config, secondary_cfg)
+      secondary_mod.stream(ctx, secondary_opts)
+    else
+      {:error, error_atom}
     end
   end
 end

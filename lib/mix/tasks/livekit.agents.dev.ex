@@ -30,7 +30,7 @@ defmodule Mix.Tasks.Livekit.Agents.Dev do
   use Mix.Task
   require Logger
 
-  alias Livekit.Agents.{Worker, VoiceAgent, AgentSession}
+  alias Livekit.Agents.{AgentSession, VoiceAgent, Worker}
 
   @shortdoc "Start agent in development mode"
 
@@ -83,17 +83,19 @@ defmodule Mix.Tasks.Livekit.Agents.Dev do
 
     # Override with command line args
     %{
-      room_name: parsed[:room] || base_config[:room_name] || "dev-room",
-      participant_identity:
-        parsed[:identity] || base_config[:participant_identity] || "dev-agent",
-      server_url: parsed[:server_url] || base_config[:server_url] || get_env_var("LIVEKIT_URL"),
-      api_key: parsed[:api_key] || base_config[:api_key] || get_env_var("LIVEKIT_API_KEY"),
-      api_secret:
-        parsed[:api_secret] || base_config[:api_secret] || get_env_var("LIVEKIT_API_SECRET"),
-      dev_port: parsed[:port] || base_config[:dev_port] || 4000,
-      verbose: parsed[:verbose] || base_config[:verbose] || false
+      room_name: resolve(parsed[:room], base_config[:room_name], "dev-room"),
+      participant_identity: resolve(parsed[:identity], base_config[:participant_identity], "dev-agent"),
+      server_url: resolve(parsed[:server_url], base_config[:server_url], get_env_var("LIVEKIT_URL")),
+      api_key: resolve(parsed[:api_key], base_config[:api_key], get_env_var("LIVEKIT_API_KEY")),
+      api_secret: resolve(parsed[:api_secret], base_config[:api_secret], get_env_var("LIVEKIT_API_SECRET")),
+      dev_port: resolve(parsed[:port], base_config[:dev_port], 4000),
+      verbose: resolve(parsed[:verbose], base_config[:verbose], false)
     }
   end
+
+  defp resolve(nil, nil, default), do: default
+  defp resolve(nil, base, _default), do: base
+  defp resolve(value, _base, _default), do: value
 
   defp validate_config(config) do
     cond do
@@ -303,7 +305,7 @@ defmodule Mix.Tasks.Livekit.Agents.Dev do
     jobs = Worker.list_active_jobs(worker_pid)
     Mix.shell().info("Active Jobs (#{length(jobs)}):")
 
-    if length(jobs) == 0 do
+    if jobs == [] do
       Mix.shell().info("  No active jobs")
     else
       Enum.each(jobs, fn job ->

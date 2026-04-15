@@ -66,13 +66,13 @@ defmodule Livekit.Agents.AudioFrameTest do
       silent_data = <<0::size(4800 * 8)>>
       frame = AudioFrame.new(silent_data)
 
-      assert AudioFrame.is_silence?(frame)
+      assert AudioFrame.silence?(frame)
 
       # Create audio with some signal
       audio_data = :crypto.strong_rand_bytes(4800)
       frame = AudioFrame.new(audio_data)
 
-      refute AudioFrame.is_silence?(frame)
+      refute AudioFrame.silence?(frame)
     end
 
     test "splits stereo channels" do

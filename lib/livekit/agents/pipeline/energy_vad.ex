@@ -68,7 +68,7 @@ defmodule Livekit.Agents.Pipeline.EnergyVAD do
   @doc """
   Classifies an audio frame as `:speech` or `:silence`.
 
-  Delegates to `AudioFrame.is_silence?/2` using `config.threshold`. Returns
+  Delegates to `AudioFrame.silence?/2` using `config.threshold`. Returns
   `:silence` when the frame energy falls below the threshold, `:speech`
   otherwise.
 
@@ -81,7 +81,7 @@ defmodule Livekit.Agents.Pipeline.EnergyVAD do
   """
   @spec classify(AudioFrame.t(), Config.t()) :: :speech | :silence
   def classify(%AudioFrame{} = frame, %Config{} = config) do
-    if AudioFrame.is_silence?(frame, config.threshold) do
+    if AudioFrame.silence?(frame, config.threshold) do
       :silence
     else
       :speech

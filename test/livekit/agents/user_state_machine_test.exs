@@ -2,7 +2,7 @@ defmodule Livekit.Agents.UserStateMachineTest do
   use ExUnit.Case, async: true
 
   alias Livekit.Agents.{EventBus, Events, UserStateMachine}
-  alias Events.UserStateChanged
+  alias Livekit.Agents.Events.UserStateChanged
 
   # Start the EventBus Registry before any test that needs it (idempotent).
   defp ensure_event_bus do

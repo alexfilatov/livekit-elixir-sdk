@@ -4,9 +4,9 @@ defmodule Livekit.Agents.IntegrationTest do
   # Legacy integration tests — reference old Pipeline.new/0 and mock provider APIs.
   @moduletag :legacy
 
-  alias Livekit.Agents.{VoiceAgent, AgentSession, Worker, JobContext, AudioFrame}
-  alias Livekit.Agents.STT.Deepgram
+  alias Livekit.Agents.{AgentSession, AudioFrame, JobContext, VoiceAgent, Worker}
   alias Livekit.Agents.LLM.OpenAI
+  alias Livekit.Agents.STT.Deepgram
   alias Livekit.Agents.TTS.OpenAI, as: OpenAITTS
 
   @moduletag :integration
@@ -104,7 +104,7 @@ defmodule Livekit.Agents.IntegrationTest do
       # Test silence detection
       silent_data = <<0::size(1000 * 8)>>
       silent_frame = AudioFrame.new(silent_data)
-      assert AudioFrame.is_silence?(silent_frame)
+      assert AudioFrame.silence?(silent_frame)
 
       # Test duration calculation
       duration_ms = AudioFrame.duration_ms(frame)

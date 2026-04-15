@@ -23,7 +23,7 @@ defmodule Livekit.Agents.VoiceAgent do
   use GenServer
   require Logger
 
-  alias Livekit.Agents.{Pipeline, AudioFrame, VoiceAgent}
+  alias Livekit.Agents.{AudioFrame, Pipeline, VoiceAgent}
 
   defmodule Config do
     @moduledoc """
@@ -241,69 +241,65 @@ defmodule Livekit.Agents.VoiceAgent do
   # Private Functions
 
   defp initialize_pipeline(config) do
-    try do
-      pipeline = Pipeline.new()
+    pipeline = Pipeline.new()
 
-      # Initialize STT component
-      pipeline =
-        case config.stt do
-          {stt_module, stt_config} ->
-            Pipeline.add_stt_node(pipeline, stt_module, stt_config)
+    # Initialize STT component
+    pipeline =
+      case config.stt do
+        {stt_module, stt_config} ->
+          Pipeline.add_stt_node(pipeline, stt_module, stt_config)
 
-          nil ->
-            pipeline
-        end
+        nil ->
+          pipeline
+      end
 
-      # Initialize LLM component
-      pipeline =
-        case config.llm do
-          {llm_module, llm_config} ->
-            llm_config_with_instructions = Map.put(llm_config, :instructions, config.instructions)
-            Pipeline.add_llm_node(pipeline, llm_module, llm_config_with_instructions)
+    # Initialize LLM component
+    pipeline =
+      case config.llm do
+        {llm_module, llm_config} ->
+          llm_config_with_instructions = Map.put(llm_config, :instructions, config.instructions)
+          Pipeline.add_llm_node(pipeline, llm_module, llm_config_with_instructions)
 
-          nil ->
-            pipeline
-        end
+        nil ->
+          pipeline
+      end
 
-      # Initialize TTS component
-      pipeline =
-        case config.tts do
-          {tts_module, tts_config} ->
-            Pipeline.add_tts_node(pipeline, tts_module, tts_config)
+    # Initialize TTS component
+    pipeline =
+      case config.tts do
+        {tts_module, tts_config} ->
+          Pipeline.add_tts_node(pipeline, tts_module, tts_config)
 
-          nil ->
-            pipeline
-        end
+        nil ->
+          pipeline
+      end
 
-      {:ok, pipeline}
-    rescue
-      error ->
-        {:error, error}
-    end
+    {:ok, pipeline}
+  rescue
+    error ->
+      {:error, error}
   end
 
   defp process_audio_frame_internal(audio_frame, state) do
-    try do
-      # Update metrics
-      new_metrics = Map.update!(state.metrics, :audio_frames_processed, &(&1 + 1))
-      new_metrics = Map.put(new_metrics, :last_activity, DateTime.utc_now())
+    # Update metrics
+    new_metrics = Map.update!(state.metrics, :audio_frames_processed, &(&1 + 1))
+    new_metrics = Map.put(new_metrics, :last_activity, DateTime.utc_now())
 
-      # Process through pipeline
-      case Pipeline.process_audio(state.pipeline, audio_frame) do
-        {:ok, result} ->
-          handle_pipeline_result(result, %{state | metrics: new_metrics})
+    # Process through pipeline
+    case Pipeline.process_audio(state.pipeline, audio_frame) do
+      {:ok, result} ->
+        handle_pipeline_result(result, %{state | metrics: new_metrics})
 
-        {:error, reason} ->
-          Logger.error("Pipeline processing failed: #{inspect(reason)}")
-          error_metrics = Map.update!(new_metrics, :errors, &(&1 + 1))
-          %{state | metrics: error_metrics}
-      end
-    rescue
-      error ->
-        Logger.error("Audio frame processing error: #{inspect(error)}")
-        error_metrics = Map.update!(state.metrics, :errors, &(&1 + 1))
+      {:error, reason} ->
+        Logger.error("Pipeline processing failed: #{inspect(reason)}")
+        error_metrics = Map.update!(new_metrics, :errors, &(&1 + 1))
         %{state | metrics: error_metrics}
     end
+  rescue
+    error ->
+      Logger.error("Audio frame processing error: #{inspect(error)}")
+      error_metrics = Map.update!(state.metrics, :errors, &(&1 + 1))
+      %{state | metrics: error_metrics}
   end
 
   defp handle_pipeline_result(result, state) do
@@ -355,13 +351,11 @@ defmodule Livekit.Agents.VoiceAgent do
   end
 
   defp update_agent_config(current_config, updates) do
-    try do
-      new_config = struct(current_config, updates)
-      {:ok, new_config}
-    rescue
-      error ->
-        {:error, error}
-    end
+    new_config = struct(current_config, updates)
+    {:ok, new_config}
+  rescue
+    error ->
+      {:error, error}
   end
 
   defp reinitialize_pipeline_if_needed(current_pipeline, old_config, new_config) do
