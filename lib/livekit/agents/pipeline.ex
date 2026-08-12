@@ -335,9 +335,16 @@ defmodule Livekit.Agents.Pipeline do
             "Pipeline turn complete — user: #{inspect(user_text)}, assistant: #{inspect(llm_response.content)}"
           )
 
+          # BOTH sides of the turn. The user message was previously added only
+          # to the local context handed to the LLM inside the task, and never
+          # made it back into state — so a conversation accumulated the
+          # assistant's replies and forgot every question that produced them.
+          # Nothing failed; the model just lost the thread a few turns in,
+          # which is the hardest kind of bug to notice from the outside.
           updated_ctx =
-            ChatContext.add(
-              state.chat_context,
+            state.chat_context
+            |> ChatContext.add(ChatContext.new_message(:user, [user_text]))
+            |> ChatContext.add(
               ChatContext.new_message(:assistant, [content_to_string(llm_response.content)])
             )
 

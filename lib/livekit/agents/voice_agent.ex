@@ -259,47 +259,33 @@ defmodule Livekit.Agents.VoiceAgent do
   # API that never shipped: every call here raised, the rescue below turned
   # that into `{:error, _}`, and VoiceAgent could not start at all — which is
   # what its five failing tests were reporting.
-  defp initialize_pipeline(config) do
-    {stt, stt_opts} = split_component(config.stt)
-    {llm, llm_opts} = split_component(config.llm)
-    {tts, tts_opts} = split_component(config.tts)
-
-    pipeline_config = %Pipeline.Config{
+  # `Pipeline` is a GenServer configured up front, not a struct assembled by
+  # chained `add_*_node` builders. This module was written against a builder
+  # API that never shipped: every call raised, the rescue below turned that
+  # into `{:error, _}`, and VoiceAgent could not start at all.
+  #
+  # `:stt`, `:llm` and `:tts` are `{module, config}` tuples and Pipeline needs
+  # ALL THREE — it answers `:missing_providers` otherwise. An agent given only
+  # instructions is still a valid agent, so it simply runs without a pipeline
+  # rather than refusing to boot.
+  defp initialize_pipeline(%{stt: stt, llm: llm, tts: tts} = config)
+       when not is_nil(stt) and not is_nil(llm) and not is_nil(tts) do
+    Pipeline.start_link(%Pipeline.Config{
       stt: stt,
       llm: llm,
       tts: tts,
-      stt_opts: stt_opts,
-      # The agent's instructions belong to the LLM leg, which is where the
+      # The agent's instructions ride with the LLM call, which is where the
       # old builder put them too.
-      llm_opts: Keyword.put(llm_opts, :instructions, config.instructions),
-      tts_opts: tts_opts,
-      # Pipeline output is delivered as `{:pipeline_audio, frame}` messages,
-      # so the agent must be the subscriber to hear its own replies.
+      llm_opts: [instructions: config.instructions],
+      # Pipeline output arrives as `{:pipeline_audio, frame}`, so the agent
+      # must be the subscriber to hear its own replies.
       subscriber: self()
-    }
-
-    # A pipeline with no STT, LLM or TTS has nothing to do, and `Pipeline`
-    # rightly refuses to start one (`:missing_providers`). An agent
-    # configured with only instructions is still a valid agent — it simply
-    # has no pipeline yet — so this returns nil rather than failing to boot.
-    if is_nil(stt) and is_nil(llm) and is_nil(tts) do
-      {:ok, nil}
-    else
-      Pipeline.start_link(pipeline_config)
-    end
+    })
   rescue
-    error ->
-      {:error, error}
+    error -> {:error, error}
   end
 
-  # Components arrive as `{module, config}` or nil. Pipeline.Config keeps the
-  # module and its options apart, and takes options as a keyword list.
-  defp split_component({module, opts}) when is_map(opts),
-    do: {module, Enum.into(opts, [])}
-
-  defp split_component({module, opts}) when is_list(opts), do: {module, opts}
-  defp split_component(module) when is_atom(module) and not is_nil(module), do: {module, []}
-  defp split_component(_), do: {nil, []}
+  defp initialize_pipeline(_config), do: {:ok, nil}
 
   defp process_audio_frame_internal(audio_frame, state) do
     # Update metrics

@@ -5,9 +5,11 @@ defmodule Livekit.Agents.AgentStateMachineTest do
   alias Livekit.Agents.Events.AgentStateChanged
 
   defp ensure_event_bus do
-    case EventBus.start_link() do
-      {:ok, _pid} -> :ok
-      {:error, {:already_started, _}} -> :ok
+    # Started once in test_helper.exs and deliberately unlinked, so a test
+    # finishing cannot take the event bus down with it.
+    case Process.whereis(Livekit.Agents.EventBus.Registry) do
+      nil -> flunk("EventBus not running — test_helper.exs should have started it")
+      _pid -> :ok
     end
   end
 
