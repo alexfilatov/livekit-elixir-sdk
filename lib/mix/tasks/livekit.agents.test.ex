@@ -343,13 +343,16 @@ defmodule Mix.Tasks.Livekit.Agents.Test do
     end
   end
 
+  # Pipeline is a GenServer, not a struct built by `new/0` — this task was
+  # written against an API that never shipped, so it could not run at all.
   defp test_pipeline_init do
-    pipeline = Pipeline.new()
+    case Pipeline.start_link(%Pipeline.Config{subscriber: self()}) do
+      {:ok, pid} ->
+        Pipeline.stop(pid)
+        :ok
 
-    if is_struct(pipeline, Pipeline) do
-      :ok
-    else
-      {:error, "Pipeline initialization failed"}
+      {:error, reason} ->
+        {:error, "Pipeline initialization failed: #{inspect(reason)}"}
     end
   end
 
@@ -452,23 +455,32 @@ defmodule Mix.Tasks.Livekit.Agents.Test do
     audio_data = :crypto.strong_rand_bytes(4800)
     audio_frame = AudioFrame.new(audio_data, sample_rate: 48_000)
 
-    pipeline = Pipeline.new()
+    # No STT configured, so the frame is accepted and dropped — what is under
+    # test here is that a frame can be pushed without the pipeline crashing.
+    case Pipeline.start_link(%Pipeline.Config{subscriber: self()}) do
+      {:ok, pid} ->
+        :ok = Pipeline.push_frame(pid, audio_frame)
+        _ = Pipeline.get_metrics(pid)
+        Pipeline.stop(pid)
+        :ok
 
-    case Pipeline.process_audio(pipeline, audio_frame) do
-      {:ok, _result} -> :ok
-      # Expected for mock
-      {:error, :no_stt_node} -> :ok
-      error -> error
+      {:error, reason} ->
+        {:error, "STT pipeline failed to start: #{inspect(reason)}"}
     end
   end
 
   defp test_llm_processing(_config) do
-    pipeline = Pipeline.new()
+    # With no LLM configured the pipeline still has to hold a chat context;
+    # that round trip is the useful check without reaching a provider.
+    case Pipeline.start_link(%Pipeline.Config{subscriber: self()}) do
+      {:ok, pid} ->
+        ctx = Pipeline.get_chat_context(pid)
+        :ok = Pipeline.set_chat_context(pid, ctx)
+        Pipeline.stop(pid)
+        :ok
 
-    case Pipeline.process_text(pipeline, "Hello, test!") do
-      {:ok, _result} -> :ok
-      # Expected for mock
-      {:error, _reason} -> :ok
+      {:error, reason} ->
+        {:error, "LLM pipeline failed to start: #{inspect(reason)}"}
     end
   end
 

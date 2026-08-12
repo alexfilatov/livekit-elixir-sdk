@@ -219,13 +219,25 @@ defmodule Livekit.Agents.EventBus do
   # Broadcasts a telemetry measurement to all currently registered session subscribers.
   @spec emit_to_all_sessions(Events.TelemetryMeasurement.t()) :: :ok
   defp emit_to_all_sessions(event) do
-    # Select all {key, pid, value} entries from the Registry
-    entries = Registry.select(@registry, [{{:"$1", :"$2", :"$3"}, [], [{{:"$1", :"$2"}}]}])
+    # The registry is only running when something has started it — this SDK
+    # has no supervision tree of its own, so an application that uses the
+    # pipeline without subscribing to events never starts one.
+    #
+    # `Registry.select/2` raises ArgumentError on an unknown registry, and
+    # this runs inside a :telemetry handler: one raise and telemetry DETACHES
+    # the handler permanently, so the event bus would go quiet for the rest
+    # of the VM's life after a single pipeline event. Nobody is subscribed in
+    # that case, so there is nothing to deliver and nothing to report.
+    case Process.whereis(@registry) do
+      nil ->
+        :ok
 
-    for {_session_id, pid} <- entries do
-      send(pid, {:livekit_event, event})
+      _pid ->
+        @registry
+        |> Registry.select([{{:"$1", :"$2", :"$3"}, [], [{{:"$1", :"$2"}}]}])
+        |> Enum.each(fn {_session_id, pid} -> send(pid, {:livekit_event, event}) end)
+
+        :ok
     end
-
-    :ok
   end
 end

@@ -226,6 +226,20 @@ defmodule Livekit.Agents.VoiceAgent do
   end
 
   @impl true
+  # The pipeline is started with `subscriber: self()`, so synthesised replies
+  # arrive here. Without this clause they fall through to the catch-all below
+  # and are logged as "unknown message" — the agent would look healthy while
+  # dropping every word it produced.
+  #
+  # Publishing the frame to the room needs the WebRTC NIF and a room handle,
+  # neither of which this module owns yet, so for now the frame is counted
+  # and dropped. Counted, not silent: the metric is how you tell "not wired
+  # up" apart from "never spoke".
+  def handle_info({:pipeline_audio, %AudioFrame{} = _frame}, state) do
+    metrics = Map.update(state.metrics, :audio_frames_out, 1, &(&1 + 1))
+    {:noreply, %{state | metrics: metrics}}
+  end
+
   def handle_info(msg, state) do
     Logger.debug("VoiceAgent received unknown message: #{inspect(msg)}")
     {:noreply, state}
@@ -240,114 +254,71 @@ defmodule Livekit.Agents.VoiceAgent do
 
   # Private Functions
 
+  # `Pipeline` is a GenServer configured up front, not a struct assembled by
+  # chained `add_*_node` builders. This module was written against a builder
+  # API that never shipped: every call here raised, the rescue below turned
+  # that into `{:error, _}`, and VoiceAgent could not start at all — which is
+  # what its five failing tests were reporting.
   defp initialize_pipeline(config) do
-    pipeline = Pipeline.new()
+    {stt, stt_opts} = split_component(config.stt)
+    {llm, llm_opts} = split_component(config.llm)
+    {tts, tts_opts} = split_component(config.tts)
 
-    # Initialize STT component
-    pipeline =
-      case config.stt do
-        {stt_module, stt_config} ->
-          Pipeline.add_stt_node(pipeline, stt_module, stt_config)
+    pipeline_config = %Pipeline.Config{
+      stt: stt,
+      llm: llm,
+      tts: tts,
+      stt_opts: stt_opts,
+      # The agent's instructions belong to the LLM leg, which is where the
+      # old builder put them too.
+      llm_opts: Keyword.put(llm_opts, :instructions, config.instructions),
+      tts_opts: tts_opts,
+      # Pipeline output is delivered as `{:pipeline_audio, frame}` messages,
+      # so the agent must be the subscriber to hear its own replies.
+      subscriber: self()
+    }
 
-        nil ->
-          pipeline
-      end
-
-    # Initialize LLM component
-    pipeline =
-      case config.llm do
-        {llm_module, llm_config} ->
-          llm_config_with_instructions = Map.put(llm_config, :instructions, config.instructions)
-          Pipeline.add_llm_node(pipeline, llm_module, llm_config_with_instructions)
-
-        nil ->
-          pipeline
-      end
-
-    # Initialize TTS component
-    pipeline =
-      case config.tts do
-        {tts_module, tts_config} ->
-          Pipeline.add_tts_node(pipeline, tts_module, tts_config)
-
-        nil ->
-          pipeline
-      end
-
-    {:ok, pipeline}
+    # A pipeline with no STT, LLM or TTS has nothing to do, and `Pipeline`
+    # rightly refuses to start one (`:missing_providers`). An agent
+    # configured with only instructions is still a valid agent — it simply
+    # has no pipeline yet — so this returns nil rather than failing to boot.
+    if is_nil(stt) and is_nil(llm) and is_nil(tts) do
+      {:ok, nil}
+    else
+      Pipeline.start_link(pipeline_config)
+    end
   rescue
     error ->
       {:error, error}
   end
+
+  # Components arrive as `{module, config}` or nil. Pipeline.Config keeps the
+  # module and its options apart, and takes options as a keyword list.
+  defp split_component({module, opts}) when is_map(opts),
+    do: {module, Enum.into(opts, [])}
+
+  defp split_component({module, opts}) when is_list(opts), do: {module, opts}
+  defp split_component(module) when is_atom(module) and not is_nil(module), do: {module, []}
+  defp split_component(_), do: {nil, []}
 
   defp process_audio_frame_internal(audio_frame, state) do
     # Update metrics
     new_metrics = Map.update!(state.metrics, :audio_frames_processed, &(&1 + 1))
     new_metrics = Map.put(new_metrics, :last_activity, DateTime.utc_now())
 
-    # Process through pipeline
-    case Pipeline.process_audio(state.pipeline, audio_frame) do
-      {:ok, result} ->
-        handle_pipeline_result(result, %{state | metrics: new_metrics})
-
-      {:error, reason} ->
-        Logger.error("Pipeline processing failed: #{inspect(reason)}")
-        error_metrics = Map.update!(new_metrics, :errors, &(&1 + 1))
-        %{state | metrics: error_metrics}
-    end
+    # `push_frame/2` is a cast: the pipeline classifies the frame, and any
+    # reply comes back later as a `{:pipeline_audio, frame}` message to the
+    # subscriber. There is no synchronous result to branch on, and pretending
+    # otherwise is what the old code did.
+    # No providers configured means no pipeline: count the frame and drop it
+    # rather than crash the agent.
+    if is_pid(state.pipeline), do: Pipeline.push_frame(state.pipeline, audio_frame)
+    %{state | metrics: new_metrics}
   rescue
     error ->
       Logger.error("Audio frame processing error: #{inspect(error)}")
       error_metrics = Map.update!(state.metrics, :errors, &(&1 + 1))
       %{state | metrics: error_metrics}
-  end
-
-  defp handle_pipeline_result(result, state) do
-    case result do
-      {:text_transcribed, text} ->
-        Logger.debug("Transcribed text: #{text}")
-        # Add to conversation context
-        context_entry = %{type: :user, content: text, timestamp: DateTime.utc_now()}
-        new_context = [context_entry | state.conversation_context]
-        %{state | conversation_context: new_context}
-
-      {:llm_response, response} ->
-        Logger.debug("LLM response: #{inspect(response)}")
-        # Add to conversation context
-        context_entry = %{type: :assistant, content: response, timestamp: DateTime.utc_now()}
-        new_context = [context_entry | state.conversation_context]
-
-        # Update turn metrics
-        new_metrics = Map.update!(state.metrics, :turns_processed, &(&1 + 1))
-
-        %{state | conversation_context: new_context, metrics: new_metrics}
-
-      {:audio_synthesized, audio_data} ->
-        Logger.debug("Audio synthesized, #{byte_size(audio_data)} bytes")
-        # Send audio to session if connected
-        if state.session do
-          send_audio_to_session(state.session, audio_data)
-        end
-
-        state
-
-      {:error, reason} ->
-        Logger.error("Pipeline result error: #{inspect(reason)}")
-        error_metrics = Map.update!(state.metrics, :errors, &(&1 + 1))
-        %{state | metrics: error_metrics}
-
-      _ ->
-        Logger.debug("Unknown pipeline result: #{inspect(result)}")
-        state
-    end
-  end
-
-  defp send_audio_to_session(session_pid, audio_data) do
-    # This will be implemented when we have the session module
-    # For now, just log
-    Logger.debug(
-      "Would send #{byte_size(audio_data)} bytes of audio to session #{inspect(session_pid)}"
-    )
   end
 
   defp update_agent_config(current_config, updates) do
@@ -377,8 +348,14 @@ defmodule Livekit.Agents.VoiceAgent do
 
   defp cleanup_pipeline(nil), do: :ok
 
-  defp cleanup_pipeline(pipeline) do
-    # Clean up pipeline resources
-    Pipeline.cleanup(pipeline)
+  defp cleanup_pipeline(pipeline) when is_pid(pipeline) do
+    # The pipeline is a process, so stopping it IS the cleanup. `stop/1` on a
+    # pid that has already gone is harmless; a crashed pipeline must not stop
+    # the agent from terminating.
+    if Process.alive?(pipeline), do: Pipeline.stop(pipeline), else: :ok
+  catch
+    :exit, _ -> :ok
   end
+
+  defp cleanup_pipeline(_), do: :ok
 end

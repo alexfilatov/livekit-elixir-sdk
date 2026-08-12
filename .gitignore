@@ -24,6 +24,11 @@ livekit-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
-# vendor/native/livekit_webrtc/target/
+# Rust build output. This was commented out AND had the wrong path
+# (`vendor/native/...`), leaving 2.6GB of target/ one `git add -A` away from
+# being committed permanently — a mistake that cannot be undone without
+# rewriting history.
+native/*/target/
+**/target/
 _build/
 deps/
