@@ -185,7 +185,7 @@ defmodule Livekit.Agents.STT.Deepgram do
       {Tesla.Middleware.Logger, debug: false}
     ]
 
-    Tesla.client(middleware, Tesla.Adapter.Hackney)
+    Tesla.client(middleware, Livekit.HTTP.adapter())
   end
 
   @spec build_query_params(Config.t()) :: keyword()

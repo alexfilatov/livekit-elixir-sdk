@@ -37,7 +37,8 @@ defmodule Livekit.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      extra_applications: [:logger, :crypto, :gun, :grpc]
+      # :inets and :ssl are what OTP's httpc needs — the default adapter.
+      extra_applications: [:logger, :crypto, :inets, :ssl, :gun, :grpc]
     ]
   end
 
@@ -46,7 +47,12 @@ defmodule Livekit.MixProject do
     [
       {:protobuf, "~> 0.14.0"},
       {:tesla, "~> 1.7"},
-      {:hackney, "~> 1.18"},
+      # No HTTP client dependency by design — the Tesla adapter is chosen by
+      # the consumer via `config :livekit, :tesla_adapter` and defaults to
+      # OTP's httpc, which needs nothing. See `Livekit.HTTP`. Finch is here
+      # only so the recommended production adapter can be compiled and
+      # tested; it is optional and not started by this library.
+      {:finch, "~> 0.19", optional: true},
       {:jason, "~> 1.4"},
       {:joken, "~> 2.6"},
       {:inflex, "~> 2.1"},

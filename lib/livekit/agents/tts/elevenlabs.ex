@@ -243,7 +243,7 @@ defmodule Livekit.Agents.TTS.ElevenLabs do
       {Tesla.Middleware.Query, [output_format: output_format]}
     ]
 
-    Tesla.client(middleware, Tesla.Adapter.Hackney)
+    Tesla.client(middleware, Livekit.HTTP.adapter())
   end
 
   defp build_cache_key(config, text) do

@@ -136,7 +136,10 @@ defmodule Mix.Tasks.Livekit do
   @impl Mix.Task
   def run(args) do
     # Start required applications
-    Application.ensure_all_started(:hackney)
+    # The HTTP adapter is the consumer's choice (see Livekit.HTTP); httpc,
+    # the default, lives in :inets.
+    Application.ensure_all_started(:inets)
+    Application.ensure_all_started(:ssl)
     Application.ensure_all_started(:gun)
     Application.ensure_all_started(:grpc)
 

@@ -341,7 +341,7 @@ defmodule Livekit.Agents.LLM.OpenAI do
       Tesla.Middleware.JSON
     ]
 
-    Tesla.client(middleware, Tesla.Adapter.Hackney)
+    Tesla.client(middleware, Livekit.HTTP.adapter())
   end
 
   defp build_stream_client(%Config{api_key: key, base_url: base_url}) do
@@ -355,6 +355,6 @@ defmodule Livekit.Agents.LLM.OpenAI do
       Tesla.Middleware.JSON
     ]
 
-    Tesla.client(middleware, {Tesla.Adapter.Hackney, [recv_timeout: 60_000]})
+    Tesla.client(middleware, Livekit.HTTP.adapter(60_000))
   end
 end

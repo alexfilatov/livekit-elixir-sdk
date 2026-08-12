@@ -185,7 +185,7 @@ defmodule Livekit.Agents.TTS.OpenAI do
       {Tesla.Middleware.JSON, decode_content_types: ["application/json"]}
     ]
 
-    Tesla.client(middleware, Tesla.Adapter.Hackney)
+    Tesla.client(middleware, Livekit.HTTP.adapter())
   end
 
   defp build_cache_key(config, text) do

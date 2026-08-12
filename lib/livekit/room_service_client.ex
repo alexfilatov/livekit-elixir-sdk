@@ -54,7 +54,7 @@ defmodule Livekit.RoomServiceClient do
        ]}
     ]
 
-    client = Tesla.client(middleware, {Tesla.Adapter.Hackney, [recv_timeout: 30_000]})
+    client = Tesla.client(middleware, Livekit.HTTP.adapter(30_000))
 
     %__MODULE__{
       base_url: base_url,
