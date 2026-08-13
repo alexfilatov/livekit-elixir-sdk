@@ -15,6 +15,13 @@ defmodule Livekit.Agents.AgentSession do
 
   Audio flows: Room → RoomIO → Pipeline → RoomIO → Room.
 
+  ## Mock mode (`:server_url` starting with `"mock://"`)
+
+  `connect_to_room/1` succeeds without touching the WebRTC NIF or the network.
+  This matches `Livekit.Agents.Worker`, which treats the same URL scheme as
+  mock mode, so a worker under test does not spawn sessions that try to open
+  real peer connections.
+
   ## No server_url (`:server_url` nil or empty)
 
   When no `server_url` is provided, `connect_to_room/1` returns
@@ -54,7 +61,8 @@ defmodule Livekit.Agents.AgentSession do
 
     - `:room_name` — LiveKit room name to join.
     - `:participant_identity` — Identity published by the agent participant.
-    - `:server_url` — LiveKit server WebSocket URL (`"wss://..."`). Set `nil` to use mock mode.
+    - `:server_url` — LiveKit server WebSocket URL (`"wss://..."`). A `"mock://"`
+      URL connects without touching the network; `nil` cannot connect at all.
     - `:api_key` — LiveKit API key (required for real mode).
     - `:api_secret` — LiveKit API secret (required for real mode).
     - `:pipeline_config` — `%Pipeline.Config{}` for STT/LLM/TTS. Required for real mode.
@@ -285,6 +293,14 @@ defmodule Livekit.Agents.AgentSession do
 
   defp connect_to_room_internal(%State{config: %Config{server_url: ""}} = _state),
     do: {:error, :missing_server_url}
+
+  # `Worker` treats a `mock://` server URL as mock mode and never touches Gun.
+  # Without the same rule here, a worker started in mock mode spawned sessions
+  # that went straight to the real WebRTC NIF — which, with the Rust NIF built,
+  # aborts the whole VM rather than returning an error. The two modules have to
+  # agree on what "mock" means.
+  defp connect_to_room_internal(%State{config: %Config{server_url: "mock://" <> _}} = state),
+    do: {:ok, state}
 
   defp connect_to_room_internal(%State{} = state) do
     connect_real(state)

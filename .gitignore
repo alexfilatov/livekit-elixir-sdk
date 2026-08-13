@@ -32,3 +32,8 @@ native/*/target/
 **/target/
 _build/
 deps/
+
+# Compiled Rust NIF. 23MB of build output that must be rebuilt per
+# platform anyway — committing it would bloat every clone and ship a macOS
+# binary to a Linux container.
+priv/native/

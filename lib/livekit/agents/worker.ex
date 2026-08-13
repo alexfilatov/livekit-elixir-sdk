@@ -9,8 +9,9 @@ defmodule Livekit.Agents.Worker do
   - Sends periodic ping/status updates carrying current load information.
   - Responds to `AvailabilityRequest` messages by accepting or rejecting new
     jobs based on capacity and drain state.
-  - On job assignment (`JobAssignment`), spawns an `AgentSession` under
-    `JobSupervisor` and monitors it for lifecycle management.
+  - On job assignment (`JobAssignment`), calls the configured `entrypoint`
+    with the job context, then spawns an `AgentSession` under `JobSupervisor`
+    with the pipeline the entrypoint returned, and monitors it.
   - Implements graceful drain: stops accepting new jobs and waits (up to
     `drain_timeout` ms) for in-flight sessions to finish.
   - Reports load as `active_jobs / max_concurrent_jobs` in every status update.
@@ -41,6 +42,26 @@ defmodule Livekit.Agents.Worker do
       })
 
       :ok = Worker.drain(pid)
+
+  ## The entrypoint
+
+  Called with the job context when a job is assigned, and returning what the
+  agent should be for that job:
+
+      def run(%{room_name: room}) do
+        {:ok, %Pipeline.Config{
+          stt: {MySTT, %{}},
+          llm: {MyLLM, %{}},
+          tts: {MyTTS, %{}},
+          llm_opts: [instructions: instructions_for(room)]
+        }}
+      end
+
+  This is the whole point of the worker: which room it was dispatched into
+  decides which prompt, tools and voice the session gets. `:ok` accepts the
+  job with no pipeline — useful only in mock mode, since a session without
+  one joins the room deaf and mute. `{:error, reason}` declines the job and
+  reports it failed.
   """
 
   use GenServer
@@ -731,39 +752,84 @@ defmodule Livekit.Agents.Worker do
       room_name = if room, do: room.name, else: ""
       participant_identity = if participant, do: participant.identity, else: ""
 
-      session_config = %AgentSession.Config{
+      job_ctx = %{
+        job_id: job.id,
         room_name: room_name,
         participant_identity: participant_identity,
         server_url: assignment.url || state.config.server_url,
-        api_key: state.config.api_key,
-        api_secret: state.config.api_secret
+        metadata: job.metadata
       }
 
-      case JobSupervisor.start_job(session_config) do
-        {:ok, session_pid} ->
-          monitor_ref = Process.monitor(session_pid)
-
-          job_info = %{
-            session_pid: session_pid,
-            monitor_ref: monitor_ref,
+      case run_entrypoint(state.config.entrypoint, job_ctx) do
+        {:ok, pipeline_config} ->
+          session_config = %AgentSession.Config{
             room_name: room_name,
             participant_identity: participant_identity,
-            started_at: DateTime.utc_now()
+            server_url: assignment.url || state.config.server_url,
+            api_key: state.config.api_key,
+            api_secret: state.config.api_secret,
+            pipeline_config: pipeline_config
           }
 
-          Logger.info(
-            "Job assigned: id=#{job.id}, room=#{room_name}, participant=#{participant_identity}"
-          )
-
-          new_state = %{state | active_jobs: Map.put(state.active_jobs, job.id, job_info)}
-          send_worker_load_update(new_state)
-          new_state
+          start_job_session(state, job.id, session_config, job_ctx)
 
         {:error, reason} ->
-          Logger.error("Failed to start job session for job=#{job.id}: #{inspect(reason)}")
+          Logger.error("Entrypoint refused job=#{job.id}: #{inspect(reason)}")
           send_job_status_update(state, job.id, :JS_FAILED)
           %{state | metrics: Map.update!(state.metrics, :jobs_failed, &(&1 + 1))}
       end
+    end
+  end
+
+  # The entrypoint is where the host application decides what this agent
+  # actually is: which room it was called into, and therefore which prompt,
+  # tools and voice to give it. Returning `{:ok, %Pipeline.Config{}}` supplies
+  # them; a bare `:ok` accepts the job with no pipeline, which is only useful
+  # in mock mode; `{:error, reason}` declines the job.
+  #
+  # It is called in the worker process, so it must be fast — build config, do
+  # not do I/O. A crash here declines one job rather than taking down the
+  # worker and every other in-flight session with it.
+  defp run_entrypoint(entrypoint, job_ctx) do
+    case entrypoint.(job_ctx) do
+      {:ok, %Livekit.Agents.Pipeline.Config{} = pipeline_config} -> {:ok, pipeline_config}
+      :ok -> {:ok, nil}
+      {:error, reason} -> {:error, reason}
+      other -> {:error, {:bad_entrypoint_return, other}}
+    end
+  rescue
+    e -> {:error, {:entrypoint_raised, e}}
+  catch
+    kind, value -> {:error, {:entrypoint_threw, kind, value}}
+  end
+
+  defp start_job_session(state, job_id, session_config, job_ctx) do
+    %{room_name: room_name, participant_identity: participant_identity} = job_ctx
+
+    case JobSupervisor.start_job(session_config) do
+      {:ok, session_pid} ->
+        monitor_ref = Process.monitor(session_pid)
+
+        job_info = %{
+          session_pid: session_pid,
+          monitor_ref: monitor_ref,
+          room_name: room_name,
+          participant_identity: participant_identity,
+          started_at: DateTime.utc_now()
+        }
+
+        Logger.info(
+          "Job assigned: id=#{job_id}, room=#{room_name}, participant=#{participant_identity}"
+        )
+
+        new_state = %{state | active_jobs: Map.put(state.active_jobs, job_id, job_info)}
+        send_worker_load_update(new_state)
+        new_state
+
+      {:error, reason} ->
+        Logger.error("Failed to start job session for job=#{job_id}: #{inspect(reason)}")
+        send_job_status_update(state, job_id, :JS_FAILED)
+        %{state | metrics: Map.update!(state.metrics, :jobs_failed, &(&1 + 1))}
     end
   end
 
