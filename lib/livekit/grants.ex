@@ -10,7 +10,13 @@ defmodule Livekit.Grants do
             room_record: false,
             room_admin: false,
             room_create: false,
-            ingress_admin: false
+            ingress_admin: false,
+            # Required by LiveKit's agent worker endpoint. Without it the
+            # WebSocket upgrade to /agent is refused with a 401, and since a
+            # refused upgrade arrives as `{:gun_response, ...}` rather than
+            # `{:gun_upgrade, ...}`, a worker can sit there looking healthy
+            # and never be dispatched anything.
+            agent: false
 
   @type t :: %__MODULE__{
           room: String.t() | nil,
@@ -19,7 +25,8 @@ defmodule Livekit.Grants do
           room_record: boolean(),
           room_admin: boolean(),
           room_create: boolean(),
-          ingress_admin: boolean()
+          ingress_admin: boolean(),
+          agent: boolean()
         }
 
   @doc """

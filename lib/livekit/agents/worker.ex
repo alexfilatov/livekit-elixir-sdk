@@ -359,7 +359,7 @@ defmodule Livekit.Agents.Worker do
   def handle_info({:gun_up, gun_pid, :http}, %State{gun_pid: gun_pid} = state) do
     Logger.debug("Gun HTTP connection up, upgrading to WebSocket")
 
-    token = build_auth_token(state.config)
+    token = registration_token(state.config)
 
     stream =
       :gun.ws_upgrade(gun_pid, "/agent", [
@@ -408,6 +408,26 @@ defmodule Livekit.Agents.Worker do
   def handle_info({:gun_ws, _gun_pid, _stream, {:text, _data}}, state) do
     Logger.debug("Received unexpected text frame from server (expected binary protobuf)")
     {:noreply, state}
+  end
+
+  # An upgrade the server REFUSED. Gun answers a rejected ws_upgrade with
+  # `{:gun_response, ...}` rather than `{:gun_upgrade, ...}`, so without this
+  # clause the message fell through to the catch-all and was discarded: the
+  # worker logged "Starting", set gun_pid and ws_stream, and then sat forever
+  # looking perfectly healthy while never being dispatched a single job. A
+  # 401 here almost always means the registration token lacks the `agent`
+  # grant.
+  @impl true
+  def handle_info({:gun_response, _pid, _stream, _fin, status, _headers}, state) do
+    Logger.error(
+      "Worker registration refused by server: HTTP #{status}. " <>
+        "A 401 usually means the API key/secret are wrong or the token is missing " <>
+        "the `agent` grant. Retrying in #{state.backoff_ms} ms."
+    )
+
+    Process.send_after(self(), :connect, state.backoff_ms)
+
+    {:noreply, %{clear_connection(state) | backoff_ms: next_backoff(state.backoff_ms)}}
   end
 
   @impl true
@@ -639,11 +659,18 @@ defmodule Livekit.Agents.Worker do
     end
   end
 
-  defp build_auth_token(config) do
+  @doc """
+  The JWT this worker registers with.
+
+  Public so the grants can be asserted on: `agent: true` is what LiveKit's
+  worker endpoint checks, and without it the upgrade is refused with a 401
+  that surfaces nowhere.
+  """
+  def registration_token(config) do
     alias Livekit.AccessToken
     alias Livekit.Grants
 
-    grants = %Grants{room_join: true, room_admin: true}
+    grants = %Grants{room_join: true, room_admin: true, agent: true}
 
     AccessToken.new(config.api_key, config.api_secret)
     |> AccessToken.with_identity(config.worker_id)
