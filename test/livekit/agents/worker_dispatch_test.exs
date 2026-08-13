@@ -87,6 +87,20 @@ defmodule Livekit.Agents.WorkerDispatchTest do
     assert session_config.pipeline_config == config
   end
 
+  test "a room job with no participant still gets an identity" do
+    pid = start_worker(fn _ctx -> :ok end)
+    assign(pid, "board-42")
+
+    [{_id, job}] = Map.to_list(:sys.get_state(pid).active_jobs)
+
+    # A room-type job names no participant. An empty identity produces a join
+    # token with an empty `sub`, which LiveKit refuses as
+    # "401 Unauthorized - missing authorization header" — a message that
+    # blames the header rather than what is missing inside it.
+    assert job.participant_identity == "agent-job-1"
+    assert job.participant_identity != ""
+  end
+
   test "an entrypoint that declines the job means no session starts" do
     pid = start_worker(fn _ctx -> {:error, :out_of_credit} end)
     assign(pid, "board-7")

@@ -777,7 +777,14 @@ defmodule Livekit.Agents.Worker do
       participant = job.participant
 
       room_name = if room, do: room.name, else: ""
-      participant_identity = if participant, do: participant.identity, else: ""
+
+      # A room-type job names no participant — the agent is joining the room
+      # itself, not shadowing somebody. That left the identity empty, and an
+      # empty identity produces a join token whose `sub` is "", which LiveKit
+      # refuses with "401 Unauthorized - missing authorization header". The
+      # token is present and well-formed; it is the identity inside it that is
+      # missing, which the message does not say.
+      participant_identity = agent_identity(participant, job.id)
 
       job_ctx = %{
         job_id: job.id,
@@ -829,6 +836,14 @@ defmodule Livekit.Agents.Worker do
   catch
     kind, value -> {:error, {:entrypoint_threw, kind, value}}
   end
+
+  # Unique per job, so two conversations in one room never collide on an
+  # identity and evict each other.
+  defp agent_identity(%{identity: identity}, _job_id)
+       when is_binary(identity) and identity != "",
+       do: identity
+
+  defp agent_identity(_participant, job_id), do: "agent-" <> to_string(job_id)
 
   defp start_job_session(state, job_id, session_config, job_ctx) do
     %{room_name: room_name, participant_identity: participant_identity} = job_ctx
