@@ -41,8 +41,8 @@ defmodule Livekit.RoomServiceClient do
       {Tesla.Middleware.BaseUrl, base_url},
       {Tesla.Middleware.Headers,
        [
-         {"Content-Type", "application/protobuf"},
-         {"Accept", "application/protobuf"}
+         {"content-type", "application/protobuf"},
+         {"accept", "application/protobuf"}
        ]},
       {Tesla.Middleware.Logger,
        [
@@ -357,8 +357,8 @@ defmodule Livekit.RoomServiceClient do
       |> AccessToken.to_jwt()
 
     [
-      {"Authorization", "Bearer #{token}"},
-      {"User-Agent", "Livekit Elixir SDK"}
+      {"authorization", "Bearer #{token}"},
+      {"user-agent", "Livekit Elixir SDK"}
     ]
   end
 end

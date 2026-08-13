@@ -362,8 +362,8 @@ defmodule Livekit.Agents.LLM.OpenAI do
       {Tesla.Middleware.BaseUrl, base_url},
       {Tesla.Middleware.Headers,
        [
-         {"Authorization", "Bearer #{key}"},
-         {"Content-Type", "application/json"}
+         {"authorization", "Bearer #{key}"},
+         {"content-type", "application/json"}
        ]},
       Tesla.Middleware.JSON
     ]
@@ -376,8 +376,8 @@ defmodule Livekit.Agents.LLM.OpenAI do
       {Tesla.Middleware.BaseUrl, base_url},
       {Tesla.Middleware.Headers,
        [
-         {"Authorization", "Bearer #{key}"},
-         {"Content-Type", "application/json"}
+         {"authorization", "Bearer #{key}"},
+         {"content-type", "application/json"}
        ]},
       Tesla.Middleware.JSON
     ]

@@ -178,8 +178,8 @@ defmodule Livekit.Agents.STT.Deepgram do
       {Tesla.Middleware.BaseUrl, config.base_url},
       {Tesla.Middleware.Headers,
        [
-         {"Authorization", "Token #{config.api_key}"},
-         {"Content-Type", "audio/l16"}
+         {"authorization", "Token #{config.api_key}"},
+         {"content-type", "audio/l16"}
        ]},
       Tesla.Middleware.JSON,
       {Tesla.Middleware.Logger, debug: false}

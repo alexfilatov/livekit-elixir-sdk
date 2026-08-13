@@ -179,8 +179,8 @@ defmodule Livekit.Agents.TTS.OpenAI do
       {Tesla.Middleware.BaseUrl, base_url},
       {Tesla.Middleware.Headers,
        [
-         {"Authorization", "Bearer #{key}"},
-         {"Content-Type", "application/json"}
+         {"authorization", "Bearer #{key}"},
+         {"content-type", "application/json"}
        ]},
       {Tesla.Middleware.JSON, decode_content_types: ["application/json"]}
     ]

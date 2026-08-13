@@ -235,8 +235,8 @@ defmodule Livekit.Agents.TTS.ElevenLabs do
       {Tesla.Middleware.Headers,
        [
          {"xi-api-key", key},
-         {"Content-Type", "application/json"},
-         {"Accept", "audio/mpeg"}
+         {"content-type", "application/json"},
+         {"accept", "audio/mpeg"}
        ]},
       {Tesla.Middleware.JSON,
        decode_content_types: ["application/json"], encode_content_type: "application/json"},
