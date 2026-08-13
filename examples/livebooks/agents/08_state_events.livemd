@@ -1,0 +1,403 @@
+# State Machines, Events, and EventBus Pub/Sub
+
+The LiveKit Agents framework tracks voice session lifecycle with two state machines
+and publishes all transitions as typed events through a Registry-based pub/sub bus.
+This livebook demonstrates both state machines, all event types, telemetry integration,
+and the EventBus subscribe/publish/unsubscribe API.
+
+No API keys required.
+
+## Setup
+
+```elixir
+Mix.install([
+  {:livekit, path: Path.join(__DIR__, "../../..")},
+  {:kino, "~> 0.14"}
+])
+
+alias Livekit.Agents.UserStateMachine
+alias Livekit.Agents.AgentStateMachine
+alias Livekit.Agents.EventBus
+alias Livekit.Agents.Events
+alias Livekit.Agents.Events.{
+  UserStateChanged,
+  AgentStateChanged,
+  SpeechCreated,
+  ConversationItemAdded,
+  ErrorEvent,
+  TelemetryMeasurement
+}
+```
+
+## Typed Event Structs
+
+Before starting the state machines, let's inspect the event types. All events are
+plain Elixir structs that you pattern-match on. No callbacks or behaviours required
+on the subscriber side.
+
+```elixir
+# Create sample event structs manually to explore their shapes
+user_evt = %UserStateChanged{
+  from: :listening,
+  to: :speaking,
+  timestamp: DateTime.utc_now()
+}
+
+agent_evt = %AgentStateChanged{
+  from: :listening,
+  to: :thinking,
+  timestamp: DateTime.utc_now()
+}
+
+speech_evt = %SpeechCreated{
+  text: "Hello, how can I help you?",
+  confidence: 0.95,
+  timestamp: DateTime.utc_now()
+}
+
+conv_evt = %ConversationItemAdded{
+  role: :user,
+  content: "What time is it?",
+  timestamp: DateTime.utc_now()
+}
+
+error_evt = %ErrorEvent{
+  stage: :stt,
+  reason: :api_error,
+  timestamp: DateTime.utc_now()
+}
+
+telemetry_evt = %TelemetryMeasurement{
+  metric: :ttft_ms,
+  value: 243.5,
+  metadata: %{model: "gpt-4o-mini"},
+  timestamp: DateTime.utc_now()
+}
+
+IO.inspect(user_evt, label: "UserStateChanged")
+IO.inspect(agent_evt, label: "AgentStateChanged")
+IO.inspect(speech_evt, label: "SpeechCreated")
+IO.inspect(conv_evt, label: "ConversationItemAdded")
+IO.inspect(error_evt, label: "ErrorEvent")
+IO.inspect(telemetry_evt, label: "TelemetryMeasurement")
+```
+
+## UserStateMachine
+
+The `UserStateMachine` tracks the human speaker's voice activity state:
+
+- `:listening` — waiting for the user to speak (initial state)
+- `:speaking` — user speech detected
+- `:away` — user was speaking but went silent beyond `away_timeout_ms`
+
+Transitions are triggered by explicit API calls: `speech_start/1` and `speech_end/1`.
+
+```elixir
+{:ok, user_sm} = UserStateMachine.start_link(
+  away_timeout_ms: 2_000  # go away after 2 seconds of silence (reduced for demo)
+)
+
+IO.puts("Initial state: #{UserStateMachine.get_state(user_sm)}")
+
+# User starts speaking
+UserStateMachine.speech_start(user_sm)
+Process.sleep(10)
+IO.puts("After speech_start: #{UserStateMachine.get_state(user_sm)}")
+
+# User stops speaking
+UserStateMachine.speech_end(user_sm)
+Process.sleep(10)
+IO.puts("After speech_end: #{UserStateMachine.get_state(user_sm)}")
+
+# Another speech turn
+UserStateMachine.speech_start(user_sm)
+Process.sleep(10)
+IO.puts("After second speech_start: #{UserStateMachine.get_state(user_sm)}")
+UserStateMachine.speech_end(user_sm)
+Process.sleep(10)
+IO.puts("After second speech_end: #{UserStateMachine.get_state(user_sm)}")
+```
+
+```elixir
+# Observe the away timeout
+IO.puts("\nWaiting 2.5 seconds for away timeout...")
+Process.sleep(2500)
+IO.puts("State after away timeout: #{UserStateMachine.get_state(user_sm)}")
+
+# Coming back from away
+UserStateMachine.speech_start(user_sm)
+Process.sleep(10)
+IO.puts("After speech_start from away: #{UserStateMachine.get_state(user_sm)}")
+
+# Metrics
+metrics = UserStateMachine.get_metrics(user_sm)
+IO.puts("\nUserStateMachine metrics:")
+IO.puts("  total transitions: #{metrics.transitions}")
+IO.puts("  speaking_count:    #{metrics.speaking_count}")
+IO.puts("  away_count:        #{metrics.away_count}")
+```
+
+## AgentStateMachine
+
+The `AgentStateMachine` tracks the AI agent's lifecycle state:
+
+- `:initializing` — startup (initial state)
+- `:listening` — idle, waiting for user input
+- `:thinking` — processing STT/LLM
+- `:speaking` — TTS audio being played back
+
+```elixir
+{:ok, agent_sm} = AgentStateMachine.start_link([])
+
+IO.puts("Initial agent state: #{AgentStateMachine.get_state(agent_sm)}")
+
+# Simulate the agent starting up
+AgentStateMachine.transition(agent_sm, :listening)
+Process.sleep(10)
+IO.puts("After transition(:listening): #{AgentStateMachine.get_state(agent_sm)}")
+
+# User speaks, agent starts thinking
+AgentStateMachine.transition(agent_sm, :thinking)
+Process.sleep(10)
+IO.puts("After transition(:thinking): #{AgentStateMachine.get_state(agent_sm)}")
+
+# LLM finished, TTS begins
+AgentStateMachine.transition(agent_sm, :speaking)
+Process.sleep(10)
+IO.puts("After transition(:speaking): #{AgentStateMachine.get_state(agent_sm)}")
+
+# TTS finished, back to listening
+AgentStateMachine.transition(agent_sm, :listening)
+Process.sleep(10)
+IO.puts("After transition(:listening): #{AgentStateMachine.get_state(agent_sm)}")
+
+agent_metrics = AgentStateMachine.get_metrics(agent_sm)
+IO.puts("\nAgentStateMachine metrics:")
+IO.inspect(agent_metrics, pretty: true)
+```
+
+## EventBus: Starting the Pub/Sub System
+
+`EventBus` uses Elixir's `Registry` with `:duplicate` keys, allowing multiple processes
+to subscribe to the same `session_id`.
+
+```elixir
+# Start the EventBus (starts the Registry and attaches telemetry handlers)
+{:ok, _bus_pid} = EventBus.start_link()
+IO.puts("EventBus started")
+```
+
+## Subscribing to Events
+
+`subscribe/1` registers the calling process. All events published under that `session_id`
+are delivered as `{:livekit_event, event_struct}` messages.
+
+```elixir
+session_id = "demo-session-#{System.unique_integer()}"
+
+{:ok, _} = EventBus.subscribe(session_id)
+IO.puts("Subscribed to session: #{session_id}")
+```
+
+## Publishing Events
+
+`publish/2` sends an event to all subscribers of a session. Any struct can be published.
+The framework's state machines publish `UserStateChanged` and `AgentStateChanged` events
+automatically when a `session_id` is configured.
+
+```elixir
+# Publish various event types
+events_to_publish = [
+  %UserStateChanged{from: :listening, to: :speaking, timestamp: DateTime.utc_now()},
+  %AgentStateChanged{from: :listening, to: :thinking, timestamp: DateTime.utc_now()},
+  %SpeechCreated{text: "Hello there", confidence: 0.92, timestamp: DateTime.utc_now()},
+  %ConversationItemAdded{role: :user, content: "Hello there", timestamp: DateTime.utc_now()},
+  %AgentStateChanged{from: :thinking, to: :speaking, timestamp: DateTime.utc_now()},
+  %ConversationItemAdded{role: :assistant, content: "Hi! How can I help?", timestamp: DateTime.utc_now()}
+]
+
+Enum.each(events_to_publish, fn event ->
+  EventBus.publish(session_id, event)
+end)
+
+IO.puts("Published #{length(events_to_publish)} events")
+```
+
+```elixir
+# Collect and display all received events
+received =
+  Stream.repeatedly(fn ->
+    receive do
+      {:livekit_event, event} -> event
+    after
+      100 -> nil
+    end
+  end)
+  |> Stream.take_while(&(&1 != nil))
+  |> Enum.to_list()
+
+IO.puts("Received #{length(received)} events:\n")
+
+Enum.each(received, fn event ->
+  case event do
+    %UserStateChanged{from: f, to: t} ->
+      IO.puts("  [UserStateChanged] #{f} -> #{t}")
+    %AgentStateChanged{from: f, to: t} ->
+      IO.puts("  [AgentStateChanged] #{f} -> #{t}")
+    %SpeechCreated{text: text, confidence: conf} ->
+      IO.puts("  [SpeechCreated] #{inspect(text)} (confidence: #{conf})")
+    %ConversationItemAdded{role: role, content: content} ->
+      IO.puts("  [ConversationItemAdded] [#{role}] #{inspect(content)}")
+    %ErrorEvent{stage: stage, reason: reason} ->
+      IO.puts("  [ErrorEvent] #{stage}: #{inspect(reason)}")
+    %TelemetryMeasurement{metric: m, value: v} ->
+      IO.puts("  [TelemetryMeasurement] #{m}=#{v}")
+    other ->
+      IO.puts("  [other] #{inspect(other)}")
+  end
+end)
+```
+
+## State Machine Events via Session ID
+
+Configure a state machine with a `session_id` to have it auto-publish events to the
+EventBus on every transition.
+
+```elixir
+session_id2 = "auto-events-#{System.unique_integer()}"
+EventBus.subscribe(session_id2)
+
+# Start state machines wired to the EventBus
+{:ok, user_sm2} = UserStateMachine.start_link(
+  session_id: session_id2,
+  away_timeout_ms: 60_000
+)
+
+{:ok, agent_sm2} = AgentStateMachine.start_link(session_id: session_id2)
+
+# Simulate a full conversation turn
+UserStateMachine.speech_start(user_sm2)          # user starts talking
+AgentStateMachine.transition(agent_sm2, :listening)
+UserStateMachine.speech_end(user_sm2)            # user finishes talking
+AgentStateMachine.transition(agent_sm2, :thinking)  # agent processing
+AgentStateMachine.transition(agent_sm2, :speaking)  # agent speaking
+AgentStateMachine.transition(agent_sm2, :listening) # agent done
+
+Process.sleep(50)  # let messages arrive
+
+auto_events =
+  Stream.repeatedly(fn ->
+    receive do
+      {:livekit_event, e} -> e
+    after
+      100 -> nil
+    end
+  end)
+  |> Stream.take_while(&(&1 != nil))
+  |> Enum.to_list()
+
+IO.puts("Auto-published events from state machines (#{length(auto_events)}):")
+Enum.each(auto_events, fn e ->
+  case e do
+    %UserStateChanged{from: f, to: t} -> IO.puts("  [user] #{f} -> #{t}")
+    %AgentStateChanged{from: f, to: t} -> IO.puts("  [agent] #{f} -> #{t}")
+    other -> IO.inspect(other, label: "  other")
+  end
+end)
+```
+
+## Telemetry Bridge
+
+The EventBus attaches `:telemetry` handlers that bridge pipeline telemetry events into
+the pub/sub stream as `TelemetryMeasurement` structs.
+
+```elixir
+telemetry_session = "telemetry-#{System.unique_integer()}"
+EventBus.subscribe(telemetry_session)
+
+# Manually fire telemetry events (normally the Pipeline does this)
+:telemetry.execute(
+  [:livekit, :agents, :pipeline, :llm_first_token],
+  %{monotonic_time: System.monotonic_time()},
+  %{session_id: telemetry_session}
+)
+
+:telemetry.execute(
+  [:livekit, :agents, :pipeline, :tts_start],
+  %{monotonic_time: System.monotonic_time(), bytes: 4800},
+  %{session_id: telemetry_session}
+)
+
+Process.sleep(50)
+
+tel_events =
+  Stream.repeatedly(fn ->
+    receive do
+      {:livekit_event, %TelemetryMeasurement{} = e} -> e
+    after
+      200 -> nil
+    end
+  end)
+  |> Stream.take_while(&(&1 != nil))
+  |> Enum.to_list()
+
+IO.puts("Telemetry events bridged into EventBus: #{length(tel_events)}")
+Enum.each(tel_events, fn e ->
+  IO.puts("  metric=#{e.metric}, value=#{e.value}")
+end)
+```
+
+## emit_metric Convenience Function
+
+`EventBus.emit_metric/3` is a shorthand for publishing a `TelemetryMeasurement` directly.
+
+```elixir
+metric_session = "metrics-#{System.unique_integer()}"
+EventBus.subscribe(metric_session)
+
+EventBus.emit_metric(metric_session, :end_to_end_latency_ms, 512.3)
+EventBus.emit_metric(metric_session, :token_count, 87)
+EventBus.emit_metric(metric_session, :custom_metric, 42.0)
+
+Process.sleep(50)
+
+metric_events =
+  Stream.repeatedly(fn ->
+    receive do
+      {:livekit_event, %TelemetryMeasurement{} = e} -> e
+    after
+      100 -> nil
+    end
+  end)
+  |> Stream.take_while(&(&1 != nil))
+  |> Enum.to_list()
+
+IO.puts("Metrics received: #{length(metric_events)}")
+Enum.each(metric_events, fn e -> IO.puts("  #{e.metric}: #{e.value}") end)
+```
+
+## Unsubscribing and Cleanup
+
+```elixir
+EventBus.unsubscribe(session_id)
+EventBus.unsubscribe(session_id2)
+EventBus.unsubscribe(telemetry_session)
+EventBus.unsubscribe(metric_session)
+
+EventBus.stop()
+IO.puts("EventBus stopped, all sessions unsubscribed")
+```
+
+## Summary
+
+You now know how to:
+
+- Use `UserStateMachine` to track `:listening -> :speaking -> :away` transitions
+- Use `AgentStateMachine` to track `:initializing -> :listening -> :thinking -> :speaking`
+- Pattern-match on typed event structs: `UserStateChanged`, `AgentStateChanged`, `SpeechCreated`, etc.
+- Start the `EventBus` and subscribe processes to session IDs
+- Auto-publish state transitions by configuring `session_id` in state machine options
+- Bridge `:telemetry` pipeline events into the pub/sub stream via `TelemetryMeasurement`
+- Use `emit_metric/3` to publish custom measurement events
+
+Next: `09_worker_infrastructure.livemd` — the OTP supervision tree, job lifecycle, and graceful drain.

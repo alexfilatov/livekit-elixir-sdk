@@ -1,0 +1,305 @@
+# Click to Talk — Voice Agent
+
+```elixir
+Mix.install([
+  {:livekit, path: Path.join(__DIR__, "../../..")},
+  {:kino, "~> 0.14"}
+])
+```
+
+## API Keys
+
+```elixir
+openai_key_input = Kino.Input.text("OpenAI API Key", type: :password)
+```
+
+```elixir
+deepgram_key_input = Kino.Input.text("Deepgram API Key", type: :password)
+```
+
+## Start Agent
+
+```elixir
+openai_key = Kino.Input.read(openai_key_input)
+deepgram_key = Kino.Input.read(deepgram_key_input)
+
+use_mock = openai_key == "" or openai_key == nil
+
+alias Livekit.Agents.ChatContext
+alias Livekit.Agents.LLM.OpenAI, as: LLM
+alias Livekit.Agents.TTS.OpenAI, as: TTS
+alias Livekit.Agents.STT.Deepgram, as: STT
+
+llm_config = %LLM.Config{
+  api_key: openai_key,
+  model: "gpt-4o-mini",
+  instructions:
+    "You are a friendly voice assistant. Keep answers to 1-2 short sentences — they will be spoken aloud.",
+  temperature: 0.7,
+  max_tokens: 100,
+  mock: use_mock
+}
+
+tts_config = %TTS.Config{
+  api_key: openai_key,
+  voice: :nova,
+  response_format: :mp3,
+  speed: 1.0,
+  mock: use_mock
+}
+
+stt_config = %STT.Config{
+  api_key: deepgram_key,
+  model: "nova-2",
+  language: "en-US",
+  mock: deepgram_key == "" or deepgram_key == nil
+}
+
+{:ok, cache} = TTS.Cache.start_link(ttl_seconds: 600, max_entries: 100)
+
+ctx =
+  ChatContext.new()
+  |> ChatContext.add(
+    ChatContext.new_message(:system, [
+      "You are a friendly voice assistant. Keep answers to 1-2 short sentences — they will be spoken aloud."
+    ])
+  )
+
+{:ok, ctx_agent} = Agent.start_link(fn -> ctx end)
+
+agent_state = %{
+  llm_config: llm_config,
+  tts_config: tts_config,
+  stt_config: stt_config,
+  cache: cache,
+  ctx_agent: ctx_agent,
+  mock: use_mock
+}
+
+mode_label = if use_mock, do: "MOCK MODE (add API keys above for real voice)", else: "LIVE"
+Kino.Markdown.new("Agent ready — **#{mode_label}**")
+```
+
+## Click to Talk
+
+Hold the button to record, release to send. The agent will transcribe your speech, think, and respond with voice.
+
+```elixir
+defmodule VoiceWidget do
+  use Kino.JS
+  use Kino.JS.Live
+
+  def new(agent_state) do
+    Kino.JS.Live.new(__MODULE__, agent_state)
+  end
+
+  @impl true
+  def init(agent_state, ctx) do
+    {:ok, assign(ctx, agent_state: agent_state, processing: false)}
+  end
+
+  @impl true
+  def handle_connect(ctx) do
+    {:ok, %{}, ctx}
+  end
+
+  @impl true
+  def handle_event("audio_recorded", %{"audio" => audio_b64}, ctx) do
+    if ctx.assigns.processing do
+      broadcast_event(ctx, "state", %{state: "busy"})
+      {:noreply, ctx}
+    else
+      ctx = assign(ctx, processing: true)
+      broadcast_event(ctx, "state", %{state: "processing"})
+
+      agent = ctx.assigns.agent_state
+
+      audio_binary = Base.decode64!(audio_b64)
+
+      broadcast_event(ctx, "status", %{text: "Transcribing..."})
+
+      transcript =
+        case Livekit.Agents.STT.Deepgram.transcribe(audio_binary, config: agent.stt_config) do
+          {:ok, event} -> event.text || ""
+          {:error, _} -> "Hello"
+        end
+
+      broadcast_event(ctx, "transcript", %{text: transcript})
+
+      broadcast_event(ctx, "status", %{text: "Thinking..."})
+      chat_ctx = Agent.get(agent.ctx_agent, & &1)
+
+      chat_ctx =
+        Livekit.Agents.ChatContext.add(
+          chat_ctx,
+          Livekit.Agents.ChatContext.new_message(:user, [transcript])
+        )
+
+      response_text =
+        case Livekit.Agents.LLM.OpenAI.chat(chat_ctx, config: agent.llm_config) do
+          {:ok, msg} ->
+            case msg.content do
+              [t] when is_binary(t) -> t
+              parts when is_list(parts) -> Enum.map_join(parts, " ", &to_string/1)
+              t when is_binary(t) -> t
+              _ -> "Sorry, I didn't understand that."
+            end
+
+          {:error, _} ->
+            "Sorry, something went wrong."
+        end
+
+      chat_ctx =
+        Livekit.Agents.ChatContext.add(
+          chat_ctx,
+          Livekit.Agents.ChatContext.new_message(:assistant, [response_text])
+        )
+
+      chat_ctx = Livekit.Agents.ChatContext.truncate(chat_ctx, 30)
+      Agent.update(agent.ctx_agent, fn _ -> chat_ctx end)
+
+      broadcast_event(ctx, "response", %{text: response_text})
+
+      broadcast_event(ctx, "status", %{text: "Speaking..."})
+
+      case Livekit.Agents.TTS.OpenAI.synthesize(response_text,
+             config: agent.tts_config,
+             cache: agent.cache
+           ) do
+        {:ok, audio} when byte_size(audio) > 0 ->
+          audio_b64_out = Base.encode64(audio)
+          broadcast_event(ctx, "play_audio", %{audio: audio_b64_out, format: "audio/mpeg"})
+
+        _ ->
+          broadcast_event(ctx, "status", %{text: "No audio generated"})
+      end
+
+      ctx = assign(ctx, processing: false)
+      broadcast_event(ctx, "state", %{state: "idle"})
+      {:noreply, ctx}
+    end
+  end
+
+  asset "main.js" do
+    """
+    export function init(ctx, _state) {
+      const root = ctx.root;
+
+      // Build DOM safely — no innerHTML
+      const container = document.createElement("div");
+      container.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:480px;background:#0a0a0f;border-radius:16px;position:relative;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;";
+
+      const style = document.createElement("style");
+      style.textContent = `
+        .dot-grid{position:absolute;inset:0;background-image:radial-gradient(circle,rgba(100,200,255,0.08) 1px,transparent 1px);background-size:24px 24px;}
+        .orb-wrap{position:relative;width:200px;height:200px;display:flex;align-items:center;justify-content:center;z-index:2;}
+        .orb{width:80px;height:80px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#4de8ff,#0088cc,#004466);box-shadow:0 0 40px rgba(77,232,255,0.3),0 0 80px rgba(77,232,255,0.1);transition:transform .3s,box-shadow .3s;}
+        .orb.rec{transform:scale(1.4);box-shadow:0 0 60px rgba(255,77,77,0.5);background:radial-gradient(circle at 35% 35%,#ff6b6b,#cc0044,#660022);animation:pr 1s ease-in-out infinite;}
+        .orb.think{animation:pt 1.5s ease-in-out infinite;background:radial-gradient(circle at 35% 35%,#a78bfa,#7c3aed,#4c1d95);box-shadow:0 0 60px rgba(167,139,250,0.4);}
+        .orb.speak{animation:ps .6s ease-in-out infinite;background:radial-gradient(circle at 35% 35%,#34d399,#059669,#064e3b);box-shadow:0 0 60px rgba(52,211,153,0.4);}
+        @keyframes pr{0%,100%{transform:scale(1.4)}50%{transform:scale(1.6)}}
+        @keyframes pt{0%,100%{transform:scale(1);opacity:.8}50%{transform:scale(1.15);opacity:1}}
+        @keyframes ps{0%,100%{transform:scale(1)}50%{transform:scale(1.2)}}
+        .tbtn{z-index:3;margin-top:32px;padding:14px 40px;font-size:16px;font-weight:700;letter-spacing:2px;text-transform:uppercase;border:2px solid #4de8ff;border-radius:40px;background:transparent;color:#4de8ff;cursor:pointer;transition:all .2s;user-select:none;-webkit-user-select:none;}
+        .tbtn:hover{background:rgba(77,232,255,0.1);}
+        .tbtn:active,.tbtn.on{background:rgba(77,232,255,0.2);border-color:#fff;color:#fff;}
+        .tbtn:disabled{opacity:.4;cursor:not-allowed;}
+        .stxt{z-index:3;margin-top:16px;color:rgba(255,255,255,0.5);font-size:13px;min-height:20px;text-align:center;}
+        .bub{z-index:3;max-width:380px;padding:10px 16px;border-radius:12px;font-size:14px;line-height:1.5;margin-top:6px;word-wrap:break-word;}
+        .bu{background:rgba(77,232,255,0.12);color:#4de8ff;}
+        .ba{background:rgba(52,211,153,0.12);color:#34d399;}
+        .cha{z-index:3;display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:12px;min-height:60px;}
+      `;
+      container.appendChild(style);
+
+      const grid = document.createElement("div"); grid.className = "dot-grid";
+      container.appendChild(grid);
+
+      const orbWrap = document.createElement("div"); orbWrap.className = "orb-wrap";
+      const orb = document.createElement("div"); orb.className = "orb";
+      orbWrap.appendChild(orb);
+      container.appendChild(orbWrap);
+
+      const btn = document.createElement("button"); btn.className = "tbtn"; btn.textContent = "CLICK TO TALK";
+      container.appendChild(btn);
+
+      const statusEl = document.createElement("div"); statusEl.className = "stxt";
+      container.appendChild(statusEl);
+
+      const chatArea = document.createElement("div"); chatArea.className = "cha";
+      container.appendChild(chatArea);
+
+      root.appendChild(container);
+
+      let mediaRecorder = null, audioChunks = [], isRecording = false;
+
+      function addBubble(text, type) {
+        while (chatArea.children.length >= 4) chatArea.removeChild(chatArea.firstChild);
+        const d = document.createElement("div");
+        d.className = "bub " + (type === "user" ? "bu" : "ba");
+        d.textContent = text;
+        chatArea.appendChild(d);
+      }
+
+      async function startRec() {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({audio:{sampleRate:16000,channelCount:1,echoCancellation:true,noiseSuppression:true}});
+          audioChunks = [];
+          mediaRecorder = new MediaRecorder(stream, {mimeType:"audio/webm;codecs=opus"});
+          mediaRecorder.ondataavailable = (e) => { if(e.data.size>0) audioChunks.push(e.data); };
+          mediaRecorder.start(100);
+          isRecording = true;
+          orb.className = "orb rec";
+          btn.textContent = "RECORDING...";
+          btn.classList.add("on");
+          statusEl.textContent = "Release to send";
+        } catch(e) { statusEl.textContent = "Microphone access denied"; }
+      }
+
+      async function stopRec() {
+        if(!mediaRecorder||!isRecording) return;
+        isRecording = false;
+        btn.classList.remove("on");
+        btn.textContent = "PROCESSING...";
+        btn.disabled = true;
+        mediaRecorder.stop();
+        mediaRecorder.stream.getTracks().forEach(t=>t.stop());
+        await new Promise(r=>{mediaRecorder.onstop=r;});
+        const blob = new Blob(audioChunks, {type:"audio/webm"});
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const b64 = reader.result.split(",")[1];
+          ctx.pushEvent("audio_recorded", {audio: b64});
+        };
+        reader.readAsDataURL(blob);
+      }
+
+      btn.addEventListener("mousedown", (e)=>{e.preventDefault();startRec();});
+      btn.addEventListener("mouseup", (e)=>{e.preventDefault();stopRec();});
+      btn.addEventListener("mouseleave", ()=>{if(isRecording)stopRec();});
+      btn.addEventListener("touchstart", (e)=>{e.preventDefault();startRec();});
+      btn.addEventListener("touchend", (e)=>{e.preventDefault();stopRec();});
+
+      ctx.handleEvent("state", ({state})=>{
+        if(state==="idle"){orb.className="orb";btn.textContent="CLICK TO TALK";btn.disabled=false;statusEl.textContent="";}
+        else if(state==="processing"){orb.className="orb think";}
+      });
+      ctx.handleEvent("status", ({text})=>{statusEl.textContent=text;});
+      ctx.handleEvent("transcript", ({text})=>{addBubble(text,"user");});
+      ctx.handleEvent("response", ({text})=>{addBubble(text,"agent");orb.className="orb speak";});
+      ctx.handleEvent("play_audio", ({audio,format})=>{
+        const raw=atob(audio);const arr=new Uint8Array(raw.length);
+        for(let i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i);
+        const blob=new Blob([arr],{type:format});
+        const url=URL.createObjectURL(blob);
+        const p=new Audio(url);
+        p.onended=()=>{URL.revokeObjectURL(url);orb.className="orb";statusEl.textContent="";};
+        p.play().catch(()=>{statusEl.textContent="Click page first to enable audio";});
+      });
+    }
+    """
+  end
+end
+
+VoiceWidget.new(agent_state)
+```

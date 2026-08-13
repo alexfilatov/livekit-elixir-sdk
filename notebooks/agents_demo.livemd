@@ -1,0 +1,247 @@
+<!-- livebook:{"persist_outputs":true} -->
+
+# LiveKit Agents — a working demo
+
+```elixir
+Mix.install([
+  {:livekit, path: Path.expand("..", __DIR__), env: :dev}
+])
+```
+
+## What this is
+
+An acceptance test you can read. Every cell below runs against the real
+`agents` branch API — no mocks of the SDK itself, no network, no API keys, and
+no Rust toolchain. If a cell fails, the branch is not ready for someone else
+to build on.
+
+It deliberately covers the two things that were broken before: `VoiceAgent`
+starting at all, and a pipeline turn actually reaching the providers.
+
+**What it does not cover:** publishing audio into a real LiveKit room. That
+needs the Rust NIF (`native/livekit_webrtc`) and a running LiveKit server.
+Everything else — tokens, the pipeline, the agent, chat context, events — runs
+here.
+
+## 1. Room tokens
+
+The one piece a web app needs on day one: a JWT that lets a browser join one
+room and nothing else.
+
+```elixir
+grants = Livekit.Grants.join_room("demo-room")
+
+jwt =
+  "devkey"
+  |> Livekit.AccessToken.new("devsecret")
+  |> Livekit.AccessToken.with_identity("visitor-42")
+  |> Livekit.AccessToken.with_ttl(600)
+  |> Livekit.AccessToken.with_grants(grants)
+  |> Livekit.AccessToken.to_jwt()
+
+byte_size(jwt)
+```
+
+A token nobody can verify is not a token. Round-trip it:
+
+```elixir
+{:ok, claims} = Livekit.TokenVerifier.verify(jwt, "devsecret")
+
+%{
+  identity: claims["sub"],
+  room: get_in(claims, ["video", "room"]),
+  can_join: get_in(claims, ["video", "roomJoin"]),
+  # Narrow on purpose: a leaked visitor token must not create or administer rooms.
+  can_create: get_in(claims, ["video", "roomCreate"]),
+  can_admin: get_in(claims, ["video", "roomAdmin"])
+}
+```
+
+## 2. Providers
+
+The pipeline talks to STT, LLM and TTS through behaviours. Real ones call
+Deepgram, OpenAI, ElevenLabs. Here they are three small modules, so the demo
+proves the *plumbing* rather than someone's API key.
+
+```elixir
+defmodule Demo.STT do
+  @behaviour Livekit.Agents.STT
+  alias Livekit.Agents.STT.SpeechEvent
+
+  @impl true
+  def transcribe(audio, _opts) do
+    # Pretend longer audio means more was said.
+    text = if byte_size(audio) > 1000, do: "what is the garden like", else: "hello"
+    {:ok, %SpeechEvent{type: :final, text: text, confidence: 0.94, language: "en-GB"}}
+  end
+
+  @impl true
+  def stream(_config), do: {:error, :not_implemented}
+  @impl true
+  def capabilities, do: %{streaming: false, interim_results: false, languages: ["en-GB"]}
+  @impl true
+  def validate_config(_config), do: :ok
+end
+
+defmodule Demo.LLM do
+  @behaviour Livekit.Agents.LLM
+
+  @impl true
+  def chat(chat_context, opts) do
+    instructions = Keyword.get(opts, :instructions, "")
+    last = chat_context |> Livekit.Agents.ChatContext.messages() |> List.last()
+    heard = if last, do: to_string(last.content), else: ""
+
+    {:ok,
+     %{
+       role: :assistant,
+       content: "[#{instructions}] You said: #{heard}. It is south-facing, about 60ft."
+     }}
+  end
+
+  @impl true
+  def stream(_ctx, _opts), do: {:error, :not_implemented}
+  @impl true
+  def capabilities,
+    do: %{streaming: false, tool_calling: false, vision: false, max_context_tokens: 4096}
+
+  @impl true
+  def validate_config(_config), do: :ok
+end
+
+defmodule Demo.TTS do
+  @behaviour Livekit.Agents.TTS
+
+  @impl true
+  # Real TTS returns encoded audio; the byte count is what matters here.
+  def synthesize(text, _opts), do: {:ok, :binary.copy(<<0>>, byte_size(text) * 16)}
+  @impl true
+  def stream(_config), do: {:error, :not_implemented}
+  @impl true
+  def capabilities, do: %{streaming: false, voices: ["demo"], formats: [:pcm16]}
+  @impl true
+  def validate_config(_config), do: :ok
+end
+
+:providers_defined
+```
+
+## 3. A pipeline turn, end to end
+
+`Pipeline` is a GenServer. It takes `{module, config}` tuples for all three
+providers and delivers synthesised audio back to `:subscriber` as
+`{:pipeline_audio, frame}`.
+
+```elixir
+alias Livekit.Agents.{Pipeline, AudioFrame}
+
+{:ok, pipeline} =
+  Pipeline.start_link(%Pipeline.Config{
+    stt: {Demo.STT, %{}},
+    llm: {Demo.LLM, %{}},
+    tts: {Demo.TTS, %{}},
+    llm_opts: [instructions: "You are a UK estate agent."],
+    subscriber: self(),
+    # Leave vad_threshold at its default. Setting it to 0.0 classifies
+    # SILENCE as speech, so the turn never closes and no reply is ever
+    # synthesised — the pipeline looks broken when it is doing as it was told.
+    silence_ms: 100
+  })
+
+Process.alive?(pipeline)
+```
+
+Push ~100ms of loud audio, then silence to close the turn:
+
+```elixir
+speech = AudioFrame.new(:crypto.strong_rand_bytes(4800), sample_rate: 48_000)
+silence = AudioFrame.new(:binary.copy(<<0>>, 4800), sample_rate: 48_000)
+
+Pipeline.push_frame(pipeline, speech)
+Process.sleep(50)
+for _ <- 1..6, do: Pipeline.push_frame(pipeline, silence)
+
+# The reply comes back asynchronously — this is the whole point of the design.
+reply =
+  receive do
+    {:pipeline_audio, %AudioFrame{} = frame} -> {:spoke, byte_size(frame.data)}
+  after
+    3000 -> :no_audio_within_3s
+  end
+```
+
+The chat context should now hold both sides of that exchange:
+
+```elixir
+pipeline
+|> Pipeline.get_chat_context()
+|> Livekit.Agents.ChatContext.messages()
+|> Enum.map(&{&1.role, to_string(&1.content) |> String.slice(0, 60)})
+```
+
+```elixir
+Pipeline.get_metrics(pipeline)
+```
+
+```elixir
+Pipeline.stop(pipeline)
+```
+
+## 4. VoiceAgent
+
+The higher-level wrapper. This is what could not start at all before: it built
+its pipeline through a builder API that never existed.
+
+```elixir
+alias Livekit.Agents.VoiceAgent
+
+{:ok, agent} =
+  VoiceAgent.start_link(%VoiceAgent.Config{
+    name: "Kerbside",
+    instructions: "You answer questions about the house you are outside.",
+    stt: {Demo.STT, %{}},
+    llm: {Demo.LLM, %{}},
+    tts: {Demo.TTS, %{}}
+  })
+
+Process.alive?(agent)
+```
+
+```elixir
+VoiceAgent.process_audio_frame(agent, speech)
+Process.sleep(50)
+for _ <- 1..6, do: VoiceAgent.process_audio_frame(agent, silence)
+Process.sleep(500)
+
+VoiceAgent.get_metrics(agent)
+```
+
+An agent with **no** providers is still valid — it just has no pipeline. This
+is the documented "instructions only" configuration, and it used to crash.
+
+```elixir
+{:ok, bare} = VoiceAgent.start_link(%VoiceAgent.Config{instructions: "Say hello"})
+result = {Process.alive?(bare), VoiceAgent.get_metrics(bare)}
+GenServer.stop(bare)
+result
+```
+
+```elixir
+GenServer.stop(agent)
+```
+
+## 5. What is NOT wired up
+
+Being able to say this precisely is the point of the exercise.
+
+```elixir
+%{
+  rust_nif_built: Livekit.WebRTC.Native.native?(),
+  # The SDK ships no supervision tree, so nothing starts the event bus
+  # registry. Subscribing to agent events needs the host app to start it.
+  event_bus_registry_running: is_pid(Process.whereis(Livekit.Agents.EventBus.Registry)),
+  note:
+    "Publishing audio into a real room needs the NIF plus a LiveKit server. " <>
+      "Everything above runs without either."
+}
+```

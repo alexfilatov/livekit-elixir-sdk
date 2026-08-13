@@ -37,7 +37,8 @@ defmodule Livekit.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      extra_applications: [:logger, :crypto, :gun, :grpc]
+      # :inets and :ssl are what OTP's httpc needs — the default adapter.
+      extra_applications: [:logger, :crypto, :inets, :ssl, :gun, :grpc]
     ]
   end
 
@@ -46,7 +47,12 @@ defmodule Livekit.MixProject do
     [
       {:protobuf, "~> 0.14.0"},
       {:tesla, "~> 1.7"},
-      {:hackney, "~> 1.18"},
+      # No HTTP client dependency by design — the Tesla adapter is chosen by
+      # the consumer via `config :livekit, :tesla_adapter` and defaults to
+      # OTP's httpc, which needs nothing. See `Livekit.HTTP`. Finch is here
+      # only so the recommended production adapter can be compiled and
+      # tested; it is optional and not started by this library.
+      {:finch, "~> 0.19", optional: true},
       {:jason, "~> 1.4"},
       {:joken, "~> 2.6"},
       {:inflex, "~> 2.1"},
@@ -58,7 +64,9 @@ defmodule Livekit.MixProject do
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       # Test dependencies
       {:bypass, "~> 2.1", only: :test},
-      {:mock, "~> 0.3.0", only: :test}
+      {:mock, "~> 0.3.0", only: :test},
+      # NIF dependencies (optional — only needed when compiling the Rust WebRTC client)
+      {:rustler, "~> 0.37", runtime: false, optional: true}
     ]
   end
 
@@ -71,7 +79,7 @@ defmodule Livekit.MixProject do
   defp package do
     [
       name: "livekit",
-      files: ~w(lib priv mix.exs README.md LICENSE),
+      files: ~w(lib native priv mix.exs README.md LICENSE),
       licenses: ["Apache-2.0"],
       links: %{
         "GitHub" => "https://github.com/alexfilatov/livekit"

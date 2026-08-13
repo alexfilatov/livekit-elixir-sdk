@@ -1,0 +1,361 @@
+# Interactive Voice Agent
+
+```elixir
+Mix.install([
+  {:livekit, path: Path.join(__DIR__, "../../..")},
+  {:kino, "~> 0.14"}
+])
+```
+
+## Overview
+
+This livebook lets you **talk to an AI voice agent** end-to-end:
+
+1. **You type** a message (or paste audio)
+2. **Deepgram STT** transcribes it (or we use your text directly)
+3. **OpenAI GPT** generates a response
+4. **OpenAI TTS** speaks the response back
+5. **You hear** the audio in your browser
+
+You need **two API keys**: one for Deepgram (STT) and one for OpenAI (LLM + TTS).
+Don't have keys? Scroll to the **Mock Mode** section at the bottom — it works without any keys.
+
+## Configuration
+
+Enter your API keys below. They're stored only in this Livebook session — never logged or saved.
+
+```elixir
+openai_key_input = Kino.Input.text("OpenAI API Key", type: :password)
+```
+
+```elixir
+deepgram_key_input = Kino.Input.text("Deepgram API Key (optional — skip for text-only mode)", type: :password)
+```
+
+```elixir
+voice_input = Kino.Input.select("TTS Voice", [
+  {:alloy, "Alloy (neutral)"},
+  {:echo, "Echo (male)"},
+  {:fable, "Fable (expressive)"},
+  {:onyx, "Onyx (deep male)"},
+  {:nova, "Nova (female)"},
+  {:shimmer, "Shimmer (soft female)"}
+])
+```
+
+```elixir
+system_prompt_input = Kino.Input.textarea("System Prompt (personality of your agent)",
+  default: "You are a friendly, helpful voice assistant. Keep responses concise — 1-2 sentences max, since they'll be spoken aloud."
+)
+```
+
+## Initialize the Agent
+
+This cell sets up the STT, LLM, and TTS providers plus a conversation context that persists across turns.
+
+```elixir
+alias Livekit.Agents.ChatContext
+alias Livekit.Agents.ChatContext.ChatMessage
+alias Livekit.Agents.LLM.OpenAI, as: LLM
+alias Livekit.Agents.TTS.OpenAI, as: TTS
+alias Livekit.Agents.STT.Deepgram, as: STT
+
+openai_key = Kino.Input.read(openai_key_input)
+deepgram_key = Kino.Input.read(deepgram_key_input)
+voice = Kino.Input.read(voice_input)
+system_prompt = Kino.Input.read(system_prompt_input)
+
+# Determine mode
+use_real_apis = openai_key != "" and openai_key != nil
+
+llm_config = %LLM.Config{
+  api_key: openai_key,
+  model: "gpt-4o-mini",
+  instructions: system_prompt,
+  temperature: 0.7,
+  max_tokens: 150,
+  mock: not use_real_apis
+}
+
+tts_config = %TTS.Config{
+  api_key: openai_key,
+  voice: voice,
+  response_format: :mp3,
+  speed: 1.0,
+  mock: not use_real_apis
+}
+
+stt_config = %STT.Config{
+  api_key: deepgram_key,
+  model: "nova-2",
+  language: "en-US",
+  mock: deepgram_key == "" or deepgram_key == nil
+}
+
+# Start TTS cache for faster repeated phrases
+{:ok, cache} = TTS.Cache.start_link(ttl_seconds: 600, max_entries: 100)
+
+# Initialize conversation with system prompt
+ctx = ChatContext.new()
+|> ChatContext.add(ChatContext.new_message(:system, [system_prompt]))
+
+# Store context in an Agent for multi-turn persistence
+{:ok, ctx_agent} = Agent.start_link(fn -> ctx end)
+
+mode = if use_real_apis, do: "LIVE (real APIs)", else: "MOCK (synthetic responses)"
+
+Kino.Markdown.new("""
+### Agent Ready! #{if use_real_apis, do: "🟢", else: "🟡"}
+
+**Mode:** #{mode}
+**LLM:** #{llm_config.model}
+**Voice:** #{voice}
+**System prompt:** #{String.slice(system_prompt, 0, 80)}...
+
+#{if use_real_apis, do: "Type a message below to talk to your agent.", else: "Running in mock mode — responses will be synthetic. Add API keys above for real responses."}
+""")
+```
+
+## Talk to the Agent
+
+Type your message and run the cell. The agent will respond with text AND audio.
+
+```elixir
+user_message_input = Kino.Input.textarea("Your message",
+  default: "Hello! What can you help me with?"
+)
+```
+
+```elixir
+user_text = Kino.Input.read(user_message_input)
+
+# Get current conversation context
+ctx = Agent.get(ctx_agent, & &1)
+
+# Add user message
+user_msg = ChatContext.new_message(:user, [user_text])
+ctx = ChatContext.add(ctx, user_msg)
+
+# Step 1: LLM — Generate response
+{:ok, assistant_response} = LLM.chat(ctx, config: llm_config)
+
+response_text = case assistant_response.content do
+  [text] when is_binary(text) -> text
+  parts when is_list(parts) -> Enum.map_join(parts, " ", &to_string/1)
+  text when is_binary(text) -> text
+  _ -> "I'm not sure how to respond to that."
+end
+
+# Add assistant response to context
+assistant_msg = ChatContext.new_message(:assistant, [response_text])
+ctx = ChatContext.add(ctx, assistant_msg)
+
+# Truncate to keep context manageable
+ctx = ChatContext.truncate(ctx, 50)
+
+# Save updated context
+Agent.update(ctx_agent, fn _ -> ctx end)
+
+# Step 2: TTS — Synthesize speech
+{:ok, audio_binary} = TTS.synthesize(response_text, config: tts_config, cache: cache)
+
+# Step 3: Display response + play audio
+turn_count = length(ChatContext.messages(ctx)) - 1  # minus system prompt
+
+audio_html = if byte_size(audio_binary) > 0 do
+  audio_b64 = Base.encode64(audio_binary)
+  mime = if tts_config.response_format == :mp3, do: "audio/mpeg", else: "audio/wav"
+  """
+  <audio controls autoplay style="width: 100%; margin-top: 8px;">
+    <source src="data:#{mime};base64,#{audio_b64}" type="#{mime}">
+  </audio>
+  """
+else
+  "<em>(No audio generated — empty response)</em>"
+end
+
+Kino.HTML.new("""
+<div style="font-family: system-ui; max-width: 600px;">
+  <div style="background: #f0f4ff; padding: 12px 16px; border-radius: 12px; margin-bottom: 8px;">
+    <strong>You:</strong> #{user_text}
+  </div>
+  <div style="background: #e8f5e9; padding: 12px 16px; border-radius: 12px; margin-bottom: 8px;">
+    <strong>Agent:</strong> #{response_text}
+  </div>
+  #{audio_html}
+  <div style="color: #888; font-size: 12px; margin-top: 8px;">
+    Turn #{div(turn_count, 2)} · Audio: #{Float.round(byte_size(audio_binary) / 1024, 1)} KB · Context: #{turn_count} messages
+  </div>
+</div>
+""")
+```
+
+## Multi-Turn Conversation
+
+The conversation context persists between runs. Just change the message above and re-run the cell.
+Each response builds on the full conversation history.
+
+To see the full conversation so far:
+
+```elixir
+ctx = Agent.get(ctx_agent, & &1)
+messages = ChatContext.messages(ctx)
+
+rows = Enum.map(messages, fn msg ->
+  content = case msg.content do
+    [text] when is_binary(text) -> text
+    parts when is_list(parts) -> Enum.map_join(parts, " ", &to_string/1)
+    other -> inspect(other)
+  end
+  %{
+    role: msg.role,
+    content: String.slice(content, 0, 100),
+    timestamp: Calendar.strftime(msg.created_at, "%H:%M:%S")
+  }
+end)
+
+Kino.DataTable.new(rows, name: "Conversation History")
+```
+
+## Reset Conversation
+
+Run this cell to start a fresh conversation (keeps the same system prompt).
+
+```elixir
+fresh_ctx = ChatContext.new()
+|> ChatContext.add(ChatContext.new_message(:system, [system_prompt]))
+
+Agent.update(ctx_agent, fn _ -> fresh_ctx end)
+
+Kino.Markdown.new("**Conversation reset.** Go back to the \"Talk to the Agent\" section.")
+```
+
+## Speech-to-Text Mode
+
+If you have a Deepgram key, you can transcribe audio files instead of typing.
+Upload a WAV or MP3 file and the agent will respond to what you said.
+
+```elixir
+audio_file_input = Kino.Input.audio("Record or upload audio", format: :wav)
+```
+
+```elixir
+audio_data = Kino.Input.read(audio_file_input)
+
+if audio_data do
+  # Read the audio binary
+  audio_binary = audio_data.file_ref
+  |> Kino.Input.file_path()
+  |> File.read!()
+
+  # Transcribe with Deepgram
+  {:ok, speech_event} = STT.transcribe(audio_binary, config: stt_config)
+
+  transcribed_text = speech_event.text
+
+  # Now process through LLM + TTS (same as text mode)
+  ctx = Agent.get(ctx_agent, & &1)
+  user_msg = ChatContext.new_message(:user, [transcribed_text])
+  ctx = ChatContext.add(ctx, user_msg)
+
+  {:ok, assistant_response} = LLM.chat(ctx, config: llm_config)
+
+  response_text = case assistant_response.content do
+    [text] when is_binary(text) -> text
+    parts when is_list(parts) -> Enum.map_join(parts, " ", &to_string/1)
+    _ -> "I couldn't understand that."
+  end
+
+  assistant_msg = ChatContext.new_message(:assistant, [response_text])
+  ctx = ChatContext.add(ctx, assistant_msg)
+  ctx = ChatContext.truncate(ctx, 50)
+  Agent.update(ctx_agent, fn _ -> ctx end)
+
+  {:ok, audio_binary} = TTS.synthesize(response_text, config: tts_config, cache: cache)
+
+  audio_b64 = Base.encode64(audio_binary)
+  mime = if tts_config.response_format == :mp3, do: "audio/mpeg", else: "audio/wav"
+
+  Kino.HTML.new("""
+  <div style="font-family: system-ui; max-width: 600px;">
+    <div style="background: #fff3e0; padding: 12px 16px; border-radius: 12px; margin-bottom: 8px;">
+      <strong>You said (transcribed):</strong> #{transcribed_text}
+      <br><span style="color: #888; font-size: 12px;">Confidence: #{Float.round((speech_event.confidence || 0.0) * 100, 1)}%</span>
+    </div>
+    <div style="background: #e8f5e9; padding: 12px 16px; border-radius: 12px; margin-bottom: 8px;">
+      <strong>Agent:</strong> #{response_text}
+    </div>
+    <audio controls autoplay style="width: 100%; margin-top: 8px;">
+      <source src="data:#{mime};base64,#{audio_b64}" type="#{mime}">
+    </audio>
+  </div>
+  """)
+else
+  Kino.Markdown.new("*Upload or record audio above, then re-run this cell.*")
+end
+```
+
+## Mock Mode (No API Keys)
+
+Don't have API keys? This section demonstrates the full flow with mock providers.
+Responses are synthetic but the entire pipeline runs identically.
+
+```elixir
+# Mock configuration — no API keys needed
+mock_llm = %LLM.Config{mock: true, instructions: "You are a helpful assistant."}
+mock_tts = %TTS.Config{mock: true, voice: :nova, response_format: :pcm}
+
+mock_ctx = ChatContext.new()
+|> ChatContext.add(ChatContext.new_message(:system, ["You are a helpful assistant."]))
+|> ChatContext.add(ChatContext.new_message(:user, ["What's the weather like today?"]))
+
+# LLM generates response (mock)
+{:ok, mock_response} = LLM.chat(mock_ctx, config: mock_llm)
+
+mock_text = case mock_response.content do
+  [t] when is_binary(t) -> t
+  parts when is_list(parts) -> Enum.map_join(parts, " ", &to_string/1)
+  t when is_binary(t) -> t
+end
+
+# TTS synthesizes (mock — sine wave)
+{:ok, mock_audio} = TTS.synthesize(mock_text, config: mock_tts)
+
+Kino.Markdown.new("""
+### Mock Mode Demo
+
+**User:** What's the weather like today?
+
+**Agent (mock):** #{mock_text}
+
+**Audio generated:** #{byte_size(mock_audio)} bytes (PCM sine wave)
+
+The full STT → LLM → TTS pipeline ran successfully with mock providers.
+Add real API keys in the Configuration section above for actual AI responses with real audio.
+""")
+```
+
+## Summary
+
+This livebook demonstrated the **complete voice agent loop**:
+
+| Step | Provider     | What it does                      |
+| ---- | ------------ | --------------------------------- |
+| 1    | Deepgram STT | Transcribes speech to text        |
+| 2    | OpenAI GPT   | Generates conversational response |
+| 3    | OpenAI TTS   | Synthesizes response as audio     |
+
+**Key features shown:**
+
+* Multi-turn conversation with persistent context
+* Audio playback directly in the browser
+* Voice selection (6 voices)
+* Response caching for repeated phrases
+* Mock mode fallback for development
+* Speech-to-text from uploaded audio files
+
+**Next steps:**
+
+* Connect to a LiveKit room for real-time WebRTC audio
+* Add tool calling for the agent to take actions
+* Use the Pipeline GenServer for automatic VAD and turn detection

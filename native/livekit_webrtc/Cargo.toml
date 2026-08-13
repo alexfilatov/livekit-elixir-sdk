@@ -1,0 +1,32 @@
+[package]
+name = "livekit_webrtc"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "livekit_webrtc"
+crate-type = ["cdylib"]
+
+[dependencies]
+rustler = "0.37"
+# `default = ["tokio"]` — the livekit crate ships NO TLS backend unless one is
+# named, and nothing warns you. The client builds, connects to nothing, and
+# reports `WsError(Url(TlsFeatureNotEnabled))` deep in its own logs while the
+# error that reaches the host application is "failed to retrieve region info:
+# error sending request", which points at the network instead.
+#
+# rustls with the system roots rather than native-tls: no OpenSSL at runtime,
+# and the CA store is already in the image. It is also why the crypto provider
+# has to be installed at NIF load — see src/lib.rs.
+livekit = { version = "0.7", features = ["rustls-tls-native-roots"] }
+# Direct dependency purely so the crypto provider can be installed at NIF
+# load. Cargo unifies this with the rustls that livekit already pulls in, so
+# the provider is installed on the same instance the HTTP client uses.
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
+# So the Rust side can be made to talk. livekit and reqwest both emit
+# `tracing` events; without a subscriber they go nowhere, and a failure deep
+# in the client surfaces to Elixir as one line with no cause attached.
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+once_cell = "1"
+tokio = { version = "1", features = ["full"] }
+futures = "0.3"
