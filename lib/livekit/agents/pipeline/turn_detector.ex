@@ -174,11 +174,17 @@ defmodule Livekit.Agents.Pipeline.TurnDetector do
 
   @impl true
   def handle_cast({:push_frame, :silence, frame}, %State{} = state) do
-    # Only start/reset the timer when currently speaking
+    # Only start the timer when currently speaking, and only once: silence is
+    # measured from when it started, not from the last frame. Restarting it per
+    # frame meant a 500ms timer was cancelled and re-armed a hundred times a
+    # second by a microphone that never stops sending, so it could not expire
+    # while anyone was connected — turns ran to 29 seconds and the visitor had
+    # given up long before the answer arrived. A speech frame cancels it.
     state =
       if state.vad_state == :speaking do
-        state = cancel_silence_timer(state)
-        timer = Process.send_after(self(), :silence_timeout, state.config.silence_ms)
+        timer =
+          state.silence_timer ||
+            Process.send_after(self(), :silence_timeout, state.config.silence_ms)
 
         # Keep the frame. A sentence is mostly below the VAD threshold — the
         # gaps between words, the tail of every consonant — and dropping those

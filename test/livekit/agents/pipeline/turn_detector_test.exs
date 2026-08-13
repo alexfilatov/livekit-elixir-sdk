@@ -84,6 +84,33 @@ defmodule Livekit.Agents.Pipeline.TurnDetectorTest do
       GenServer.stop(pid)
     end
 
+    test "a microphone that never stops sending still ends the turn" do
+      {:ok, pid} = TurnDetector.start_link(subscriber: self(), silence_ms: 50)
+
+      TurnDetector.push_frame(pid, {:speech, make_frame(1_000)})
+      assert_receive {:turn_start, _}, 200
+
+      # A real microphone delivers a frame every 10ms whether anyone is
+      # speaking or not, and does not stop when the speaker does. Re-arming the
+      # silence timer on each of them meant it could never expire while the
+      # visitor stayed connected. The frames must still be flowing when the
+      # turn ends, or the bug hides: stop pushing and the last timer fires.
+      pusher =
+        spawn_link(fn ->
+          Stream.repeatedly(fn ->
+            TurnDetector.push_frame(pid, {:silence, silent_frame()})
+            Process.sleep(5)
+          end)
+          |> Enum.take(400)
+        end)
+
+      assert_receive {:turn_end, _frames}, 300
+
+      Process.unlink(pusher)
+      Process.exit(pusher, :kill)
+      GenServer.stop(pid)
+    end
+
     test "accumulates multiple speech frames in :turn_end" do
       {:ok, pid} = TurnDetector.start_link(subscriber: self(), silence_ms: 50)
 
