@@ -150,6 +150,25 @@ defmodule Livekit.Agents.LLM.OpenAI do
   # Private — HTTP (chat)
   # ---------------------------------------------------------------------------
 
+  # `:instructions` was a documented, defaulted Config field that nothing read.
+  # The request was built from the chat context alone, so an application that
+  # set a system prompt got a generic assistant and no error to explain why.
+  #
+  # A system message already in the context wins: two system prompts contradict
+  # each other as often as they agree, and the caller who built the context
+  # meant theirs.
+  defp with_instructions(messages, instructions)
+       when is_binary(instructions) and instructions != "" do
+    # String keys, matching what to_openai_messages/1 emits — an atom-keyed
+    # entry here would serialise to the same JSON but break every later
+    # traversal of the list.
+    if Enum.any?(messages, &(Map.get(&1, "role") == "system")),
+      do: messages,
+      else: [%{"role" => "system", "content" => instructions} | messages]
+  end
+
+  defp with_instructions(messages, _), do: messages
+
   defp do_chat(%ChatContext{} = ctx, %Config{} = config, opts) do
     model = Keyword.get(opts, :model, config.model)
     temperature = Keyword.get(opts, :temperature, config.temperature)
@@ -159,7 +178,11 @@ defmodule Livekit.Agents.LLM.OpenAI do
     # Estimate max messages to keep: ~100 tokens per message, cap at 100 entries
     max_messages = min(div(128_000, 100), 100)
     truncated_ctx = ChatContext.truncate(ctx, max(max_messages, 20))
-    messages = to_openai_messages(truncated_ctx.items)
+
+    messages =
+      truncated_ctx.items
+      |> to_openai_messages()
+      |> with_instructions(Keyword.get(opts, :instructions, config.instructions))
 
     body =
       %{
@@ -197,7 +220,11 @@ defmodule Livekit.Agents.LLM.OpenAI do
     # Estimate max messages to keep: ~100 tokens per message, cap at 100 entries
     max_messages = min(div(128_000, 100), 100)
     truncated_ctx = ChatContext.truncate(ctx, max(max_messages, 20))
-    messages = to_openai_messages(truncated_ctx.items)
+
+    messages =
+      truncated_ctx.items
+      |> to_openai_messages()
+      |> with_instructions(Keyword.get(opts, :instructions, config.instructions))
 
     body =
       %{

@@ -109,6 +109,48 @@ defmodule Livekit.Agents.LLM.OpenAITest do
       }
     end
 
+    test "config.instructions becomes the system message", %{bypass: bypass} do
+      # `:instructions` is a documented, defaulted field on Config. It was read
+      # by nothing: the request was built from the chat context alone, so every
+      # system prompt an application set was silently dropped and the model
+      # answered as a generic assistant. Nothing errored — the reply was simply
+      # not the product's.
+      ctx = ChatContext.new() |> ChatContext.add(ChatContext.new_message(:user, ["Hello"]))
+
+      Bypass.expect_once(bypass, "POST", "/v1/chat/completions", fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"messages" => messages} = Jason.decode!(body)
+
+        assert [%{"role" => "system", "content" => "You are a UK estate agent."} | _] = messages
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(text_response("Hello.")))
+      end)
+
+      config = %{config_for(bypass) | instructions: "You are a UK estate agent."}
+      OpenAI.chat(ctx, config: config)
+    end
+
+    test "a system message already in the context is not duplicated", %{bypass: bypass, ctx: ctx} do
+      Bypass.expect_once(bypass, "POST", "/v1/chat/completions", fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"messages" => messages} = Jason.decode!(body)
+
+        # Two system prompts contradict each other as often as they agree, and
+        # the caller who built the context meant theirs.
+        assert Enum.count(messages, &(&1["role"] == "system")) == 1
+        assert hd(messages)["content"] == "You are helpful."
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(text_response("Four.")))
+      end)
+
+      config = %{config_for(bypass) | instructions: "You are a UK estate agent."}
+      OpenAI.chat(ctx, config: config)
+    end
+
     test "POSTs to /v1/chat/completions", %{bypass: bypass, ctx: ctx} do
       Bypass.expect_once(bypass, "POST", "/v1/chat/completions", fn conn ->
         conn
