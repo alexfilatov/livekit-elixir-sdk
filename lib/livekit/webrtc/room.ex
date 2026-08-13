@@ -131,6 +131,17 @@ defmodule Livekit.WebRTC.Room do
     nif = config.nif_module
 
     case nif.room_connect(config.url, config.token, self()) do
+      # What the real NIF returns. `room_connect` is
+      # `Result<ResourceArc<RoomResource>, Error>`, and rustler encodes `Ok`
+      # as the bare resource term — there is no `:ok` tuple around it. Only
+      # the tuple was matched here, so the first genuinely successful connect
+      # died on a CaseClauseError naming a bare reference. It went unnoticed
+      # for as long as connecting failed earlier for other reasons.
+      room_ref when is_reference(room_ref) ->
+        Logger.info("[Livekit.WebRTC.Room] Connected to #{config.url}")
+        {:ok, %State{config: config, room_ref: room_ref, nif_module: nif}}
+
+      # Mock NIF modules in tests wrap it; keep accepting that.
       {:ok, room_ref} ->
         Logger.info("[Livekit.WebRTC.Room] Connected to #{config.url}")
         {:ok, %State{config: config, room_ref: room_ref, nif_module: nif}}
