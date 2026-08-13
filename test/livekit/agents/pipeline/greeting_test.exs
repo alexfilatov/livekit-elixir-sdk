@@ -177,4 +177,50 @@ defmodule Livekit.Agents.Pipeline.GreetingTest do
     assert Process.alive?(pid)
     refute_receive {:pipeline_audio, _}, 100
   end
+
+  test "a recorded greeting is played, not synthesised" do
+    config =
+      struct!(Pipeline.Config,
+        stt: {NoopSTT, %{}},
+        llm: {NoopLLM, %{}},
+        # Would prefix "AUDIO:" if it were used. It must not be.
+        tts: {EchoTTS, %{}},
+        greeting: "This is 14 Elm Road.",
+        greeting_audio: <<1, 2, 3, 4>>,
+        greeting_sample_rate: 24_000,
+        subscriber: nil
+      )
+
+    {:ok, pid} = Pipeline.start_link(config)
+    on_exit(fn -> if Process.alive?(pid), do: Pipeline.stop(pid) end)
+
+    Pipeline.set_subscriber(pid, self())
+    Pipeline.greet(pid)
+
+    assert_receive {:pipeline_audio, %AudioFrame{data: <<1, 2, 3, 4>>, sample_rate: 24_000}}, 2000
+  end
+
+  test "a recorded greeting still tells the model what was said" do
+    config =
+      struct!(Pipeline.Config,
+        stt: {NoopSTT, %{}},
+        llm: {NoopLLM, %{}},
+        tts: {EchoTTS, %{}},
+        greeting: "Thanks for getting in touch.",
+        greeting_audio: <<1, 2, 3, 4>>,
+        subscriber: nil
+      )
+
+    {:ok, pid} = Pipeline.start_link(config)
+    on_exit(fn -> if Process.alive?(pid), do: Pipeline.stop(pid) end)
+
+    Pipeline.set_subscriber(pid, self())
+    Pipeline.greet(pid)
+    assert_receive {:pipeline_audio, _}, 2000
+
+    # Otherwise the agent opens the conversation by greeting a second time.
+    messages = pid |> Pipeline.get_chat_context() |> ChatContext.messages()
+    assert [%{role: :assistant} = msg] = messages
+    assert to_string(msg.content) =~ "Thanks for getting in touch"
+  end
 end

@@ -83,6 +83,11 @@ defmodule Livekit.Agents.Pipeline do
     - `:stt_opts` — Extra keyword opts forwarded to the STT provider's `transcribe/2`.
     - `:llm_opts` — Extra keyword opts forwarded to the LLM provider's `chat/2`.
     - `:tts_opts` — Extra keyword opts forwarded to the TTS provider's `synthesize/2`.
+    - `:greeting_audio` — Optional PCM 16-bit audio of the greeting, recorded in
+      advance. When set the greeting is played rather than synthesised, and
+      `:greeting` is used only as the chat-context record of what was said.
+    - `:greeting_sample_rate` — Sample rate of `:greeting_audio`. Defaults to
+      the TTS provider's.
     - `:on_turn` — Optional `fun(user_text, assistant_text)` called after each
       completed turn. The pipeline holds the transcript only in memory and it
       dies with the room, so anything that needs to keep the conversation —
@@ -115,7 +120,9 @@ defmodule Livekit.Agents.Pipeline do
       stt_opts: [],
       llm_opts: [],
       tts_opts: [],
-      on_turn: nil
+      on_turn: nil,
+      greeting_audio: nil,
+      greeting_sample_rate: nil
     ]
   end
 
@@ -324,6 +331,34 @@ defmodule Livekit.Agents.Pipeline do
   # the model's next turn knows what it has already said and does not
   # introduce itself twice.
   def handle_info(:greet, %State{greeted?: true} = state), do: {:noreply, state}
+
+  # An opening line that was recorded in advance. Nothing to synthesise, so the
+  # visitor hears it as soon as anyone is there to hear it, instead of waiting
+  # out a round trip to a speech API at the start of every conversation.
+  def handle_info(:greet, %State{config: %Config{greeting_audio: audio}} = state)
+      when is_binary(audio) and byte_size(audio) > 0 do
+    state = %{state | greeted?: true}
+
+    Logger.info("Pipeline: greeting from a recording, #{byte_size(audio)} bytes")
+
+    if state.config.subscriber do
+      send(
+        state.config.subscriber,
+        {:pipeline_audio,
+         %AudioFrame{data: audio, sample_rate: greeting_sample_rate(state.config)}}
+      )
+    end
+
+    # Still into the chat context: the model has to know what has already been
+    # said to the visitor, or it opens by saying it again.
+    ctx =
+      ChatContext.add(
+        state.chat_context,
+        ChatContext.new_message(:assistant, [state.config.greeting])
+      )
+
+    {:noreply, %{state | chat_context: ctx}}
+  end
 
   def handle_info(:greet, %State{} = state) do
     greeting = state.config.greeting
@@ -620,6 +655,10 @@ defmodule Livekit.Agents.Pipeline do
     {tts_module, tts_config} = config.tts
     tts_module.synthesize(text, Keyword.merge(opts, config: tts_config))
   end
+
+  # A recording carries its own rate, which need not be the TTS provider's.
+  defp greeting_sample_rate(%Config{greeting_sample_rate: rate}) when is_integer(rate), do: rate
+  defp greeting_sample_rate(%Config{} = config), do: tts_sample_rate(config)
 
   # The rate the TTS provider actually returns, not the AudioFrame default.
   # Publishing 24kHz speech labelled 48kHz creates the track at the wrong rate
