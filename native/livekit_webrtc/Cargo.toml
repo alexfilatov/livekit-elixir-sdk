@@ -9,7 +9,16 @@ crate-type = ["cdylib"]
 
 [dependencies]
 rustler = "0.37"
-livekit = "0.7"
+# `default = ["tokio"]` — the livekit crate ships NO TLS backend unless one is
+# named, and nothing warns you. The client builds, connects to nothing, and
+# reports `WsError(Url(TlsFeatureNotEnabled))` deep in its own logs while the
+# error that reaches the host application is "failed to retrieve region info:
+# error sending request", which points at the network instead.
+#
+# rustls with the system roots rather than native-tls: no OpenSSL at runtime,
+# and the CA store is already in the image. It is also why the crypto provider
+# has to be installed at NIF load — see src/lib.rs.
+livekit = { version = "0.7", features = ["rustls-tls-native-roots"] }
 # Direct dependency purely so the crypto provider can be installed at NIF
 # load. Cargo unifies this with the rustls that livekit already pulls in, so
 # the provider is installed on the same instance the HTTP client uses.
