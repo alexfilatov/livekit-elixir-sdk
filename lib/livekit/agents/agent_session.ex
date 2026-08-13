@@ -343,9 +343,19 @@ defmodule Livekit.Agents.AgentSession do
       {:error, {:token_build_failed, error}}
   end
 
+  # LiveKit's Rust client wants a ws:// or wss:// URL. LiveKit Cloud hands the
+  # worker an `https://` regional URL in the job assignment, which the client
+  # cannot use to open a signal connection: it fails with
+  # "failed to retrieve region info: error sending request", naming an address
+  # that is perfectly reachable, so it reads as a network fault rather than a
+  # scheme it will not accept.
+  defp ws_url("https://" <> rest), do: "wss://" <> rest
+  defp ws_url("http://" <> rest), do: "ws://" <> rest
+  defp ws_url(url), do: url
+
   defp start_room(config, token) do
     Room.connect(%Room.Config{
-      url: config.server_url,
+      url: ws_url(config.server_url),
       token: token,
       auto_subscribe: config.auto_subscribe,
       nif_module: config.nif_module
