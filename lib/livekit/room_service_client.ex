@@ -66,6 +66,24 @@ defmodule Livekit.RoomServiceClient do
 
   @doc """
   Creates a new room.
+
+  ## Options
+
+  Besides the room settings, `:agents` takes a list of
+  `%Livekit.RoomAgentDispatch{name: "my-agent"}` and is how an agent is
+  dispatched **explicitly**, at the moment the room comes into being:
+
+      RoomServiceClient.create_room(client, "support-42",
+        agents: [%Livekit.RoomAgentDispatch{name: "my-agent"}]
+      )
+
+  This matters for any agent expected to speak first. A room created
+  implicitly by the first participant joining has no agent attached, so the
+  visitor arrives to silence and nothing reports a problem. Creating the room
+  ahead of them, naming the agent, is what puts it there to greet them.
+
+  A worker that registered with an `agent_name` receives explicit dispatch
+  only, so the name here must match the worker's.
   """
   def create_room(%__MODULE__{} = client, name, opts \\ []) do
     path = "/twirp/livekit.RoomService/CreateRoom"
@@ -81,7 +99,8 @@ defmodule Livekit.RoomServiceClient do
         min_playout_delay: Keyword.get(opts, :min_playout_delay),
         max_playout_delay: Keyword.get(opts, :max_playout_delay),
         node_id: Keyword.get(opts, :node_id),
-        sync_streams: Keyword.get(opts, :sync_streams)
+        sync_streams: Keyword.get(opts, :sync_streams),
+        agents: Keyword.get(opts, :agents, [])
       })
       |> CreateRoomRequest.encode()
 

@@ -71,6 +71,8 @@ defmodule Livekit.Agents.Pipeline do
     - `:tts` — `{module, config_map}` tuple for the TTS provider (required).
     - `:subscriber` — PID that receives `{:pipeline_audio, AudioFrame.t()}` output.
       Defaults to `nil` (audio is discarded).
+    - `:greeting` — text the agent speaks as soon as the pipeline starts,
+      before anybody has said anything. Defaults to `nil` (the agent waits).
     - `:vad_threshold` — RMS amplitude threshold for silence detection. Defaults to `0.01`.
     - `:silence_ms` — Milliseconds of silence after which a turn ends. Defaults to `500`.
     - `:stt_opts` — Extra keyword opts forwarded to the STT provider's `transcribe/2`.
@@ -97,6 +99,7 @@ defmodule Livekit.Agents.Pipeline do
       :llm,
       :tts,
       subscriber: nil,
+      greeting: nil,
       vad_threshold: 0.01,
       silence_ms: 500,
       stt_opts: [],
@@ -230,6 +233,11 @@ defmodule Livekit.Agents.Pipeline do
           chat_context: ChatContext.new()
         }
 
+        # Greet after init returns, not during it: synthesis is a network call,
+        # and a GenServer that blocks in init/1 blocks whoever started it —
+        # here, the agent session joining the room.
+        if greeting?(config), do: send(self(), :greet)
+
         {:ok, state}
 
       {:error, reason} ->
@@ -262,6 +270,42 @@ defmodule Livekit.Agents.Pipeline do
   end
 
   @impl true
+  # The agent speaks first.
+  #
+  # For an agent someone was sent to — a QR code on a For Sale board, a
+  # support widget they clicked — silence on arrival is indistinguishable from
+  # a broken page. Whoever arrived does not know whether to start talking, and
+  # a microphone permission prompt they have just accepted makes it worse.
+  #
+  # The greeting is recorded in the chat context as an assistant message, so
+  # the model's next turn knows what it has already said and does not
+  # introduce itself twice.
+  def handle_info(:greet, %State{} = state) do
+    greeting = state.config.greeting
+
+    case do_tts(greeting, state.config, state.config.tts_opts) do
+      {:ok, audio} when byte_size(audio) > 0 ->
+        if state.config.subscriber do
+          send(state.config.subscriber, {:pipeline_audio, %AudioFrame{data: audio}})
+        end
+
+        ctx =
+          ChatContext.add(
+            state.chat_context,
+            ChatContext.new_message(:assistant, [greeting])
+          )
+
+        {:noreply, %{state | chat_context: ctx}}
+
+      other ->
+        # A greeting that fails to synthesise must not take the session down:
+        # the visitor can still speak first, which is strictly better than a
+        # dead room.
+        Logger.warning("Pipeline greeting failed: #{inspect(other)}")
+        {:noreply, state}
+    end
+  end
+
   def handle_info({:turn_start, _timestamp_us}, %State{} = state) do
     updated_metrics = Map.put(state.metrics, :last_activity, DateTime.utc_now())
     {:noreply, %{state | metrics: updated_metrics}}
@@ -456,6 +500,8 @@ defmodule Livekit.Agents.Pipeline do
     {tts_module, tts_config} = config.tts
     tts_module.synthesize(text, Keyword.merge(opts, config: tts_config))
   end
+
+  defp greeting?(%Config{greeting: g}), do: is_binary(g) and String.trim(g) != ""
 
   @spec emit_telemetry(atom(), map()) :: :ok
   defp emit_telemetry(event, measurements) do
