@@ -40,6 +40,14 @@ defmodule MockPipelineForRoomIO do
   @impl true
   def init(test_pid), do: {:ok, test_pid}
 
+  # RoomIO claims the pipeline's audio output on init, so a stand-in pipeline
+  # has to answer that call — see Pipeline.set_subscriber/2.
+  @impl true
+  def handle_call({:set_subscriber, subscriber}, _from, test_pid) do
+    send(test_pid, {:set_subscriber_called, subscriber})
+    {:reply, :ok, test_pid}
+  end
+
   @impl true
   def handle_cast({:push_frame, frame}, test_pid) do
     send(test_pid, {:push_frame_called, frame})

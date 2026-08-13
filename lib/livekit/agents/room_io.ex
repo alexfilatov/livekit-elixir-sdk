@@ -138,6 +138,15 @@ defmodule Livekit.Agents.RoomIO do
   @impl true
   def init(%Config{} = config) do
     Room.subscribe_events(config.room_pid, self())
+
+    # Claim the pipeline's audio output. `AgentSession` starts the pipeline
+    # before RoomIO exists, so it can only name itself as subscriber — and it
+    # has no handler for `{:pipeline_audio, _}`, so every synthesised frame
+    # was silently discarded. The agent joined the room, said nothing, and
+    # published no track: from outside, indistinguishable from an agent that
+    # never arrived.
+    Livekit.Agents.Pipeline.set_subscriber(config.pipeline_pid, self())
+
     {:ok, %State{config: config}}
   end
 

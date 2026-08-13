@@ -204,6 +204,19 @@ defmodule Livekit.Agents.Pipeline do
   # GenServer callbacks
   # ---------------------------------------------------------------------------
 
+  @doc """
+  Redirects synthesised audio to `subscriber`.
+
+  The subscriber cannot be known when the pipeline starts: `RoomIO` is what
+  publishes audio into a room, and it needs the pipeline's pid to be built.
+  Rather than contort the startup order, RoomIO claims the subscription once
+  it exists.
+  """
+  @spec set_subscriber(pid(), pid()) :: :ok
+  def set_subscriber(pipeline_pid, subscriber) when is_pid(subscriber) do
+    GenServer.call(pipeline_pid, {:set_subscriber, subscriber})
+  end
+
   @impl true
   def init(%Config{stt: stt, llm: llm, tts: tts})
       when stt == nil or llm == nil or tts == nil do
@@ -439,6 +452,11 @@ defmodule Livekit.Agents.Pipeline do
     Logger.warning("Pipeline: active task exited abnormally — #{inspect(reason)}")
     updated_metrics = Map.update!(state.metrics, :errors, &(&1 + 1))
     {:noreply, %{state | metrics: updated_metrics, active_task: nil, status: :idle}}
+  end
+
+  @impl true
+  def handle_call({:set_subscriber, subscriber}, _from, %State{} = state) do
+    {:reply, :ok, %{state | config: %{state.config | subscriber: subscriber}}}
   end
 
   @impl true
