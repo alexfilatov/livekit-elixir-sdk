@@ -173,13 +173,21 @@ defmodule Livekit.Agents.Pipeline.TurnDetector do
   end
 
   @impl true
-  def handle_cast({:push_frame, :silence, _frame}, %State{} = state) do
+  def handle_cast({:push_frame, :silence, frame}, %State{} = state) do
     # Only start/reset the timer when currently speaking
     state =
       if state.vad_state == :speaking do
         state = cancel_silence_timer(state)
         timer = Process.send_after(self(), :silence_timeout, state.config.silence_ms)
-        %{state | silence_timer: timer}
+
+        # Keep the frame. A sentence is mostly below the VAD threshold — the
+        # gaps between words, the tail of every consonant — and dropping those
+        # frames handed the transcriber a few disconnected 10ms peaks instead
+        # of speech. OpenAI's answer to that is "Audio file might be corrupted
+        # or unsupported", which is a fair description of 10ms of a vowel.
+        # The turn still ends on silence_ms of continuous silence; what changes
+        # is that the utterance keeps its own pauses.
+        %{state | silence_timer: timer, utterance_frames: state.utterance_frames ++ [frame]}
       else
         state
       end

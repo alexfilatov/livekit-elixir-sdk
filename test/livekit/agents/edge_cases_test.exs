@@ -683,8 +683,10 @@ defmodule Livekit.Agents.EdgeCasesTest do
 
       TurnDetector.push_frame(pid, {:silence, silent_frame()})
 
+      # The speech frame plus the silence that ended the turn — an utterance
+      # keeps its own pauses.
       assert_receive {:turn_end, frames}, 200
-      assert length(frames) == 1
+      assert length(frames) == 2
 
       GenServer.stop(pid)
     end

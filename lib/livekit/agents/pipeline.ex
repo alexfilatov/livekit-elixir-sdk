@@ -207,14 +207,6 @@ defmodule Livekit.Agents.Pipeline do
   # ---------------------------------------------------------------------------
 
   @doc """
-  Redirects synthesised audio to `subscriber`.
-
-  The subscriber cannot be known when the pipeline starts: `RoomIO` is what
-  publishes audio into a room, and it needs the pipeline's pid to be built.
-  Rather than contort the startup order, RoomIO claims the subscription once
-  it exists.
-  """
-  @doc """
   Speaks the configured greeting, once.
 
   Separate from `set_subscriber/2` because claiming the output and having
@@ -229,6 +221,14 @@ defmodule Livekit.Agents.Pipeline do
   @spec greet(pid()) :: :ok
   def greet(pipeline_pid), do: GenServer.call(pipeline_pid, :greet)
 
+  @doc """
+  Redirects synthesised audio to `subscriber`.
+
+  The subscriber cannot be known when the pipeline starts: `RoomIO` is what
+  publishes audio into a room, and it needs the pipeline's pid to be built.
+  Rather than contort the startup order, RoomIO claims the subscription once
+  it exists.
+  """
   @spec set_subscriber(pid(), pid()) :: :ok
   def set_subscriber(pipeline_pid, subscriber) when is_pid(subscriber) do
     GenServer.call(pipeline_pid, {:set_subscriber, subscriber})

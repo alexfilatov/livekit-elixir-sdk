@@ -74,8 +74,11 @@ defmodule Livekit.Agents.Pipeline.TurnDetectorTest do
 
       TurnDetector.push_frame(pid, {:silence, silent_frame()})
 
+      # Two: the speech frame and the silence that ended the turn. Silence
+      # inside an utterance is part of the utterance — dropping it handed the
+      # transcriber disconnected fragments of speech.
       assert_receive {:turn_end, frames}, 300
-      assert length(frames) == 1
+      assert length(frames) == 2
       assert hd(frames).timestamp_us == 1_000
 
       GenServer.stop(pid)
@@ -91,8 +94,9 @@ defmodule Livekit.Agents.Pipeline.TurnDetectorTest do
 
       TurnDetector.push_frame(pid, {:silence, silent_frame()})
 
+      # Three speech frames plus the silence that ended the turn.
       assert_receive {:turn_end, frames}, 300
-      assert length(frames) == 3
+      assert length(frames) == 4
 
       GenServer.stop(pid)
     end
