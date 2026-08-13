@@ -56,6 +56,11 @@ defmodule Livekit.Agents.Pipeline do
   alias Livekit.Agents.ChatContext.FunctionCall
   alias Livekit.Agents.Pipeline.{EnergyVAD, TurnDetector}
 
+  # What Whisper-family models emit when handed a few seconds of room tone.
+  # They are not transcriptions, they are the model's favourite guesses, and
+  # answering them makes the agent talk to traffic.
+  @transcription_noise ["you", "thank you.", "thanks for watching!", "bye.", ".", "..."]
+
   # ---------------------------------------------------------------------------
   # Config struct
   # ---------------------------------------------------------------------------
@@ -387,6 +392,7 @@ defmodule Livekit.Agents.Pipeline do
       Task.async(fn ->
         with {:ok, speech_event} <- do_stt(frames, config, config.stt_opts),
              :ok <- emit_telemetry(:stt_complete, %{text: speech_event.text}),
+             :speech <- classify_transcript(speech_event.text),
              {:ok, llm_response} <-
                do_llm(
                  ChatContext.add(
@@ -428,6 +434,14 @@ defmodule Livekit.Agents.Pipeline do
 
     state =
       case result do
+        :no_speech ->
+          # A door, a car, a cough. The turn detector hears energy; only the
+          # transcriber knows whether it was language. Answering anyway makes
+          # the agent interrupt a silent street with "your message didn't come
+          # through", which is worse than saying nothing.
+          Logger.info("Pipeline: turn carried no speech, staying quiet")
+          %{state | active_task: nil, status: :idle}
+
         {:ok, user_text, nil, nil} ->
           # FunctionCall response — no audio to send, context unchanged for now
           Logger.debug("Pipeline turn complete (FunctionCall) — user: #{inspect(user_text)}")
@@ -590,6 +604,18 @@ defmodule Livekit.Agents.Pipeline do
 
   @spec do_tts(String.t(), Config.t(), keyword()) ::
           {:ok, binary()} | {:error, term()}
+  # Transcribers are obliging: handed noise, they return an empty string, and
+  # handed near-silence they hallucinate a stock phrase. Neither is a turn.
+  defp classify_transcript(text) do
+    trimmed = String.trim(text || "")
+
+    cond do
+      trimmed == "" -> :no_speech
+      String.downcase(trimmed) in @transcription_noise -> :no_speech
+      true -> :speech
+    end
+  end
+
   defp do_tts(text, config, opts) do
     {tts_module, tts_config} = config.tts
     tts_module.synthesize(text, Keyword.merge(opts, config: tts_config))

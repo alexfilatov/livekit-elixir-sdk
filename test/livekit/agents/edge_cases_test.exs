@@ -1,6 +1,16 @@
 # Mock providers for Pipeline edge-case tests — defined outside the test module
 # so that aliases within the test module resolve correctly.
 
+defmodule Livekit.Agents.EdgeCases.NoiseSTT do
+  @moduledoc false
+  use Livekit.Agents.STT
+
+  # What a transcriber returns for a passing car.
+  @impl true
+  def transcribe(_audio, _opts),
+    do: {:ok, %Livekit.Agents.STT.SpeechEvent{type: :final, text: "  ", confidence: 0.0}}
+end
+
 defmodule Livekit.Agents.EdgeCases.MockSTT do
   @moduledoc false
   use Livekit.Agents.STT
@@ -650,6 +660,32 @@ defmodule Livekit.Agents.EdgeCasesTest do
       assert_receive {:pipeline_audio, %AudioFrame{data: data}}, 500
       assert is_binary(data)
       assert byte_size(data) > 0
+
+      Pipeline.stop(pid)
+    end
+
+    test "background noise does not become a turn" do
+      test_pid = self()
+
+      config = %PipelineConfig{
+        stt: {Livekit.Agents.EdgeCases.NoiseSTT, %{}},
+        llm: {PipelineMockLLM, %{}},
+        tts: {MockTTS, %{}},
+        subscriber: test_pid,
+        silence_ms: 50,
+        on_turn: fn user, assistant -> send(test_pid, {:turn_recorded, user, assistant}) end
+      }
+
+      {:ok, pid} = Pipeline.start_link(config)
+
+      speech_data = for _ <- 1..160, into: <<>>, do: <<32_767::little-signed-16>>
+      Pipeline.push_frame(pid, AudioFrame.new(speech_data, sample_rate: 16_000, format: :pcm_16))
+      Pipeline.push_frame(pid, AudioFrame.new(<<0::320*8>>, sample_rate: 16_000, format: :pcm_16))
+
+      # The agent says nothing, records nothing, and is ready for the next turn.
+      refute_receive {:pipeline_audio, _}, 400
+      refute_receive {:turn_recorded, _, _}, 50
+      assert Process.alive?(pid)
 
       Pipeline.stop(pid)
     end
