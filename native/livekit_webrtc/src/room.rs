@@ -54,7 +54,7 @@ pub fn room_connect(
     Ok(ResourceArc::new(RoomResource {
         room,
         event_task: event_task.abort_handle(),
-        listener_pid,
+        published_audio: tokio::sync::OnceCell::new(),
     }))
 }
 

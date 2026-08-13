@@ -1,13 +1,18 @@
 use std::sync::Arc;
 
-use livekit::Room;
+use livekit::{
+    publication::LocalTrackPublication, webrtc::audio_source::native::NativeAudioSource, Room,
+};
 use rustler::{LocalPid, Resource};
-use tokio::task::AbortHandle;
+use tokio::{sync::OnceCell, task::AbortHandle};
 
 pub struct RoomResource {
     pub room: Arc<Room>,
     pub event_task: AbortHandle,
-    pub listener_pid: LocalPid,
+    /// The agent's outgoing audio track. Published exactly once, on the first
+    /// frame; every later frame is captured into the source held here. A track
+    /// per frame is not a stream anybody can listen to.
+    pub published_audio: OnceCell<(NativeAudioSource, LocalTrackPublication)>,
 }
 
 // Safety: RoomResource is only accessed via ResourceArc (reference-counted) and all interior
@@ -26,11 +31,9 @@ impl Resource for RoomResource {
 
 pub struct AudioTrackResource {
     pub stream_task: AbortHandle,
-    pub track_sid: String,
-    pub listener_pid: LocalPid,
 }
 
-// Safety: AudioTrackResource contains only AbortHandle, String, and LocalPid — all RefUnwindSafe.
+// Safety: AudioTrackResource contains only an AbortHandle, which is RefUnwindSafe.
 impl std::panic::RefUnwindSafe for AudioTrackResource {}
 
 #[rustler::resource_impl]

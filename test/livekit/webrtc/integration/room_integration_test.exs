@@ -107,6 +107,12 @@ defmodule Livekit.WebRTC.Integration.RoomIntegrationTest do
       # Subscriber should receive track_subscribed (auto_subscribe: true in RoomOptions)
       assert_receive {:track_subscribed, track_sid, "audio-publisher", "Audio"}, 5_000
 
+      # Every later frame must go into the same track. A track per frame is not a
+      # stream anybody can listen to — that was the bug.
+      :ok = AudioTrack.publish(publisher_room, silence_frame)
+      :ok = AudioTrack.publish(publisher_room, silence_frame)
+      refute_receive {:track_subscribed, _sid, "audio-publisher", "Audio"}, 2_000
+
       # Now subscribe to the audio stream
       {:ok, _track_ref} = AudioTrack.subscribe(subscriber_room, track_sid, self())
 

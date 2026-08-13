@@ -3,7 +3,7 @@ use std::time::Duration;
 use futures::StreamExt;
 use livekit::{
     options::TrackPublishOptions,
-    track::{LocalAudioTrack, LocalTrack, RemoteAudioTrack},
+    track::{LocalAudioTrack, LocalTrack, RemoteAudioTrack, TrackSource},
     webrtc::{
         audio_frame::AudioFrame,
         audio_source::{native::NativeAudioSource, AudioSourceOptions, RtcAudioSource},
@@ -60,8 +60,6 @@ pub fn audio_subscribe(
 
     Ok(ResourceArc::new(AudioTrackResource {
         stream_task: stream_task.abort_handle(),
-        track_sid,
-        listener_pid: subscriber_pid,
     }))
 }
 
@@ -81,13 +79,18 @@ fn find_remote_audio_track(room: &RoomResource, track_sid: &str) -> Option<Remot
     None
 }
 
+/// Publish one frame of the agent's speech.
+///
+/// The first frame publishes the track; every frame after it is captured into
+/// the source held on the room. Returns `:ok` or `{:error, reason}`.
 #[rustler::nif(schedule = "DirtyIo")]
-pub fn audio_publish_frame(
+pub fn audio_publish_frame<'a>(
+    env: rustler::Env<'a>,
     room: ResourceArc<RoomResource>,
     audio_binary: rustler::Binary,
     sample_rate: u32,
     channels: u32,
-) -> rustler::Atom {
+) -> rustler::Term<'a> {
     // Convert incoming little-endian int16 bytes back to Vec<i16>.
     // This is the inverse of the subscribe path's to_le_bytes() conversion.
     let bytes = audio_binary.as_slice();
@@ -98,33 +101,43 @@ pub fn audio_publish_frame(
 
     let samples_per_channel = (samples.len() / channels as usize) as u32;
 
-    let result = crate::runtime::TOKIO.block_on(async {
-        // Create a NativeAudioSource (created per-call for simplicity;
-        // a production implementation would cache the source per room — see Plan 12).
-        // queue_size_ms=100 (a multiple of 10) enables buffered capture.
-        let source = NativeAudioSource::new(
-            AudioSourceOptions {
-                echo_cancellation: false,
-                noise_suppression: false,
-                auto_gain_control: false,
-            },
-            sample_rate,
-            channels,
-            100, // queue_size_ms — must be a multiple of 10
-        );
+    let result: Result<(), String> = crate::runtime::TOKIO.block_on(async {
+        // Publish exactly once. The sample rate and channel count of the first
+        // frame define the track; the pipeline emits a single format throughout.
+        let (source, _publication) = room
+            .published_audio
+            .get_or_try_init(|| async {
+                // queue_size_ms=100 (a multiple of 10) enables buffered capture.
+                let source = NativeAudioSource::new(
+                    AudioSourceOptions {
+                        echo_cancellation: false,
+                        noise_suppression: false,
+                        auto_gain_control: false,
+                    },
+                    sample_rate,
+                    channels,
+                    100, // queue_size_ms — must be a multiple of 10
+                );
 
-        let track = LocalAudioTrack::create_audio_track(
-            "agent_audio",
-            RtcAudioSource::Native(source.clone()),
-        );
+                let track = LocalAudioTrack::create_audio_track(
+                    "agent_audio",
+                    RtcAudioSource::Native(source.clone()),
+                );
 
-        // Publish the track to the room (best-effort; error is ignored as the NIF
-        // returns :ok/:error based on capture_frame success, not publish success).
-        let _ = room
-            .room
-            .local_participant()
-            .publish_track(LocalTrack::Audio(track), TrackPublishOptions::default())
-            .await;
+                room.room
+                    .local_participant()
+                    .publish_track(
+                        LocalTrack::Audio(track),
+                        TrackPublishOptions {
+                            source: TrackSource::Microphone,
+                            ..Default::default()
+                        },
+                    )
+                    .await
+                    .map(|publication| (source, publication))
+                    .map_err(|e| format!("publish_track failed: {}", e))
+            })
+            .await?;
 
         let frame = AudioFrame {
             data: samples.into(),
@@ -134,17 +147,21 @@ pub fn audio_publish_frame(
         };
 
         // Guard against the known capture_frame blocking bug (RESEARCH.md Pitfall 2)
-        tokio::time::timeout(
+        match tokio::time::timeout(
             Duration::from_millis(CAPTURE_FRAME_TIMEOUT_MS),
             source.capture_frame(&frame),
         )
         .await
+        {
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(e)) => Err(format!("capture_frame failed: {}", e)),
+            // Never block the BEAM scheduler thread waiting on a wedged capture.
+            Err(_elapsed) => Err("capture_frame timed out".to_string()),
+        }
     });
 
     match result {
-        Ok(Ok(_)) => atoms::ok(),
-        Ok(Err(_)) => atoms::error(),
-        // Timeout elapsed — return error atom; never block the BEAM scheduler thread
-        Err(_timeout) => atoms::error(),
+        Ok(()) => atoms::ok().encode(env),
+        Err(reason) => (atoms::error(), reason).encode(env),
     }
 }
