@@ -89,6 +89,12 @@ fn find_remote_audio_track(room: &RoomResource, track_sid: &str) -> Option<Remot
 ///
 /// The first frame publishes the track; every frame after it is captured into
 /// the source held on the room. Returns `:ok` or `{:error, reason}`.
+///
+/// Because capture paces in real time, this call lasts as long as the audio
+/// does — a caller publishing a whole sentence blocks for the whole sentence.
+/// ponytail: acceptable while the agent is speaking anyway; if barge-in needs
+/// to interrupt mid-sentence, hand the chunk loop to a tokio task and let
+/// Elixir cancel it.
 #[rustler::nif(schedule = "DirtyIo")]
 pub fn audio_publish_frame<'a>(
     env: rustler::Env<'a>,
@@ -104,8 +110,6 @@ pub fn audio_publish_frame<'a>(
         .chunks_exact(2)
         .map(|chunk| i16::from_le_bytes([chunk[0], chunk[1]]))
         .collect();
-
-    let samples_per_channel = (samples.len() / channels as usize) as u32;
 
     let result: Result<(), String> = crate::runtime::TOKIO.block_on(async {
         // Publish exactly once. The sample rate and channel count of the first
@@ -145,25 +149,37 @@ pub fn audio_publish_frame<'a>(
             })
             .await?;
 
-        let frame = AudioFrame {
-            data: samples.into(),
-            sample_rate,
-            num_channels: channels,
-            samples_per_channel,
-        };
+        // capture_frame takes 10ms of audio and paces itself against the
+        // source's queue, so a whole synthesised sentence handed over in one
+        // call blocks until it has played and trips the timeout. A greeting is
+        // seconds long; the caller has no idea it is meant to arrive in
+        // 10ms slices, so the slicing happens here.
+        let frame_samples = (sample_rate as usize / 100) * channels as usize;
 
-        // Guard against the known capture_frame blocking bug (RESEARCH.md Pitfall 2)
-        match tokio::time::timeout(
-            Duration::from_millis(CAPTURE_FRAME_TIMEOUT_MS),
-            source.capture_frame(&frame),
-        )
-        .await
-        {
-            Ok(Ok(())) => Ok(()),
-            Ok(Err(e)) => Err(format!("capture_frame failed: {}", e)),
-            // Never block the BEAM scheduler thread waiting on a wedged capture.
-            Err(_elapsed) => Err("capture_frame timed out".to_string()),
+        for chunk in samples.chunks(frame_samples) {
+            let frame = AudioFrame {
+                data: chunk.into(),
+                sample_rate,
+                num_channels: channels,
+                samples_per_channel: (chunk.len() / channels as usize) as u32,
+            };
+
+            // Per chunk, not per call: pacing means each one waits roughly its
+            // own duration, and the guard is against a wedged capture rather
+            // than against the audio being long.
+            match tokio::time::timeout(
+                Duration::from_millis(CAPTURE_FRAME_TIMEOUT_MS),
+                source.capture_frame(&frame),
+            )
+            .await
+            {
+                Ok(Ok(())) => {}
+                Ok(Err(e)) => return Err(format!("capture_frame failed: {}", e)),
+                Err(_elapsed) => return Err("capture_frame timed out".to_string()),
+            }
         }
+
+        Ok(())
     });
 
     match result {
