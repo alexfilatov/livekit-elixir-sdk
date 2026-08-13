@@ -83,6 +83,14 @@ defmodule Livekit.Agents.RoomIO do
     defstruct [
       :config,
       subscribed_track: nil,
+      # Publishing paces in real time — a sentence takes as long to publish as
+      # it takes to say. Doing that inside the GenServer stopped this process
+      # reading its mailbox, so the visitor's microphone piled up and arrived
+      # in one burst the moment the agent stopped talking, collapsing the turn
+      # detector's timing into a single 10ms "turn". One publish at a time,
+      # off the loop, in order.
+      publish_task: nil,
+      publish_queue: [],
       metrics: %{frames_received: 0, frames_published: 0, errors: 0}
     ]
   end
@@ -214,32 +222,44 @@ defmodule Livekit.Agents.RoomIO do
     {:noreply, %{state | metrics: metrics}}
   end
 
-  # Synthesised audio from pipeline — publish back to room
+  # Synthesised audio from pipeline — publish back to room, off the loop.
   @impl true
   def handle_info({:pipeline_audio, %AudioFrame{} = frame}, state) do
-    case AudioTrack.publish(state.config.room_pid, frame) do
-      :ok ->
-        # The first frame is the one that publishes the track, so it is the one
-        # worth a line: after it, either the visitor hears the agent or the
-        # problem is downstream of us.
-        if state.metrics.frames_published == 0 do
-          Logger.info("[RoomIO] Published first audio frame (#{byte_size(frame.data)} bytes)")
-        end
-
-        metrics = Map.update!(state.metrics, :frames_published, &(&1 + 1))
-        {:noreply, %{state | metrics: metrics}}
-
-      {:error, reason} ->
-        Logger.warning("[RoomIO] Failed to publish pipeline audio: #{inspect(reason)}")
-
-        metrics =
-          state.metrics
-          |> Map.update!(:frames_published, &(&1 + 1))
-          |> Map.update!(:errors, &(&1 + 1))
-
-        {:noreply, %{state | metrics: metrics}}
-    end
+    {:noreply, enqueue_publish(state, frame)}
   end
+
+  # A publish finished.
+  @impl true
+  def handle_info({ref, result}, %State{publish_task: %Task{ref: task_ref}} = state)
+      when ref == task_ref do
+    Process.demonitor(ref, [:flush])
+
+    state =
+      case result do
+        :ok ->
+          if state.metrics.frames_published == 0 do
+            Logger.info("[RoomIO] Published first audio frame")
+          end
+
+          %{state | metrics: Map.update!(state.metrics, :frames_published, &(&1 + 1))}
+
+        {:error, reason} ->
+          Logger.warning("[RoomIO] Failed to publish pipeline audio: #{inspect(reason)}")
+
+          metrics =
+            state.metrics
+            |> Map.update!(:frames_published, &(&1 + 1))
+            |> Map.update!(:errors, &(&1 + 1))
+
+          %{state | metrics: metrics}
+      end
+
+    {:noreply, start_next_publish(%{state | publish_task: nil})}
+  end
+
+  # The publishing task exited; its result was handled above.
+  @impl true
+  def handle_info({:DOWN, _ref, :process, _pid, _reason}, state), do: {:noreply, state}
 
   # Participant disconnected — drop track reference
   @impl true
@@ -265,6 +285,24 @@ defmodule Livekit.Agents.RoomIO do
   # ---------------------------------------------------------------------------
   # Private Helpers
   # ---------------------------------------------------------------------------
+
+  # One utterance publishes at a time: two concurrent publishes would interleave
+  # their 10ms frames into the same track and come out as noise.
+  defp enqueue_publish(%State{publish_task: nil} = state, frame),
+    do: %{state | publish_task: publish_async(state, frame)}
+
+  defp enqueue_publish(%State{} = state, frame),
+    do: %{state | publish_queue: state.publish_queue ++ [frame]}
+
+  defp start_next_publish(%State{publish_queue: []} = state), do: state
+
+  defp start_next_publish(%State{publish_queue: [frame | rest]} = state),
+    do: %{state | publish_task: publish_async(state, frame), publish_queue: rest}
+
+  defp publish_async(%State{} = state, frame) do
+    room_pid = state.config.room_pid
+    Task.async(fn -> AudioTrack.publish(room_pid, frame) end)
+  end
 
   defp unsubscribe_track(nil), do: :ok
 
