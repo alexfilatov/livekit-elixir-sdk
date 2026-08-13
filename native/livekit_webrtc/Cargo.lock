@@ -1587,6 +1587,7 @@ dependencies = [
  "livekit",
  "once_cell",
  "rustler",
+ "rustls",
  "tokio",
 ]
 
