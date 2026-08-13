@@ -55,7 +55,11 @@ defmodule Livekit.Agents.TTS.OpenAI do
               voice: :alloy,
               response_format: :pcm,
               speed: 1.0,
-              sample_rate: 48_000,
+              # What the API actually returns for `response_format: :pcm` —
+              # 24kHz 16-bit mono LE. It is not a request parameter, so this
+              # field only describes the response; claiming 48kHz made the
+              # agent play back at double speed.
+              sample_rate: 24_000,
               base_url: "https://api.openai.com",
               cache_ttl_seconds: 3600,
               cache_max_entries: 500

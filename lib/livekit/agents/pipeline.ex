@@ -316,7 +316,11 @@ defmodule Livekit.Agents.Pipeline do
         )
 
         if state.config.subscriber do
-          send(state.config.subscriber, {:pipeline_audio, %AudioFrame{data: audio}})
+          send(
+            state.config.subscriber,
+            {:pipeline_audio,
+             %AudioFrame{data: audio, sample_rate: tts_sample_rate(state.config)}}
+          )
         end
 
         ctx =
@@ -423,7 +427,11 @@ defmodule Livekit.Agents.Pipeline do
             )
 
           if state.config.subscriber do
-            audio_frame = %AudioFrame{data: audio_binary}
+            audio_frame = %AudioFrame{
+              data: audio_binary,
+              sample_rate: tts_sample_rate(state.config)
+            }
+
             send(state.config.subscriber, {:pipeline_audio, audio_frame})
           end
 
@@ -542,6 +550,14 @@ defmodule Livekit.Agents.Pipeline do
     {tts_module, tts_config} = config.tts
     tts_module.synthesize(text, Keyword.merge(opts, config: tts_config))
   end
+
+  # The rate the TTS provider actually returns, not the AudioFrame default.
+  # Publishing 24kHz speech labelled 48kHz creates the track at the wrong rate
+  # and the agent plays back at double speed.
+  defp tts_sample_rate(%Config{tts: {_module, %{sample_rate: rate}}}) when is_integer(rate),
+    do: rate
+
+  defp tts_sample_rate(%Config{}), do: 48_000
 
   defp greeting?(%Config{greeting: g}), do: is_binary(g) and String.trim(g) != ""
 

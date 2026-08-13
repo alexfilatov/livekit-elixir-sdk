@@ -22,6 +22,15 @@ defmodule Livekit.WebRTC.AudioTrackTest do
     end
   end
 
+  # rustler encodes `Ok(resource)` as the bare resource term — no :ok tuple.
+  defmodule MockNativeBareRef do
+    @moduledoc false
+
+    def room_connect(_url, _token, _pid), do: {:ok, make_ref()}
+    def room_disconnect(_room_ref), do: :ok
+    def audio_subscribe(_room_ref, _track_sid, _subscriber_pid), do: make_ref()
+  end
+
   defmodule MockNativePublishError do
     @moduledoc false
 
@@ -88,6 +97,18 @@ defmodule Livekit.WebRTC.AudioTrackTest do
 
       # MockNative sends a confirmation message so we can assert the call was made
       assert_receive {:mock_subscribe_called, "TR_abc123"}, 500
+
+      Room.disconnect(room_pid)
+    end
+
+    # Every mock here wrapped the resource in an {:ok, _} tuple, so none of them
+    # returned what the real NIF returns. RoomIO matched only the tuple and died
+    # with a CaseClauseError on the first real subscribe in production.
+    test "normalises the bare resource term the real NIF returns" do
+      {:ok, room_pid} = Room.connect(mock_config(MockNativeBareRef))
+
+      assert {:ok, track_ref} = AudioTrack.subscribe(room_pid, "TR_abc123", self())
+      assert is_reference(track_ref)
 
       Room.disconnect(room_pid)
     end

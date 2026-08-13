@@ -21,7 +21,17 @@ defmodule Livekit.WebRTC.AudioTrack do
   def subscribe(room_pid, track_sid, subscriber_pid) do
     room_ref = Room.room_ref(room_pid)
     nif = Room.nif_module(room_pid)
-    nif.audio_subscribe(room_ref, track_sid, subscriber_pid)
+
+    case nif.audio_subscribe(room_ref, track_sid, subscriber_pid) do
+      # `audio_subscribe` is `Result<ResourceArc<AudioTrackResource>, Error>`,
+      # and rustler encodes `Ok` as the bare resource term — no `:ok` tuple.
+      # Normalised here rather than at each caller: the same shape already bit
+      # `room_connect`, and every caller downstream expects the tuple.
+      track_ref when is_reference(track_ref) -> {:ok, track_ref}
+      # Mock NIF modules in tests wrap it; keep accepting that.
+      {:ok, track_ref} -> {:ok, track_ref}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   @doc """
