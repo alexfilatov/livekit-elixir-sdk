@@ -10,7 +10,7 @@ use livekit::{
         audio_stream::native::{NativeAudioStream, NativeAudioStreamOptions},
     },
 };
-use rustler::{Encoder, LocalPid, OwnedEnv, ResourceArc};
+use rustler::{Encoder, LocalPid, OwnedBinary, OwnedEnv, ResourceArc};
 
 use crate::atoms;
 use crate::resources::{AudioTrackResource, RoomResource};
@@ -53,7 +53,13 @@ pub fn audio_subscribe(
             let mut env = OwnedEnv::new();
             // Safe: called from tokio worker thread, not a BEAM scheduler thread
             let _ = env.send_and_clear(&subscriber_pid, move |env| {
-                (atoms::audio_frame(), track_sid_clone, bytes).encode(env)
+                // An OwnedBinary, not the Vec directly: rustler encodes Vec<u8>
+                // as an Erlang list of integers, and every consumer of
+                // {:audio_frame, _, _} expects a binary.
+                let mut bin = OwnedBinary::new(bytes.len()).expect("audio frame allocation");
+                bin.as_mut_slice().copy_from_slice(&bytes);
+
+                (atoms::audio_frame(), track_sid_clone, bin.release(env)).encode(env)
             });
         }
     });

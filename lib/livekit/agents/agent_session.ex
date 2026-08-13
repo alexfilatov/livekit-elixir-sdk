@@ -367,7 +367,12 @@ defmodule Livekit.Agents.AgentSession do
   end
 
   defp start_pipeline(%Config{pipeline_config: pipeline_config}) do
-    Pipeline.start_link(%{pipeline_config | subscriber: self()})
+    # Deliberately not `subscriber: self()`. This process has no
+    # `{:pipeline_audio, _}` handler, so naming itself here both discarded
+    # every synthesised frame and — because the pipeline greets on init when a
+    # subscriber is already set — fired the greeting seconds before `RoomIO`
+    # existed to carry it. `RoomIO` claims the output in its own init.
+    Pipeline.start_link(pipeline_config)
   end
 
   defp start_room_io(room_pid, pipeline_pid) do
