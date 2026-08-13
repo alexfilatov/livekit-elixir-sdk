@@ -133,6 +133,8 @@ defmodule Livekit.Agents.Pipeline do
       :turn_detector,
       :chat_context,
       active_task: nil,
+      # So a re-subscribe cannot make the agent introduce itself twice.
+      greeted?: false,
       status: :idle,
       metrics: %{
         turns_processed: 0,
@@ -246,10 +248,12 @@ defmodule Livekit.Agents.Pipeline do
           chat_context: ChatContext.new()
         }
 
-        # Greet after init returns, not during it: synthesis is a network call,
-        # and a GenServer that blocks in init/1 blocks whoever started it —
-        # here, the agent session joining the room.
-        if greeting?(config), do: send(self(), :greet)
+        # Only greet now if somebody is already listening. When an agent is
+        # joining a room the subscriber is RoomIO, which cannot exist yet —
+        # it needs this pipeline's pid — so greeting here would synthesise
+        # the opening line and hand it to a process that drops it. The
+        # greeting is deferred to set_subscriber/2 in that case.
+        if greeting?(config) and config.subscriber, do: send(self(), :greet)
 
         {:ok, state}
 
@@ -293,8 +297,11 @@ defmodule Livekit.Agents.Pipeline do
   # The greeting is recorded in the chat context as an assistant message, so
   # the model's next turn knows what it has already said and does not
   # introduce itself twice.
+  def handle_info(:greet, %State{greeted?: true} = state), do: {:noreply, state}
+
   def handle_info(:greet, %State{} = state) do
     greeting = state.config.greeting
+    state = %{state | greeted?: true}
 
     case do_tts(greeting, state.config, state.config.tts_opts) do
       {:ok, audio} when byte_size(audio) > 0 ->
@@ -456,7 +463,14 @@ defmodule Livekit.Agents.Pipeline do
 
   @impl true
   def handle_call({:set_subscriber, subscriber}, _from, %State{} = state) do
-    {:reply, :ok, %{state | config: %{state.config | subscriber: subscriber}}}
+    state = %{state | config: %{state.config | subscriber: subscriber}}
+
+    # The deferred greeting. Whoever just claimed the output is the first
+    # process able to carry it anywhere, so this is the earliest moment the
+    # opening line can actually be heard.
+    if greeting?(state.config) and not state.greeted?, do: send(self(), :greet)
+
+    {:reply, :ok, state}
   end
 
   @impl true

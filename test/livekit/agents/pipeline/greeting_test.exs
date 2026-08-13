@@ -98,6 +98,38 @@ defmodule Livekit.Agents.Pipeline.GreetingTest do
     assert to_string(msg.content) =~ "14 Elm Road"
   end
 
+  test "with no subscriber yet, the greeting waits for one" do
+    config =
+      struct!(Pipeline.Config,
+        stt: {NoopSTT, %{}},
+        llm: {NoopLLM, %{}},
+        tts: {EchoTTS, %{}},
+        greeting: "This is 14 Elm Road.",
+        subscriber: nil
+      )
+
+    {:ok, pid} = Pipeline.start_link(config)
+    on_exit(fn -> if Process.alive?(pid), do: Pipeline.stop(pid) end)
+
+    # Nobody is listening yet. Greeting now would synthesise the opening line
+    # and hand it to nothing — which is exactly what happened when RoomIO
+    # claimed the output a moment after the pipeline started.
+    refute_receive {:pipeline_audio, _}, 300
+
+    Pipeline.set_subscriber(pid, self())
+    assert_receive {:pipeline_audio, %AudioFrame{data: "AUDIO:This is 14 Elm Road."}}, 2000
+  end
+
+  test "claiming the output twice does not greet twice" do
+    pid = start(tts: {EchoTTS, %{}}, greeting: "This is 14 Elm Road.")
+    assert_receive {:pipeline_audio, _}, 2000
+
+    Pipeline.set_subscriber(pid, self())
+
+    # A board that introduces itself twice sounds broken.
+    refute_receive {:pipeline_audio, _}, 300
+  end
+
   test "no greeting configured means the agent waits, as before" do
     start(tts: {EchoTTS, %{}})
     refute_receive {:pipeline_audio, _}, 300
