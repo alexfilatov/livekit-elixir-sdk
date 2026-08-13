@@ -78,6 +78,10 @@ defmodule Livekit.Agents.Pipeline do
     - `:stt_opts` — Extra keyword opts forwarded to the STT provider's `transcribe/2`.
     - `:llm_opts` — Extra keyword opts forwarded to the LLM provider's `chat/2`.
     - `:tts_opts` — Extra keyword opts forwarded to the TTS provider's `synthesize/2`.
+    - `:on_turn` — Optional `fun(user_text, assistant_text)` called after each
+      completed turn. The pipeline holds the transcript only in memory and it
+      dies with the room, so anything that needs to keep the conversation —
+      persistence, analytics, a CRM — hooks in here.
     """
 
     @type provider :: {module(), map()}
@@ -91,7 +95,8 @@ defmodule Livekit.Agents.Pipeline do
             silence_ms: pos_integer(),
             stt_opts: keyword(),
             llm_opts: keyword(),
-            tts_opts: keyword()
+            tts_opts: keyword(),
+            on_turn: (String.t(), String.t() -> any()) | nil
           }
 
     defstruct [
@@ -104,7 +109,8 @@ defmodule Livekit.Agents.Pipeline do
       silence_ms: 500,
       stt_opts: [],
       llm_opts: [],
-      tts_opts: []
+      tts_opts: [],
+      on_turn: nil
     ]
   end
 
@@ -453,6 +459,18 @@ defmodule Livekit.Agents.Pipeline do
             }
 
             send(state.config.subscriber, {:pipeline_audio, audio_frame})
+          end
+
+          # Outside the pipeline the transcript exists nowhere else: this process
+          # holds it in memory and it dies with the room. Failures here are the
+          # caller's problem to log, never the agent's to crash on — a lost
+          # transcript must not end a conversation mid-sentence.
+          if is_function(state.config.on_turn, 2) do
+            try do
+              state.config.on_turn.(user_text, content_to_string(llm_response.content))
+            rescue
+              e -> Logger.error("Pipeline on_turn raised: #{inspect(e)}")
+            end
           end
 
           updated_metrics = Map.update!(state.metrics, :turns_processed, &(&1 + 1))

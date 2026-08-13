@@ -653,6 +653,57 @@ defmodule Livekit.Agents.EdgeCasesTest do
 
       Pipeline.stop(pid)
     end
+
+    test "on_turn is called with both sides of the turn" do
+      test_pid = self()
+
+      config = %PipelineConfig{
+        stt: {MockSTT, %{}},
+        llm: {PipelineMockLLM, %{}},
+        tts: {MockTTS, %{}},
+        subscriber: test_pid,
+        silence_ms: 50,
+        on_turn: fn user, assistant -> send(test_pid, {:turn_recorded, user, assistant}) end
+      }
+
+      {:ok, pid} = Pipeline.start_link(config)
+
+      speech_data = for _ <- 1..160, into: <<>>, do: <<32_767::little-signed-16>>
+      Pipeline.push_frame(pid, AudioFrame.new(speech_data, sample_rate: 16_000, format: :pcm_16))
+      Pipeline.push_frame(pid, AudioFrame.new(<<0::320*8>>, sample_rate: 16_000, format: :pcm_16))
+
+      assert_receive {:turn_recorded, user, assistant}, 500
+      assert is_binary(user)
+      assert is_binary(assistant)
+
+      Pipeline.stop(pid)
+    end
+
+    test "a raising on_turn does not take the pipeline down" do
+      test_pid = self()
+
+      config = %PipelineConfig{
+        stt: {MockSTT, %{}},
+        llm: {PipelineMockLLM, %{}},
+        tts: {MockTTS, %{}},
+        subscriber: test_pid,
+        silence_ms: 50,
+        on_turn: fn _user, _assistant -> raise "the database is gone" end
+      }
+
+      {:ok, pid} = Pipeline.start_link(config)
+
+      speech_data = for _ <- 1..160, into: <<>>, do: <<32_767::little-signed-16>>
+      Pipeline.push_frame(pid, AudioFrame.new(speech_data, sample_rate: 16_000, format: :pcm_16))
+      Pipeline.push_frame(pid, AudioFrame.new(<<0::320*8>>, sample_rate: 16_000, format: :pcm_16))
+
+      # The visitor still hears the answer: losing the transcript is not worth
+      # ending the conversation over.
+      assert_receive {:pipeline_audio, %AudioFrame{}}, 500
+      assert Process.alive?(pid)
+
+      Pipeline.stop(pid)
+    end
   end
 
   # ---------------------------------------------------------------------------
