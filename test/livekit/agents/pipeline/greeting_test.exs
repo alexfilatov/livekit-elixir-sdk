@@ -116,8 +116,36 @@ defmodule Livekit.Agents.Pipeline.GreetingTest do
     # claimed the output a moment after the pipeline started.
     refute_receive {:pipeline_audio, _}, 300
 
+    # Claiming the output is not enough: an agent is dispatched when the room
+    # is created, before the visitor has finished joining, and audio published
+    # into an empty room is discarded rather than buffered.
     Pipeline.set_subscriber(pid, self())
+    refute_receive {:pipeline_audio, _}, 300
+
+    Pipeline.greet(pid)
     assert_receive {:pipeline_audio, %AudioFrame{data: "AUDIO:This is 14 Elm Road."}}, 2000
+  end
+
+  test "greeting twice is still one greeting" do
+    config =
+      struct!(Pipeline.Config,
+        stt: {NoopSTT, %{}},
+        llm: {NoopLLM, %{}},
+        tts: {EchoTTS, %{}},
+        greeting: "This is 14 Elm Road.",
+        subscriber: nil
+      )
+
+    {:ok, pid} = Pipeline.start_link(config)
+    on_exit(fn -> if Process.alive?(pid), do: Pipeline.stop(pid) end)
+
+    Pipeline.set_subscriber(pid, self())
+    Pipeline.greet(pid)
+    assert_receive {:pipeline_audio, _}, 2000
+
+    # A visitor who reconnects a track must not be introduced to twice.
+    Pipeline.greet(pid)
+    refute_receive {:pipeline_audio, _}, 300
   end
 
   test "claiming the output twice does not greet twice" do

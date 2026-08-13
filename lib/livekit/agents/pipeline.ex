@@ -214,6 +214,21 @@ defmodule Livekit.Agents.Pipeline do
   Rather than contort the startup order, RoomIO claims the subscription once
   it exists.
   """
+  @doc """
+  Speaks the configured greeting, once.
+
+  Separate from `set_subscriber/2` because claiming the output and having
+  somebody to hear it are different moments. LiveKit dispatches an agent when
+  the room is created, which is before the visitor's browser has finished
+  connecting; audio published in that gap is played to an empty room and
+  discarded, since WebRTC buffers nothing. Call this when a visitor is
+  demonstrably present.
+
+  A no-op when no greeting is configured or the agent has already greeted.
+  """
+  @spec greet(pid()) :: :ok
+  def greet(pipeline_pid), do: GenServer.call(pipeline_pid, :greet)
+
   @spec set_subscriber(pid(), pid()) :: :ok
   def set_subscriber(pipeline_pid, subscriber) when is_pid(subscriber) do
     GenServer.call(pipeline_pid, {:set_subscriber, subscriber})
@@ -357,6 +372,11 @@ defmodule Livekit.Agents.Pipeline do
     config = state.config
     chat_context = state.chat_context
 
+    # The first observable sign that the agent heard anything at all. Without
+    # it, "the visitor spoke and nothing happened" and "the visitor's audio
+    # never arrived" look identical from the logs.
+    Logger.info("Pipeline: turn ended, #{length(frames)} frames")
+
     task =
       Task.async(fn ->
         with {:ok, speech_event} <- do_stt(frames, config, config.stt_opts),
@@ -409,7 +429,7 @@ defmodule Livekit.Agents.Pipeline do
           %{state | metrics: updated_metrics, active_task: nil, status: :idle}
 
         {:ok, user_text, llm_response, audio_binary} ->
-          Logger.debug(
+          Logger.info(
             "Pipeline turn complete — user: #{inspect(user_text)}, assistant: #{inspect(llm_response.content)}"
           )
 
@@ -483,10 +503,16 @@ defmodule Livekit.Agents.Pipeline do
   def handle_call({:set_subscriber, subscriber}, _from, %State{} = state) do
     state = %{state | config: %{state.config | subscriber: subscriber}}
 
-    # The deferred greeting. Whoever just claimed the output is the first
-    # process able to carry it anywhere, so this is the earliest moment the
-    # opening line can actually be heard.
-    if greeting?(state.config) and not state.greeted?, do: send(self(), :greet)
+    # Deliberately no greeting here. Claiming the output only proves the audio
+    # has somewhere to go, not that anybody is in the room — see greet/1.
+    {:reply, :ok, state}
+  end
+
+  @impl true
+  def handle_call(:greet, _from, %State{} = state) do
+    if greeting?(state.config) and not state.greeted? and state.config.subscriber do
+      send(self(), :greet)
+    end
 
     {:reply, :ok, state}
   end

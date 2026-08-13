@@ -48,6 +48,13 @@ defmodule MockPipelineForRoomIO do
     {:reply, :ok, test_pid}
   end
 
+  # And asks for the greeting once a visitor is publishing — see Pipeline.greet/1.
+  @impl true
+  def handle_call(:greet, _from, test_pid) do
+    send(test_pid, {:greet_called, self()})
+    {:reply, :ok, test_pid}
+  end
+
   @impl true
   def handle_cast({:push_frame, frame}, test_pid) do
     send(test_pid, {:push_frame_called, frame})

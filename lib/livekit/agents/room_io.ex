@@ -162,6 +162,13 @@ defmodule Livekit.Agents.RoomIO do
     case AudioTrack.subscribe(state.config.room_pid, track_sid, self()) do
       {:ok, track_ref} ->
         Logger.info("[RoomIO] Subscribed to audio track #{track_sid}")
+
+        # Somebody is publishing a microphone, so somebody is in the room to
+        # hear the opening line. Greeting any earlier plays it to nobody: the
+        # agent is dispatched when the room is created, seconds before the
+        # visitor's browser finishes connecting, and WebRTC buffers nothing.
+        Pipeline.greet(state.config.pipeline_pid)
+
         {:noreply, %{state | subscribed_track: {track_sid, track_ref}}}
 
       {:error, reason} ->
@@ -196,6 +203,13 @@ defmodule Livekit.Agents.RoomIO do
       )
 
     Pipeline.push_frame(state.config.pipeline_pid, frame)
+
+    # Once at the start and then rarely: enough to tell "the visitor's audio is
+    # arriving" from "it never came", without a line per 10ms of speech.
+    if rem(state.metrics.frames_received, 500) == 0 do
+      Logger.info("[RoomIO] Received #{state.metrics.frames_received + 1} audio frames")
+    end
+
     metrics = Map.update!(state.metrics, :frames_received, &(&1 + 1))
     {:noreply, %{state | metrics: metrics}}
   end
