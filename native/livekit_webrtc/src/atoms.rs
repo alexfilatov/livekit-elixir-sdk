@@ -11,6 +11,9 @@ rustler::atoms! {
     data_received,
     connection_quality_changed,
     disconnected,
+    // Track kinds, as carried by track_subscribed
+    audio,
+    video,
     // Audio (D-13)
     audio_frame,
     // General

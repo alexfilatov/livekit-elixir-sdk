@@ -161,7 +161,7 @@ defmodule Livekit.Agents.RoomIO do
       when is_nil(state.subscribed_track) do
     case AudioTrack.subscribe(state.config.room_pid, track_sid, self()) do
       {:ok, track_ref} ->
-        Logger.debug("[RoomIO] Subscribed to audio track #{track_sid}")
+        Logger.info("[RoomIO] Subscribed to audio track #{track_sid}")
         {:noreply, %{state | subscribed_track: {track_sid, track_ref}}}
 
       {:error, reason} ->
@@ -177,9 +177,11 @@ defmodule Livekit.Agents.RoomIO do
     {:noreply, state}
   end
 
-  # Non-audio track subscribed — ignore
+  # Non-audio track subscribed — ignore. Logged because an unrecognised kind
+  # silently ends the conversation here: no subscribe, no greeting, no audio.
   @impl true
-  def handle_info({:track_subscribed, _track_sid, _identity, _kind}, state) do
+  def handle_info({:track_subscribed, _track_sid, _identity, kind}, state) do
+    Logger.info("[RoomIO] Ignoring #{inspect(kind)} track")
     {:noreply, state}
   end
 
@@ -203,6 +205,13 @@ defmodule Livekit.Agents.RoomIO do
   def handle_info({:pipeline_audio, %AudioFrame{} = frame}, state) do
     case AudioTrack.publish(state.config.room_pid, frame) do
       :ok ->
+        # The first frame is the one that publishes the track, so it is the one
+        # worth a line: after it, either the visitor hears the agent or the
+        # problem is downstream of us.
+        if state.metrics.frames_published == 0 do
+          Logger.info("[RoomIO] Published first audio frame (#{byte_size(frame.data)} bytes)")
+        end
+
         metrics = Map.update!(state.metrics, :frames_published, &(&1 + 1))
         {:noreply, %{state | metrics: metrics}}
 

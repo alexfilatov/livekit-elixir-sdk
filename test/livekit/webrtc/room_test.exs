@@ -61,7 +61,7 @@ defmodule Livekit.WebRTC.RoomTest do
       events = [
         {:participant_connected, "alice"},
         {:participant_disconnected, "alice"},
-        {:track_subscribed, "TR_abc123", "alice", "Audio"},
+        {:track_subscribed, "TR_abc123", "alice", :audio},
         {:track_unsubscribed, "TR_abc123", "alice"},
         {:track_published, "TR_abc123", "alice"},
         {:track_unpublished, "TR_abc123", "alice"},
@@ -108,8 +108,8 @@ defmodule Livekit.WebRTC.RoomTest do
     test "tracks_subscribed increments on track_subscribed events" do
       {:ok, room_pid} = Room.connect(mock_config())
 
-      send(room_pid, {:track_subscribed, "TR_1", "alice", "Audio"})
-      send(room_pid, {:track_subscribed, "TR_2", "bob", "Audio"})
+      send(room_pid, {:track_subscribed, "TR_1", "alice", :audio})
+      send(room_pid, {:track_subscribed, "TR_2", "bob", :audio})
       :timer.sleep(50)
 
       metrics = Room.get_metrics(room_pid)

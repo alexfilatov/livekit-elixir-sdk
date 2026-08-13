@@ -303,8 +303,18 @@ defmodule Livekit.Agents.Pipeline do
     greeting = state.config.greeting
     state = %{state | greeted?: true}
 
+    # The greeting is the whole voice path in miniature — TTS, then the hop to
+    # whoever publishes. Both ends are logged: a silent room is otherwise
+    # indistinguishable from a slow one.
+    Logger.info("Pipeline: synthesising greeting (#{byte_size(greeting)} chars)")
+
     case do_tts(greeting, state.config, state.config.tts_opts) do
       {:ok, audio} when byte_size(audio) > 0 ->
+        Logger.info(
+          "Pipeline: greeting synthesised, #{byte_size(audio)} bytes, " <>
+            "subscriber=#{inspect(state.config.subscriber)}"
+        )
+
         if state.config.subscriber do
           send(state.config.subscriber, {:pipeline_audio, %AudioFrame{data: audio}})
         end

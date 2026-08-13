@@ -105,8 +105,12 @@ fn forward_room_event(pid: &LocalPid, event: RoomEvent) {
         RoomEvent::TrackSubscribed { track, publication, participant } => {
             let track_sid = publication.sid().to_string();
             let identity = participant.identity().to_string();
-            // Format the track kind as a lowercase string ("audio" / "video")
-            let track_kind = format!("{:?}", track.kind()).to_lowercase();
+            // An atom, not a string: every consumer pattern-matches the kind,
+            // and a string cannot match `:audio` however it is cased.
+            let track_kind = match track.kind() {
+                livekit::track::TrackKind::Audio => atoms::audio(),
+                livekit::track::TrackKind::Video => atoms::video(),
+            };
             let _ = env.send_and_clear(pid, move |env| {
                 (atoms::track_subscribed(), track_sid, identity, track_kind).encode(env)
             });

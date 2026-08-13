@@ -11,7 +11,7 @@ defmodule Livekit.WebRTC.Room do
 
       {:participant_connected, identity}
       {:participant_disconnected, identity}
-      {:track_subscribed, track_sid, identity, track_kind}
+      {:track_subscribed, track_sid, identity, :audio | :video}
       {:track_unsubscribed, track_sid, identity}
       {:track_published, track_sid, identity}
       {:track_unpublished, track_sid, identity}
