@@ -70,11 +70,11 @@ defmodule Livekit.RoomServiceClient do
   ## Options
 
   Besides the room settings, `:agents` takes a list of
-  `%Livekit.RoomAgentDispatch{name: "my-agent"}` and is how an agent is
+  `%Livekit.RoomAgentDispatch{agent_name: "my-agent"}` and is how an agent is
   dispatched **explicitly**, at the moment the room comes into being:
 
       RoomServiceClient.create_room(client, "support-42",
-        agents: [%Livekit.RoomAgentDispatch{name: "my-agent"}]
+        agents: [%Livekit.RoomAgentDispatch{agent_name: "my-agent"}]
       )
 
   This matters for any agent expected to speak first. A room created
