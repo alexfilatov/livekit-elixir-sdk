@@ -13,6 +13,7 @@ defmodule Livekit.Agents.WorkerAuthTest do
   """
 
   alias Livekit.{AccessToken, Grants, TokenVerifier}
+  alias Livekit.Agents.Worker
 
   test "the agent grant exists and reaches the JWT" do
     jwt =
@@ -29,7 +30,7 @@ defmodule Livekit.Agents.WorkerAuthTest do
 
   test "a refused upgrade is reported and retried, not swallowed" do
     {:ok, pid} =
-      Livekit.Agents.Worker.start_link(%Livekit.Agents.Worker.Config{
+      Worker.start_link(%Worker.Config{
         server_url: "mock://test",
         api_key: "k",
         api_secret: "s",
@@ -58,7 +59,7 @@ defmodule Livekit.Agents.WorkerAuthTest do
       entrypoint: fn _ -> :ok end
     }
 
-    jwt = Livekit.Agents.Worker.registration_token(config)
+    jwt = Worker.registration_token(config)
     {:ok, claims} = TokenVerifier.verify(jwt, config.api_secret)
 
     # Without this the upgrade is refused and nothing in the SDK says so.

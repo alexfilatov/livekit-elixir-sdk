@@ -153,7 +153,7 @@ defmodule Livekit.Agents.RoomIO do
     # was silently discarded. The agent joined the room, said nothing, and
     # published no track: from outside, indistinguishable from an agent that
     # never arrived.
-    Livekit.Agents.Pipeline.set_subscriber(config.pipeline_pid, self())
+    Pipeline.set_subscriber(config.pipeline_pid, self())
 
     {:ok, %State{config: config}}
   end

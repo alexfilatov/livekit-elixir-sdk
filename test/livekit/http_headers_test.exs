@@ -28,8 +28,7 @@ defmodule Livekit.HTTPHeadersTest do
         |> File.read!()
         |> then(&Regex.scan(@tesla_header_regex, &1, capture: :all_but_first))
         |> List.flatten()
-        |> Enum.filter(&header_name?/1)
-        |> Enum.filter(&(&1 != String.downcase(&1)))
+        |> Enum.filter(&(header_name?(&1) and &1 != String.downcase(&1)))
         |> Enum.map(&{path, &1})
       end)
 
