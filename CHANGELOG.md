@@ -1,5 +1,55 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **Egress and Ingress now work at all.** Both clients dialled gRPC and sent
+  `authorization: Bearer <key>:<secret>`. A LiveKit server offers neither — it
+  serves Twirp over HTTP and expects a signed JWT — so every call through
+  either client failed before reaching the service. Both now use the same
+  Twirp transport as `Livekit.RoomServiceClient`, with a token carrying
+  `roomRecord` and `ingressAdmin` respectively.
+- **The protobuf definitions were transcribed by hand and had invented field
+  numbers.** `EgressInfo.status` was 4 where LiveKit numbers it 3, `room_name`
+  3 where LiveKit has 13, `error` 5 where LiveKit has 9; every storage upload
+  type's `bucket` was wrong, as were the oneof tags on three egress request
+  types and `SendDataRequest.destination_identities`/`nonce`. Starting an
+  egress therefore succeeded on the server and raised `Protobuf.DecodeError`
+  reading the reply. `proto/` now holds LiveKit's own files, vendored verbatim
+  (`proto/UPSTREAM_VERSION`), and `mix livekit.proto.gen` regenerates from
+  them.
+- `Livekit.RoomAgentDispatch` was `name`/`identity`/`init_request`, a shape
+  that has never existed upstream, alongside a `Livekit.InitRequest` message
+  that LiveKit does not define. It is now `agent_name`/`metadata`.
+- `mix livekit start-room-streaming` sent its RTMP URL as a *file* output with
+  `file_type: :rtmp`, a member `EncodedFileType` does not have. It now sends
+  `stream_outputs`.
+- `mix livekit list-egress` iterated the response struct as if it were a list,
+  and `stop-egress` passed a bare string where a request struct was expected.
+
+### Added
+
+- `mix livekit.proto.gen` — regenerates `lib/livekit/proto` from `proto/`.
+  There was previously no generation step of any kind, which is how the
+  definitions drifted.
+- `Livekit.EgressServiceClient`: `start_web_egress/2`,
+  `start_participant_egress/2`, `start_track_composite_egress/2`,
+  `update_layout/2` and `update_stream/2`, which the service has always
+  offered but the client never exposed.
+- `Livekit.ProtoFieldNumbersTest` pins the field numbers that were wrong, so a
+  hand-edit or a regeneration from the wrong source fails in CI.
+
+### Changed
+
+- **Breaking:** `Livekit.EgressServiceClient.new/3` and
+  `Livekit.IngressServiceClient.new/3` return a client struct rather than
+  `{:ok, {channel, metadata}}`, matching `RoomServiceClient`. Calls return
+  `{:ok, message}` or `{:error, {status, body}}` instead of gRPC results.
+- `:grpc` is no longer a dependency. `:gun`, previously arriving transitively
+  through it while being used directly by the agents transport, is now a
+  direct dependency.
+
 ## [0.1.4] - 2025-09-27
 
 ### Added

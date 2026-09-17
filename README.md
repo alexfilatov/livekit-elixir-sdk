@@ -1,5 +1,12 @@
 # Livekit Server SDK for Elixir
 
+[![Hex.pm](https://img.shields.io/hexpm/v/livekit.svg)](https://hex.pm/packages/livekit)
+[![Hex Docs](https://img.shields.io/badge/hex-docs-blue.svg)](https://hexdocs.pm/livekit)
+[![Downloads](https://img.shields.io/hexpm/dt/livekit.svg)](https://hex.pm/packages/livekit)
+[![CI](https://github.com/alexfilatov/livekit-elixir-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/alexfilatov/livekit-elixir-sdk/actions/workflows/ci.yml)
+[![License](https://img.shields.io/hexpm/l/livekit.svg)](https://github.com/alexfilatov/livekit-elixir-sdk/blob/master/LICENSE)
+[![Elixir](https://img.shields.io/badge/elixir-~%3E%201.15-purple.svg)](https://elixir-lang.org)
+
 This is *not* official Elixir server SDK for [Livekit](https://livekit.io). This SDK allows you to manage rooms and create access tokens from your Elixir backend.
 
 ## Feature Support
@@ -53,6 +60,21 @@ The following table shows which LiveKit features are currently supported in this
 - [ ] Additional Grant Types (SIPGrant, etc.)
 - [ ] Real-Time Client SDK (WebRTC connections)
 - [ ] Unified API Client
+
+## Protobuf definitions
+
+`proto/` holds LiveKit's `.proto` files, vendored verbatim from
+[livekit/protocol](https://github.com/livekit/protocol) at the tag in
+`proto/UPSTREAM_VERSION`. `lib/livekit/proto` is generated from them:
+
+```bash
+mix livekit.proto.gen
+```
+
+**Do not hand-edit anything in `lib/livekit/proto`, and do not hand-write
+`.proto` files.** They used to be abridged transcriptions, and the field
+numbers drifted from LiveKit's — which is invisible in Elixir and fatal on the
+wire. `Livekit.ProtoFieldNumbersTest` guards the numbers that were wrong.
 
 ## Installation
 
@@ -286,8 +308,54 @@ end
 
 ### Room Egress
 
+Streaming a room to one or more RTMP destinations — the room is encoded once
+and pushed to every URL, so simulcasting to several platforms costs one egress:
+
 ```elixir
-# Configure automatic room recording
+egress = Livekit.EgressServiceClient.new("wss://my-project.livekit.cloud", api_key, api_secret)
+
+{:ok, info} =
+  Livekit.EgressServiceClient.start_room_composite_egress(egress, %Livekit.RoomCompositeEgressRequest{
+    room_name: "room-name",
+    layout: "grid",
+    stream_outputs: [
+      %Livekit.StreamOutput{
+        protocol: :RTMP,
+        urls: [
+          "rtmp://a.rtmp.youtube.com/live2/YOUR_KEY",
+          "rtmps://live-api-s.facebook.com/rtmp/YOUR_KEY"
+        ]
+      }
+    ],
+    options: {:preset, :H264_720P_30}
+  })
+
+info.egress_id   #=> "EG_xxxxxxxx"
+info.status      #=> :EGRESS_STARTING
+```
+
+Each destination reports separately, so a rejected stream key can be told
+apart from a failed egress:
+
+```elixir
+{:ok, %{items: [info]}} =
+  Livekit.EgressServiceClient.list_egress(egress, %Livekit.ListEgressRequest{active: true})
+
+for s <- info.stream_results, do: IO.puts("#{s.url} #{s.status} #{s.error}")
+```
+
+LiveKit masks stream keys in its replies (`rtmp://host/live/{ab...yz}`), so an
+`EgressInfo` is safe to log. Stop with:
+
+```elixir
+{:ok, _} = Livekit.EgressServiceClient.stop_egress(egress, %Livekit.StopEgressRequest{
+  egress_id: info.egress_id
+})
+```
+
+Recording a room to storage instead, configured at room creation:
+
+```elixir
 {:ok, room} = Livekit.RoomServiceClient.create_room(client, "room-name",
   egress: %Livekit.RoomEgress{
     room: %Livekit.RoomCompositeEgressRequest{
@@ -297,13 +365,13 @@ end
           disable_manifest: false
         }
       ],
-      encoding_options: %Livekit.RoomCompositeEgressRequest.Options{
-        video_width: 1280,
-        video_height: 720,
-        fps: 30,
-        audio_bitrate: 128000,
-        video_bitrate: 3000000
-      }
+      options: {:advanced, %Livekit.EncodingOptions{
+        width: 1280,
+        height: 720,
+        framerate: 30,
+        audio_bitrate: 128,
+        video_bitrate: 3000
+      }}
     }
   }
 )
@@ -313,7 +381,7 @@ end
 
 ```elixir
 # Connect to Ingress service (ws/wss will be converted to http/https automatically)
-{:ok, client} = Livekit.IngressServiceClient.new("http://localhost:7880", "devkey", "secret")
+client = Livekit.IngressServiceClient.new("http://localhost:7880", "devkey", "secret")
 
 # Create RTMP ingress
 request = %Livekit.CreateIngressRequest{
@@ -348,11 +416,8 @@ Enum.each(resp.items, &IO.puts(&1.ingress_id))
 {:ok, room} = Livekit.RoomServiceClient.create_room(client, "room-with-agents",
   agents: [
     %Livekit.RoomAgentDispatch{
-      name: "my-agent",
-      identity: "agent-1",
-      init_request: %{
-        "prompt" => "You are a helpful assistant"
-      }
+      agent_name: "my-agent",
+      metadata: "You are a helpful assistant"
     }
   ]
 )
