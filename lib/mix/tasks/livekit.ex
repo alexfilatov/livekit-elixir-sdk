@@ -141,7 +141,6 @@ defmodule Mix.Tasks.Livekit do
     Application.ensure_all_started(:inets)
     Application.ensure_all_started(:ssl)
     Application.ensure_all_started(:gun)
-    Application.ensure_all_started(:grpc)
 
     {opts, args, _} = parse_options(args)
 
@@ -348,13 +347,15 @@ defmodule Mix.Tasks.Livekit do
             filepath: output
           }
         ],
-        options: %Livekit.RoomCompositeEgressRequest.Options{
-          video_width: 1280,
-          video_height: 720,
-          fps: 30,
-          audio_bitrate: 128_000,
-          video_bitrate: 3_000_000
-        }
+        options:
+          {:advanced,
+           %Livekit.EncodingOptions{
+             width: 1280,
+             height: 720,
+             framerate: 30,
+             audio_bitrate: 128,
+             video_bitrate: 3000
+           }}
       }
 
       try do
@@ -362,13 +363,6 @@ defmodule Mix.Tasks.Livekit do
           {:ok, response} ->
             Logger.info("Successfully started room recording, response: #{inspect(response)}")
             {:ok, response}
-
-          {:error, %GRPC.RPCError{} = error} ->
-            Logger.error(
-              "Failed to start room recording because of GRPC error: #{inspect(error)}"
-            )
-
-            {:error, error.message}
 
           {:error, reason} ->
             Logger.error("Failed to start room recording: #{inspect(reason)}")
@@ -463,21 +457,19 @@ defmodule Mix.Tasks.Livekit do
         video_bitrate: Keyword.get(opts, :video_bitrate, 3000)
       }
 
+      # RTMP is a stream output, not a file output: `EncodedFileType` has no
+      # `:rtmp` member, so the old `file_outputs` form could not even encode.
       request = %Livekit.RoomCompositeEgressRequest{
         room_name: room,
         options: {:advanced, encoding_options},
-        file_outputs: [
-          %Livekit.EncodedFileOutput{
-            file_type: :rtmp,
-            filepath: rtmp,
-            output: rtmp
-          }
+        stream_outputs: [
+          %Livekit.StreamOutput{protocol: :RTMP, urls: [rtmp]}
         ]
       }
 
       case Livekit.EgressServiceClient.start_room_composite_egress(client, request) do
-        :ok -> IO.puts("Started room streaming")
-        {:error, error} -> IO.puts("Failed to start room streaming: #{error}")
+        {:ok, info} -> IO.puts("Started room streaming (#{info.egress_id})")
+        {:error, error} -> IO.puts("Failed to start room streaming: #{inspect(error)}")
       end
     end
   end
@@ -490,16 +482,16 @@ defmodule Mix.Tasks.Livekit do
       request = %Livekit.TrackEgressRequest{
         room_name: room,
         track_id: track_id,
-        filepath: output
+        output: {:file, %Livekit.DirectFileOutput{filepath: output}}
       }
 
       case Livekit.EgressServiceClient.start_track_egress(client, request) do
-        :ok ->
+        {:ok, info} ->
           Logger.info(
             "Successfully started track recording for track #{track_id} in room #{room}"
           )
 
-          IO.puts("Started track recording")
+          IO.puts("Started track recording (#{info.egress_id})")
 
         {:error, error} ->
           Logger.error("Failed to start track recording: #{inspect(error)}")
@@ -534,12 +526,12 @@ defmodule Mix.Tasks.Livekit do
       }
 
       case Livekit.EgressServiceClient.start_room_composite_egress(client, request) do
-        :ok ->
+        {:ok, info} ->
           Logger.info(
             "Successfully started track streaming for track #{track_id} in room #{room}"
           )
 
-          IO.puts("Started track streaming")
+          IO.puts("Started track streaming (#{info.egress_id})")
 
         {:error, error} ->
           Logger.error("Failed to start track streaming: #{inspect(error)}")
@@ -551,7 +543,7 @@ defmodule Mix.Tasks.Livekit do
   defp handle_list_egress(opts) do
     with {:ok, client} <- get_egress_client(opts) do
       case Livekit.EgressServiceClient.list_egress(client) do
-        {:ok, items} ->
+        {:ok, %Livekit.ListEgressResponse{items: items}} ->
           Enum.each(items, fn item ->
             IO.puts("Egress ID: #{item.egress_id}")
             IO.puts("Status: #{item.status}")
@@ -567,8 +559,10 @@ defmodule Mix.Tasks.Livekit do
   defp handle_stop_egress(opts) do
     with {:ok, client} <- get_egress_client(opts),
          {:ok, egress_id} <- get_opt(opts, :egress_id) do
-      case Livekit.EgressServiceClient.stop_egress(client, egress_id) do
-        :ok -> IO.puts("Stopped egress")
+      request = %Livekit.StopEgressRequest{egress_id: egress_id}
+
+      case Livekit.EgressServiceClient.stop_egress(client, request) do
+        {:ok, info} -> IO.puts("Stopped egress (#{info.egress_id})")
         {:error, error} -> IO.puts("Error: #{inspect(error)}")
       end
     end
@@ -580,12 +574,12 @@ defmodule Mix.Tasks.Livekit do
          {:ok, prompt} <- get_opt(opts, :prompt) do
       random_id = :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)
 
+      # `metadata` is the only free-form field LiveKit carries through to the
+      # job; the fork used to invent an `init_request.prompt` that no server
+      # has ever read.
       agent = %Livekit.RoomAgentDispatch{
-        name: "agent-#{random_id}",
-        identity: "agent-#{random_id}",
-        init_request: %Livekit.InitRequest{
-          prompt: prompt
-        }
+        agent_name: "agent-#{random_id}",
+        metadata: prompt
       }
 
       case Livekit.RoomServiceClient.create_room(client, room, agents: [agent]) do
@@ -718,12 +712,7 @@ defmodule Mix.Tasks.Livekit do
 
   defp get_egress_client(opts) do
     with {:ok, config} <- Livekit.Config.get_validated(opts) do
-      try do
-        Livekit.EgressServiceClient.new(config.url, config.api_key, config.api_secret)
-      rescue
-        error in [UndefinedFunctionError] ->
-          {:error, "Failed to connect to egress service: #{inspect(error)}"}
-      end
+      {:ok, Livekit.EgressServiceClient.new(config.url, config.api_key, config.api_secret)}
     end
   end
 
@@ -885,7 +874,7 @@ defmodule Mix.Tasks.Livekit do
     with {:ok, url} <- get_opt(opts, :url),
          {:ok, api_key} <- get_opt(opts, :api_key),
          {:ok, api_secret} <- get_opt(opts, :api_secret) do
-      Livekit.IngressServiceClient.new(url, api_key, api_secret)
+      {:ok, Livekit.IngressServiceClient.new(url, api_key, api_secret)}
     end
   end
 

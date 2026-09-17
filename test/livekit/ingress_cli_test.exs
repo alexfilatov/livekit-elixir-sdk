@@ -401,7 +401,10 @@ defmodule Livekit.IngressCliTest do
 
     test "handles client connection errors" do
       with_mock Livekit.IngressServiceClient,
-        new: fn _url, _api_key, _api_secret ->
+        new: fn url, api_key, api_secret ->
+          passthrough([url, api_key, api_secret])
+        end,
+        create_ingress: fn _client, _request ->
           {:error, "Connection failed"}
         end do
         output =
@@ -425,7 +428,7 @@ defmodule Livekit.IngressCliTest do
             ])
           end)
 
-        assert String.contains?(output, "❌ Error: Connection failed")
+        assert String.contains?(output, "❌ Error creating ingress: \"Connection failed\"")
       end
     end
 
@@ -836,7 +839,7 @@ defmodule Livekit.IngressCliTest do
         end)
 
       # Should handle gracefully or show error
-      assert String.contains?(output, "❌ Error:") or String.contains?(output, "✅")
+      assert String.contains?(output, "❌ Error") or String.contains?(output, "✅")
     end
   end
 
