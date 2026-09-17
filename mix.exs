@@ -25,7 +25,6 @@ defmodule Livekit.MixProject do
         "coveralls.post": :test,
         "coveralls.html": :test
       ],
-      compilers: Mix.compilers() ++ [:proto],
       # Dialyzer configuration
       dialyzer: [
         ignore_warnings: "dialyzer.ignore-warnings",
@@ -81,7 +80,7 @@ defmodule Livekit.MixProject do
   defp package do
     [
       name: "livekit",
-      files: ~w(lib native priv proto mix.exs README.md CHANGELOG.md LICENSE),
+      files: ~w(lib native priv mix.exs README.md CHANGELOG.md LICENSE),
       licenses: ["Apache-2.0"],
       links: %{
         "GitHub" => "https://github.com/alexfilatov/livekit-elixir-sdk"

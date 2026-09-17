@@ -71,6 +71,9 @@ The following table shows which LiveKit features are currently supported in this
 mix livekit.proto.gen
 ```
 
+Generation is deliberate, not a build step: the committed output is what
+compiles, and `protoc` is needed only when regenerating.
+
 **Do not hand-edit anything in `lib/livekit/proto`, and do not hand-write
 `.proto` files.** They used to be abridged transcriptions, and the field
 numbers drifted from LiveKit's — which is invisible in Elixir and fatal on the

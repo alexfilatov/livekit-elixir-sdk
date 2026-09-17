@@ -19,6 +19,11 @@ defmodule Mix.Tasks.Livekit.Proto.Gen do
   `proto/UPSTREAM_VERSION`, and this task regenerates from them. Editing
   anything in `lib/livekit/proto` by hand puts the drift back.
 
+  This replaces a `:proto` compiler that ran protoc on every build. Generated
+  code is committed, so regenerating it is a deliberate act rather than a
+  build step — and a build step meant anyone compiling the package needed
+  protoc on their machine.
+
   ## Usage
 
       mix livekit.proto.gen

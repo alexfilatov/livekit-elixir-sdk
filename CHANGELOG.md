@@ -16,9 +16,9 @@
   type's `bucket` was wrong, as were the oneof tags on three egress request
   types and `SendDataRequest.destination_identities`/`nonce`. Starting an
   egress therefore succeeded on the server and raised `Protobuf.DecodeError`
-  reading the reply. `proto/` now holds LiveKit's own files, vendored verbatim
-  (`proto/UPSTREAM_VERSION`), and `mix livekit.proto.gen` regenerates from
-  them.
+  reading the reply. The `:proto` compiler generated faithfully from those
+  files, so the drift was propagated rather than introduced. `proto/` now
+  holds LiveKit's own files, vendored verbatim (`proto/UPSTREAM_VERSION`).
 - `Livekit.RoomAgentDispatch` was `name`/`identity`/`init_request`, a shape
   that has never existed upstream, alongside a `Livekit.InitRequest` message
   that LiveKit does not define. It is now `agent_name`/`metadata`.
@@ -30,9 +30,15 @@
 
 ### Added
 
-- `mix livekit.proto.gen` — regenerates `lib/livekit/proto` from `proto/`.
-  There was previously no generation step of any kind, which is how the
-  definitions drifted.
+- `mix livekit.proto.gen` — regenerates `lib/livekit/proto` from `proto/`,
+  replacing the `:proto` compiler that ran on every build. That compiler
+  globbed `proto/**/*.proto`, so it generated `logger/options.proto` into
+  `Logger.Sensitivity` and `Logger.PbExtension` — inside Elixir's own `Logger`
+  namespace — and its staleness check looked for the output at a flattened
+  path that protoc never wrote, so it regenerated those two on every compile.
+  It also required `protoc` on the machine of anyone compiling the package.
+  Generated code is committed; regenerating it is a deliberate act, not a
+  build step.
 - `Livekit.EgressServiceClient`: `start_web_egress/2`,
   `start_participant_egress/2`, `start_track_composite_egress/2`,
   `update_layout/2` and `update_stream/2`, which the service has always
