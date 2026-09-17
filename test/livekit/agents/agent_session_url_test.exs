@@ -1,5 +1,7 @@
 defmodule Livekit.Agents.AgentSessionURLTest do
-  use ExUnit.Case, async: true
+  # Not async: these tests point the global :test_reporter at self(), so
+  # running them concurrently makes them steal each other's messages.
+  use ExUnit.Case, async: false
 
   @moduledoc """
   The URL a dispatched session hands to the WebRTC client.

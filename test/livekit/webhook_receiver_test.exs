@@ -1,5 +1,9 @@
 defmodule Livekit.WebhookReceiverTest do
-  use ExUnit.Case, async: true
+  # Not async: `with_mocks` swaps Livekit.AccessToken for the whole VM, so a
+  # concurrent test calling AccessToken.new/2 finds the module unloaded and
+  # dies with "module is not available". That was the source of the suite's
+  # intermittent, seed-dependent failures.
+  use ExUnit.Case, async: false
 
   alias Livekit.AccessToken
   alias Livekit.WebhookReceiver
