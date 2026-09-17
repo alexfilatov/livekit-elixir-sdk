@@ -56,8 +56,14 @@ defmodule Livekit.CreateIngressRequest do
   field(:name, 2, type: :string)
   field(:room_name, 3, type: :string, json_name: "roomName")
   field(:participant_identity, 4, type: :string, json_name: "participantIdentity")
-  field(:participant_name, 5, type: :string, json_name: "participantName")
-  field(:participant_metadata, 10, type: :string, json_name: "participantMetadata")
+  field(:participant_name, 5, type: :string, json_name: "participantName", deprecated: false)
+
+  field(:participant_metadata, 10,
+    type: :string,
+    json_name: "participantMetadata",
+    deprecated: false
+  )
+
   field(:bypass_transcoding, 8, type: :bool, json_name: "bypassTranscoding", deprecated: true)
 
   field(:enable_transcoding, 11,
@@ -123,7 +129,7 @@ defmodule Livekit.IngressInfo do
 
   use Protobuf, protoc_gen_elixir_version: "0.15.0", syntax: :proto3
 
-  field(:ingress_id, 1, type: :string, json_name: "ingressId")
+  field(:ingress_id, 1, type: :string, json_name: "ingressId", deprecated: false)
   field(:name, 2, type: :string)
   field(:stream_key, 3, type: :string, json_name: "streamKey")
   field(:url, 4, type: :string)
@@ -140,8 +146,14 @@ defmodule Livekit.IngressInfo do
   field(:video, 7, type: Livekit.IngressVideoOptions)
   field(:room_name, 8, type: :string, json_name: "roomName")
   field(:participant_identity, 9, type: :string, json_name: "participantIdentity")
-  field(:participant_name, 10, type: :string, json_name: "participantName")
-  field(:participant_metadata, 14, type: :string, json_name: "participantMetadata")
+  field(:participant_name, 10, type: :string, json_name: "participantName", deprecated: false)
+
+  field(:participant_metadata, 14,
+    type: :string,
+    json_name: "participantMetadata",
+    deprecated: false
+  )
+
   field(:reusable, 11, type: :bool)
   field(:state, 12, type: Livekit.IngressState)
   field(:enabled, 16, proto3_optional: true, type: :bool)
@@ -156,11 +168,11 @@ defmodule Livekit.IngressState do
   field(:error, 2, type: :string)
   field(:video, 3, type: Livekit.InputVideoState)
   field(:audio, 4, type: Livekit.InputAudioState)
-  field(:room_id, 5, type: :string, json_name: "roomId")
+  field(:room_id, 5, type: :string, json_name: "roomId", deprecated: false)
   field(:started_at, 7, type: :int64, json_name: "startedAt")
   field(:ended_at, 8, type: :int64, json_name: "endedAt")
   field(:updated_at, 10, type: :int64, json_name: "updatedAt")
-  field(:resource_id, 9, type: :string, json_name: "resourceId")
+  field(:resource_id, 9, type: :string, json_name: "resourceId", deprecated: false)
   field(:tracks, 6, repeated: true, type: Livekit.TrackInfo)
 end
 
@@ -192,12 +204,17 @@ defmodule Livekit.UpdateIngressRequest do
 
   use Protobuf, protoc_gen_elixir_version: "0.15.0", syntax: :proto3
 
-  field(:ingress_id, 1, type: :string, json_name: "ingressId")
+  field(:ingress_id, 1, type: :string, json_name: "ingressId", deprecated: false)
   field(:name, 2, type: :string)
   field(:room_name, 3, type: :string, json_name: "roomName")
   field(:participant_identity, 4, type: :string, json_name: "participantIdentity")
-  field(:participant_name, 5, type: :string, json_name: "participantName")
-  field(:participant_metadata, 9, type: :string, json_name: "participantMetadata")
+  field(:participant_name, 5, type: :string, json_name: "participantName", deprecated: false)
+
+  field(:participant_metadata, 9,
+    type: :string,
+    json_name: "participantMetadata",
+    deprecated: false
+  )
 
   field(:bypass_transcoding, 8,
     proto3_optional: true,
@@ -222,8 +239,9 @@ defmodule Livekit.ListIngressRequest do
 
   use Protobuf, protoc_gen_elixir_version: "0.15.0", syntax: :proto3
 
+  field(:page_token, 3, type: Livekit.TokenPagination, json_name: "pageToken")
   field(:room_name, 1, type: :string, json_name: "roomName")
-  field(:ingress_id, 2, type: :string, json_name: "ingressId")
+  field(:ingress_id, 2, type: :string, json_name: "ingressId", deprecated: false)
 end
 
 defmodule Livekit.ListIngressResponse do
@@ -231,6 +249,7 @@ defmodule Livekit.ListIngressResponse do
 
   use Protobuf, protoc_gen_elixir_version: "0.15.0", syntax: :proto3
 
+  field(:next_page_token, 2, type: Livekit.TokenPagination, json_name: "nextPageToken")
   field(:items, 1, repeated: true, type: Livekit.IngressInfo)
 end
 
@@ -239,25 +258,5 @@ defmodule Livekit.DeleteIngressRequest do
 
   use Protobuf, protoc_gen_elixir_version: "0.15.0", syntax: :proto3
 
-  field(:ingress_id, 1, type: :string, json_name: "ingressId")
-end
-
-defmodule Livekit.Ingress.Service do
-  @moduledoc false
-
-  use GRPC.Service, name: "livekit.Ingress", protoc_gen_elixir_version: "0.15.0"
-
-  rpc(:CreateIngress, Livekit.CreateIngressRequest, Livekit.IngressInfo)
-
-  rpc(:UpdateIngress, Livekit.UpdateIngressRequest, Livekit.IngressInfo)
-
-  rpc(:ListIngress, Livekit.ListIngressRequest, Livekit.ListIngressResponse)
-
-  rpc(:DeleteIngress, Livekit.DeleteIngressRequest, Livekit.IngressInfo)
-end
-
-defmodule Livekit.Ingress.Stub do
-  @moduledoc false
-
-  use GRPC.Stub, service: Livekit.Ingress.Service
+  field(:ingress_id, 1, type: :string, json_name: "ingressId", deprecated: false)
 end

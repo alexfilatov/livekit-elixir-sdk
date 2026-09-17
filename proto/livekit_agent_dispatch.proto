@@ -1,13 +1,103 @@
+// Copyright 2023 LiveKit, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 syntax = "proto3";
 
 package livekit;
+option go_package = "github.com/livekit/protocol/livekit";
+option csharp_namespace = "LiveKit.Proto";
+option ruby_package = "LiveKit::Proto";
+
+import "livekit_agent.proto";
+import "logger/options.proto";
+
+enum JobRestartPolicy {
+  JRP_ON_FAILURE = 0; // restart when the job fails (default)
+  JRP_NEVER = 1;      // never restart
+}
+
+service AgentDispatchService {
+  rpc CreateDispatch(CreateAgentDispatchRequest) returns (AgentDispatch);
+  rpc DeleteDispatch(DeleteAgentDispatchRequest) returns (AgentDispatch);
+  rpc ListDispatch(ListAgentDispatchRequest) returns (ListAgentDispatchResponse);
+}
+
+message CreateAgentDispatchRequest {
+  string agent_name = 1;
+  string room = 2;
+  string metadata = 3 [
+    (logger.sensitivity) = SENSITIVITY_PII,
+    (logger.redact_format) = "<redacted ({{ .Size }} bytes)>"
+  ];
+  JobRestartPolicy restart_policy = 4; // cloud only
+  string deployment = 5;
+  map<string, string> attributes = 6 [
+    (logger.sensitivity) = SENSITIVITY_PII,
+    (logger.redact_format) = "<redacted ({{ .Size }} bytes)>"
+  ];
+}
 
 message RoomAgentDispatch {
-  string name = 1;
-  string identity = 2;
-  InitRequest init_request = 3;
+  string agent_name = 1;
+  string metadata = 2 [
+    (logger.sensitivity) = SENSITIVITY_PII,
+    (logger.redact_format) = "<redacted ({{ .Size }} bytes)>"
+  ];
+  JobRestartPolicy restart_policy = 3; // cloud only
+  string deployment = 4;
+  map<string, string> attributes = 5 [
+    (logger.sensitivity) = SENSITIVITY_PII,
+    (logger.redact_format) = "<redacted ({{ .Size }} bytes)>"
+  ];
 }
 
-message InitRequest {
-  string prompt = 1;
+message DeleteAgentDispatchRequest {
+  string dispatch_id = 1 [(logger.name) = "dispatchID"];
+  string room = 2;
 }
+
+message ListAgentDispatchRequest {
+  string dispatch_id = 1 [(logger.name) = "dispatchID"]; // if set, only the dispatch whose id is given will be returned
+  string room = 2;        // name of the room to list agents for. Must be set.
+}
+
+message ListAgentDispatchResponse {
+  repeated AgentDispatch agent_dispatches = 1;
+}
+
+message AgentDispatch {
+  string id = 1;
+  string agent_name = 2;
+  string room = 3;
+  string metadata = 4 [
+    (logger.sensitivity) = SENSITIVITY_PII,
+    (logger.redact_format) = "<redacted ({{ .Size }} bytes)>"
+  ];
+  AgentDispatchState state = 5;
+  JobRestartPolicy restart_policy = 6; // cloud only
+  string deployment = 7;
+  map<string, string> attributes = 8 [
+    (logger.sensitivity) = SENSITIVITY_PII,
+    (logger.redact_format) = "<redacted ({{ .Size }} bytes)>"
+  ];
+}
+
+message AgentDispatchState {
+  // For dispatches of tyoe JT_ROOM, there will be at most 1 job.
+  // For dispatches of type JT_PUBLISHER, there will be 1 per publisher.
+  repeated Job jobs = 1;
+  int64 created_at = 2;
+  int64 deleted_at = 3;
+}
+

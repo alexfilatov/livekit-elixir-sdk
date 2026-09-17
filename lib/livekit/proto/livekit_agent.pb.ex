@@ -28,6 +28,57 @@ defmodule Livekit.JobStatus do
   field(:JS_FAILED, 3)
 end
 
+defmodule Livekit.Job.AttributesEntry do
+  @moduledoc false
+
+  use Protobuf, map: true, protoc_gen_elixir_version: "0.15.0", syntax: :proto3
+
+  field(:key, 1, type: :string)
+  field(:value, 2, type: :string)
+end
+
+defmodule Livekit.Job do
+  @moduledoc false
+
+  use Protobuf, protoc_gen_elixir_version: "0.15.0", syntax: :proto3
+
+  field(:id, 1, type: :string)
+  field(:dispatch_id, 9, type: :string, json_name: "dispatchId", deprecated: false)
+  field(:type, 2, type: Livekit.JobType, enum: true)
+  field(:room, 3, type: Livekit.Room)
+  field(:participant, 4, proto3_optional: true, type: Livekit.ParticipantInfo)
+  field(:namespace, 5, type: :string, deprecated: true)
+  field(:metadata, 6, type: :string, deprecated: false)
+  field(:agent_name, 7, type: :string, json_name: "agentName")
+  field(:state, 8, type: Livekit.JobState)
+  field(:enable_recording, 10, type: :bool, json_name: "enableRecording")
+  field(:deployment, 11, type: :string)
+
+  field(:attributes, 12,
+    repeated: true,
+    type: Livekit.Job.AttributesEntry,
+    map: true,
+    deprecated: false
+  )
+
+  field(:enable_redaction, 13, type: :bool, json_name: "enableRedaction")
+end
+
+defmodule Livekit.JobState do
+  @moduledoc false
+
+  use Protobuf, protoc_gen_elixir_version: "0.15.0", syntax: :proto3
+
+  field(:status, 1, type: Livekit.JobStatus, enum: true)
+  field(:error, 2, type: :string)
+  field(:started_at, 3, type: :int64, json_name: "startedAt")
+  field(:ended_at, 4, type: :int64, json_name: "endedAt")
+  field(:updated_at, 5, type: :int64, json_name: "updatedAt")
+  field(:participant_identity, 6, type: :string, json_name: "participantIdentity")
+  field(:worker_id, 7, type: :string, json_name: "workerId", deprecated: false)
+  field(:agent_id, 8, type: :string, json_name: "agentId", deprecated: false)
+end
+
 defmodule Livekit.WorkerMessage do
   @moduledoc false
 
@@ -54,39 +105,8 @@ defmodule Livekit.ServerMessage do
   field(:register, 1, type: Livekit.RegisterWorkerResponse, oneof: 0)
   field(:availability, 2, type: Livekit.AvailabilityRequest, oneof: 0)
   field(:assignment, 3, type: Livekit.JobAssignment, oneof: 0)
-  field(:pong, 4, type: Livekit.WorkerPong, oneof: 0)
   field(:termination, 5, type: Livekit.JobTermination, oneof: 0)
-end
-
-defmodule Livekit.Job do
-  @moduledoc false
-
-  use Protobuf, protoc_gen_elixir_version: "0.15.0", syntax: :proto3
-
-  field(:id, 1, type: :string)
-  field(:dispatch_id, 9, type: :string, json_name: "dispatchId")
-  field(:type, 2, type: Livekit.JobType, enum: true)
-  field(:room, 3, type: Livekit.Room)
-  field(:participant, 4, proto3_optional: true, type: Livekit.ParticipantInfo)
-  field(:metadata, 6, type: :string)
-  field(:agent_name, 7, type: :string, json_name: "agentName")
-  field(:state, 8, type: Livekit.JobState)
-  field(:enable_recording, 10, type: :bool, json_name: "enableRecording")
-end
-
-defmodule Livekit.JobState do
-  @moduledoc false
-
-  use Protobuf, protoc_gen_elixir_version: "0.15.0", syntax: :proto3
-
-  field(:status, 1, type: Livekit.JobStatus, enum: true)
-  field(:error, 2, type: :string)
-  field(:started_at, 3, type: :int64, json_name: "startedAt")
-  field(:ended_at, 4, type: :int64, json_name: "endedAt")
-  field(:updated_at, 5, type: :int64, json_name: "updatedAt")
-  field(:participant_identity, 6, type: :string, json_name: "participantIdentity")
-  field(:worker_id, 7, type: :string, json_name: "workerId")
-  field(:agent_id, 8, type: :string, json_name: "agentId")
+  field(:pong, 4, type: Livekit.WorkerPong, oneof: 0)
 end
 
 defmodule Livekit.SimulateJobRequest do
@@ -131,6 +151,8 @@ defmodule Livekit.RegisterWorkerRequest do
     type: Livekit.ParticipantPermission,
     json_name: "allowedPermissions"
   )
+
+  field(:deployment, 9, type: :string)
 end
 
 defmodule Livekit.RegisterWorkerResponse do
@@ -138,7 +160,7 @@ defmodule Livekit.RegisterWorkerResponse do
 
   use Protobuf, protoc_gen_elixir_version: "0.15.0", syntax: :proto3
 
-  field(:worker_id, 1, type: :string, json_name: "workerId")
+  field(:worker_id, 1, type: :string, json_name: "workerId", deprecated: false)
   field(:server_info, 3, type: Livekit.ServerInfo, json_name: "serverInfo")
 end
 
@@ -173,7 +195,7 @@ defmodule Livekit.AvailabilityResponse do
 
   use Protobuf, protoc_gen_elixir_version: "0.15.0", syntax: :proto3
 
-  field(:job_id, 1, type: :string, json_name: "jobId")
+  field(:job_id, 1, type: :string, json_name: "jobId", deprecated: false)
   field(:available, 2, type: :bool)
   field(:supports_resume, 3, type: :bool, json_name: "supportsResume")
   field(:terminate, 8, type: :bool)
@@ -194,7 +216,7 @@ defmodule Livekit.UpdateJobStatus do
 
   use Protobuf, protoc_gen_elixir_version: "0.15.0", syntax: :proto3
 
-  field(:job_id, 1, type: :string, json_name: "jobId")
+  field(:job_id, 1, type: :string, json_name: "jobId", deprecated: false)
   field(:status, 2, type: Livekit.JobStatus, enum: true)
   field(:error, 3, type: :string)
 end
@@ -224,5 +246,5 @@ defmodule Livekit.JobTermination do
 
   use Protobuf, protoc_gen_elixir_version: "0.15.0", syntax: :proto3
 
-  field(:job_id, 1, type: :string, json_name: "jobId")
+  field(:job_id, 1, type: :string, json_name: "jobId", deprecated: false)
 end
