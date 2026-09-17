@@ -38,7 +38,7 @@ defmodule Livekit.MixProject do
   def application do
     [
       # :inets and :ssl are what OTP's httpc needs — the default adapter.
-      extra_applications: [:logger, :crypto, :inets, :ssl, :gun, :grpc]
+      extra_applications: [:logger, :crypto, :inets, :ssl, :gun]
     ]
   end
 
@@ -47,6 +47,9 @@ defmodule Livekit.MixProject do
     [
       {:protobuf, "~> 0.14.0"},
       {:tesla, "~> 1.7"},
+      # Used directly by the agents WebSocket transport. It used to arrive
+      # transitively via :grpc; naming it keeps that from breaking again.
+      {:gun, "~> 2.2"},
       # No HTTP client dependency by design — the Tesla adapter is chosen by
       # the consumer via `config :livekit, :tesla_adapter` and defaults to
       # OTP's httpc, which needs nothing. See `Livekit.HTTP`. Finch is here
@@ -56,7 +59,6 @@ defmodule Livekit.MixProject do
       {:jason, "~> 1.4"},
       {:joken, "~> 2.6"},
       {:inflex, "~> 2.1"},
-      {:grpc, "~> 0.10.2"},
       # Development dependencies
       {:ex_doc, "~> 0.29", only: :dev, runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
@@ -79,10 +81,10 @@ defmodule Livekit.MixProject do
   defp package do
     [
       name: "livekit",
-      files: ~w(lib native priv mix.exs README.md LICENSE),
+      files: ~w(lib native priv proto mix.exs README.md CHANGELOG.md LICENSE),
       licenses: ["Apache-2.0"],
       links: %{
-        "GitHub" => "https://github.com/alexfilatov/livekit"
+        "GitHub" => "https://github.com/alexfilatov/livekit-elixir-sdk"
       }
     ]
   end
